@@ -8,17 +8,17 @@ BIO CE v0.3.0-rc1 is a Windows desktop memory manager backed by a local SQLite/F
 | Area | Status |
 |---|---|
 | Windows version actually exercised | Windows 11 Home x64, build 26200, Korean locale, 100% display scale |
-| Automated tests (`pytest -q tests`, official CPython 3.12.10) | 99 passed (also in a fresh venv using the CI workflow's exact steps) |
-| v0.3.0-rc1 installer on the developer's own Windows 11 account: v0.2 → v0.3 update, data kept, Claude Code connection through the installed binaries, Auto memory, review queue, pause, revoke, uninstall/reinstall (silent installs; GUI checked by window capture) | Verified (non-clean machine: Python and Git present) |
+| Automated tests (`pytest -q tests`, official CPython 3.12.10) | 103 passed (also in a fresh clone and venv using the CI workflow's exact steps) |
+| v0.3.0-rc1 installer on the developer's own Windows 11 account: v0.2 → v0.3 update, data kept, add/search/edit/retract, backup/restore, Claude Code connection through the installed binaries, Auto memory, recall in a new session, review queue, hook removal, pause, revoke, uninstall/reinstall (silent installs; GUI checked by window capture) | Verified, 25/25 steps (non-clean machine: Python and Git present) |
 | v0.2.0-rc1 installer, wizard and CRUD driven through the real GUI | Verified on the developer's account |
 | Same flow on a clean Windows 11 VM or account without Python/Git | **NOT VERIFIED** (no VM or Windows Sandbox available; Windows 11 Home) |
 | Codex CLI / Claude Code registration, packaged MCP server, official SDK search/read, disconnect | Verified with isolated host profiles |
 | A real AI model using Auto memory | Claude Code: saved, deduplicated, corrected, and recalled memories in one short synthetic run. Codex CLI: **limited**, its code-mode models are not shown MCP tools ([Codex support](docs/codex-support.md)) |
 | Windows 10, 125%/150% display scaling on real hardware | **NOT VERIFIED** (scaling is covered only by simulated-scale UI tests) |
-| GitHub Actions CI on a hosted runner | **NOT RUN** (the only run was refused by GitHub for an account billing reason before a runner started) |
+| GitHub Actions CI on a hosted runner | **BLOCKED** (the only run was refused by GitHub for an account billing reason before a runner started) |
 | Code signing | **Not signed** |
 
-Details and evidence: [v0.3.0-rc1 report](docs/release-v0.3-rc1-report.md), [v0.2 test report](docs/release-v0.2-test-report.md), and [v0.2 RC1 release notes](RELEASE_NOTES_v0.2.0-rc1.md).
+Details and evidence: [release notes](RELEASE_NOTES_v0.3.0-rc1.md), [final RC report](docs/release-v0.3-rc1-final-report.md), [v0.3.0-rc1 stabilization report](docs/release-v0.3-rc1-report.md), [v0.2 test report](docs/release-v0.2-test-report.md), and [v0.2 RC1 release notes](RELEASE_NOTES_v0.2.0-rc1.md).
 
 > **Release candidate (v0.3.0-rc1, branch `feat/autonomous-memory-v0.3`, not published): Auto memory.** A connected
 > host can save, update, and recall lasting memories on its own, per host and only after you turn it on. BIO CE's
@@ -151,7 +151,7 @@ Run the Windows regression suite:
 .\.venv\Scripts\python.exe -m pytest -q tests
 ```
 
-The suite covers store revision/retraction, concurrency freshness, scope binding and cross-scope isolation, the Tkinter UI against a temporary SQLite database, MCP stdio with the official SDK (including 14 synthetic Auto memory scenarios), isolated Codex/Claude configuration, backup/restore hygiene, single-instance locking, and installer packaging policy (including an Inno Setup compile check). Current totals are in [the v0.3.0-rc1 report](docs/release-v0.3-rc1-report.md).
+The suite covers store revision/retraction, concurrency freshness, scope binding and cross-scope isolation, the Tkinter UI against a temporary SQLite database, MCP stdio with the official SDK (including 18 synthetic Auto memory scenarios), isolated Codex/Claude configuration, backup/restore hygiene, single-instance locking, and installer packaging policy (including an Inno Setup compile check). Current totals are in [the final RC report](docs/release-v0.3-rc1-final-report.md).
 
 The existing 1k/10k FTS5 CPU measurements are synthetic, local, in-process measurements. They exclude MCP framing, host scheduling, and model inference. They are not general end-user latency guarantees. Methodology is in [CPU Benchmark Methodology](docs/benchmark-methodology.md).
 

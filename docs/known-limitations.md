@@ -1,11 +1,11 @@
 <!-- Copyright 2026 stickleetoto | Apache-2.0 -->
 # Known Limitations
 
-- Official support target is Windows 11 x64 for v0.2.0-rc1. Only Windows 11 Home build 26200 (Korean locale, 100% scale) was exercised. Windows 10 is not tested; Setup does not block it, but it is not supported.
+- Official support target is Windows 11 x64 for v0.3.0-rc1. Only Windows 11 Home build 26200 (Korean locale, 100% scale) was exercised. Windows 10 is not tested; Setup does not block it, but it is not supported.
 - The release build and test runtime is the official python.org CPython 3.12.10 x64 build (the last 3.12 release with Windows binaries). Package metadata requires Python >=3.12; Python 3.11 compatibility is not claimed.
-- CPU-first; no neural retrieval, embedding, model manager, autonomous memory extraction, or model API call.
+- CPU-first; no neural retrieval, embedding, model manager, or model API call. BIO CE never extracts memories from conversations itself; Auto memory writes come only from tool calls of a host the user switched to Auto memory.
 - Search uses SQLite FTS5 lexical ranking. Recall/MRR data measures exact synthetic targets, not semantic evaluation.
-- MCP uses local stdio only. There is no HTTP transport, remote listener, authentication, or ACL.
+- MCP uses local stdio only. There is no HTTP transport or remote listener. Per-connection tokens identify host connections; there are no user accounts or multi-user access control.
 - The MCP server serves one scope. Managed (v0.3) connections take it from their grant and refuse any other; servers without a connection take it from their launch arguments. Scope strings are never used as authentication.
 - Reads revalidate freshness immediately before return; a write committed after that check is ordered after the read. Strict immediate revocation is unsupported.
 - Retraction blocks application reads but keeps earlier rows in SQLite; secure erasure is unsupported.
@@ -20,7 +20,7 @@
 - Python dependency pins do not include artifact hashes or a package-index URL. The RC1 bundle includes license texts for its pinned Python dependencies, CPython 3.12.10 and its incorporated libraries, Tcl/Tk, the PyInstaller bootloader, and Inno Setup. Licenses of Rust crates statically linked into `pydantic-core`, `rpds-py`, and `cryptography` are represented only by those distributions' own license files.
 - The installer is not byte-for-byte reproducible across machines; `build-manifest.json` records per-file hashes so two builds can be compared.
 - Source provenance: the full local BIO Core source, history, and its private remote were compared with BIO CE on 2026-10-25 and no BIO Core code was found. The owner decisions and residual risks (for example, AI-assisted code was not checked against public code databases) are listed in the [provenance audit](audit/source-provenance.md).
-- The initial Private push triggered an Actions run that failed before a runner was assigned and produced no job steps or CI test result. Local Windows 11 tests are separate evidence; Windows 10 and actual Codex/Claude model-host calls remain NOT RUN. The later documentation sync commit used [skip ci]; no GitHub-hosted test result is claimed.
+- GitHub Actions CI is **BLOCKED**: the only hosted run (2026-10-21) was refused by GitHub for an account billing reason before a runner started, so no hosted CI result exists. Local runs of the workflow's exact steps are separate evidence and are not reported as a CI result. Windows 10 remains NOT RUN.
 
 ## v0.3 Auto memory (v0.3.0-rc1)
 

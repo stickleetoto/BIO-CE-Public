@@ -71,7 +71,8 @@ class Run:
 def uninstall_entry() -> dict | None:
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, UNINSTALL_KEY) as key:
-            return {name: winreg.QueryValueEx(key, name)[0] for name in ("DisplayVersion", "InstallLocation")}
+            return {name: winreg.QueryValueEx(key, name)[0]
+                    for name in ("DisplayVersion", "InstallLocation", "UninstallString")}
     except OSError:
         return None
 
@@ -108,8 +109,11 @@ def install(run: Run, setup: Path, tag: str) -> bool:
 
 
 def uninstall(run: Run, tag: str) -> bool:
-    uninstaller = APP_DIR / "unins000.exe"
-    if not uninstaller.is_file():
+    # Inno Setup numbers the uninstaller (unins000, unins001, ...) when a reinstall finds the previous
+    # one still being removed, so use the path Windows itself uses.
+    entry = uninstall_entry()
+    uninstaller = Path(entry["UninstallString"].strip('"')) if entry else None
+    if uninstaller is None or not uninstaller.is_file():
         return False
     subprocess.run([str(uninstaller), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
                     f"/LOG={run.out / f'uninstall-{tag}.log'}"], timeout=600)
@@ -399,7 +403,7 @@ def claude_flow(run: Run, root: Path) -> None:
 
 
 def cleanup(run: Run) -> bool:
-    cleaned = uninstall(run, "cleanup") if (APP_DIR / "unins000.exe").exists() else True
+    cleaned = uninstall(run, "cleanup") if uninstall_entry() is not None else True
     if (DATA_ROOT / MARKER).is_file():
         shutil.rmtree(DATA_ROOT, ignore_errors=True)
     final = machine_state()
