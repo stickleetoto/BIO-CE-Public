@@ -1,7 +1,67 @@
 <!-- Copyright 2026 stickleetoto | Apache-2.0 -->
 # Public Release Gates
 
-## Pre-public check, 2026-10-25 (current)
+## Final release gates, 2026-10-26 (current)
+
+Making the source public (Gate A) and publishing the installer as a GitHub pre-release (Gate B) are **separate
+decisions**. Each needs its own explicit approval from the owner. Approving Gate A does not approve Gate B. Gate B
+publishes a file in the public repository, so it can happen only after Gate A or together with it. No push,
+visibility change, setting change, or release has been made.
+
+Candidate: local branch `public/v0.3.0-rc1-release`, in the public history after the installer's source commit
+`d433ebd`. The commits after `d433ebd` change only documentation and the installer test harness.
+
+### Gate A — make the source public: READY, owner approval needed
+
+| Check | Status | Evidence |
+|---|---|---|
+| Source provenance and IP | **PASS** | [Source Provenance](source-provenance.md) (2026-10-25), re-scanned on this candidate: no BIO Core names, codenames, or paths |
+| Git history | **PASS** | New root commit, none of the private development history; every commit's author and committer use the GitHub noreply identity |
+| Secrets | **PASS** | Gitleaks 8.18.4 on the candidate history and tree: 0 findings |
+| Personal data | **PASS** | No Windows user name, email address, local path, or private repository name in any file or commit message |
+| License | **PASS** | `LICENSE` byte-identical to the ASF Apache-2.0 text and protected by `.gitattributes`; `pyproject.toml` declares `Apache-2.0`; every source and document file has an SPDX or copyright header (two JSON benchmark result files cannot carry one); all 30 runtime dependencies use permissive licenses and appear in the [inventory](../THIRD_PARTY_LICENSES.md) |
+| Documentation | **PASS** | README, `SECURITY.md`, release notes, and known limitations state what is and is not verified; no Windows 10, real-DPI, clean-machine, or CI claim |
+| Tests | **PASS (local)** | 103 passed in a fresh clone and venv using the CI workflow's steps; this is not a CI result |
+| CI workflow file | **PASS (static)** | Valid against GitHub's workflow schema (`check-jsonschema`, a broken control file was rejected); actions pinned to SHAs that match their release tags |
+| Hosted CI run | **Not required for Gate A** | BLOCKED by account billing; verify after publication (below) |
+
+**Owner decisions for Gate A:**
+
+1. Approve pushing `public/v0.3.0-rc1-release` and making it public.
+2. Choose the repository. Recommended: a **new** public repository with this branch as `main`. If the existing
+   private repository is reused with a force-push, its earlier private commits and its one Actions run may stay
+   retrievable by SHA.
+3. Enable **private vulnerability reporting** immediately after the repository becomes public. `SECURITY.md`
+   points to it.
+
+### Gate B — publish the installer as a GitHub pre-release: BLOCKED
+
+| Check | Status | Evidence |
+|---|---|---|
+| Built from public source | **PASS** | Fresh clone of `d433ebd`; frozen `bio_ce` code matches the source module by module |
+| Hash and manifest | **PASS** | `BIO-CE-Setup-v0.3.0-rc1.exe`, 44,231,910 bytes, SHA-256 `2d79e7d4c9dff1187ff90149a1bc7418f014f9c0209a6c984ffa5d2d741572ee`; 2,566 payload files match `build-manifest.json` |
+| Payload content | **PASS** | No development files, personal data, or private names; licenses bundled |
+| Installer E2E, developer's account | **PASS** | 25/25 steps, silent installs, GUI checked by window capture |
+| **Clean Windows install** | **NOT RUN, blocks Gate B** | No VM, Windows Sandbox, or second account available. Run the [clean install checklist](clean-install-checklist.md) |
+| **Hosted CI** | **BLOCKED, blocks Gate B** | GitHub refused the only run before a runner started, for an account billing reason. Needs a passing hosted run of the published commit |
+| Code signing | **Not signed: owner decision** | Either sign the installer and programs, or explicitly approve an unsigned pre-release. Release notes and the bundled installation guide state that the file is unsigned and that SmartScreen may warn |
+| Windows 10, real 125%/150% scaling | Not claimed | Not tested; the documents say so |
+
+**Owner decisions for Gate B:** after the clean-install checklist and a hosted CI run pass, approve (1) shipping
+unsigned or signing first, and (2) creating the `v0.3.0-rc1` tag and a GitHub **pre-release** with the installer
+and `SHA256SUMS.txt`. If anything that goes into the installer changes, rebuild and repeat the hash and E2E steps.
+
+### Verify after the source is public
+
+1. A hosted CI run on the published commit passes. Public repositories get standard GitHub-hosted runners free;
+   check whether the account billing block still applies.
+2. Private vulnerability reporting is on, and the `SECURITY.md` link opens the form.
+3. GitHub detects Apache-2.0; README, release notes, and relative links render correctly.
+4. GitHub secret scanning reports no alerts.
+5. With a new repository, none of the private development SHAs resolve in it.
+6. For Gate B: the uploaded asset's SHA-256 equals `SHA256SUMS.txt`, and the release is marked pre-release.
+
+## Pre-public check, 2026-10-25 (superseded by the final gates above)
 
 Checked read-only against the local candidate repository and the GitHub repository `stickleetoto/BIO-CE`. No
 push, visibility change, setting change, or release was made.

@@ -11,8 +11,9 @@ qualification: **PARTIAL**. See "Not verified" below and the
 |---|---:|---|
 | `BIO-CE-Setup-v0.3.0-rc1.exe` | 44,231,910 bytes | `2d79e7d4c9dff1187ff90149a1bc7418f014f9c0209a6c984ffa5d2d741572ee` |
 
-Built from source commit `d433ebd01cd61fbace397a15d88bc96f6edc62b6` (the first commit of the public history). The commit that adds these
-notes changes documentation only; no file that goes into the installer differs.
+Built from source commit `d433ebd01cd61fbace397a15d88bc96f6edc62b6` (the first commit of the public history).
+Later commits change only documentation and the installer test harness; no file that goes into the installer
+differs.
 
 Check the file before running it:
 
@@ -20,12 +21,23 @@ Check the file before running it:
 Get-FileHash -Algorithm SHA256 .\BIO-CE-Setup-v0.3.0-rc1.exe
 ```
 
-The installer is **not code-signed**; Windows SmartScreen may show an unknown-publisher warning for a
-downloaded copy.
+### The installer is not code-signed
+
+- Neither `BIO-CE-Setup-v0.3.0-rc1.exe` nor the programs it installs carry a digital signature. Windows
+  cannot show who published them, and a signature cannot prove that the file is unchanged. The SHA-256 above is
+  the only integrity check.
+- When you run a downloaded copy, **Windows SmartScreen may block it** with "Windows protected your PC" and an
+  unknown publisher. Some antivirus products may also warn about unsigned, newly published programs.
+- Run the installer only if its SHA-256 matches exactly. If it does not match, or you are unsure where the file
+  came from, delete it. BIO CE never asks you to turn off SmartScreen, Microsoft Defender, or any other Windows
+  protection.
 
 ## Requirements
 
-- Windows 11 x64. Only Windows 11 Home build 26200 was exercised. Windows 10 is **not tested or supported**.
+- Windows 11 x64. Only Windows 11 Home build 26200 (Korean locale) was exercised. **Windows 10 is not tested
+  or supported**; Setup does not block it.
+- Display scaling: only 100% was exercised on real hardware. 125% and 150% were checked with simulated-scale UI
+  tests only and are **not verified** on a real display.
 - No administrator rights, Python, Git, or other runtime. Codex CLI or Claude Code only if you want to
   connect one.
 

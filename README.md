@@ -18,7 +18,7 @@ BIO CE v0.3.0-rc1 is a Windows desktop memory manager backed by a local SQLite/F
 | GitHub Actions CI on a hosted runner | **BLOCKED** (the only run was refused by GitHub for an account billing reason before a runner started) |
 | Code signing | **Not signed** |
 
-Details and evidence: [release notes](RELEASE_NOTES_v0.3.0-rc1.md), [final RC report](docs/release-v0.3-rc1-final-report.md), [v0.3.0-rc1 stabilization report](docs/release-v0.3-rc1-report.md), [v0.2 test report](docs/release-v0.2-test-report.md), and [v0.2 RC1 release notes](RELEASE_NOTES_v0.2.0-rc1.md).
+Release gates (source publication and installer pre-release are approved separately): [Public Release Gates](docs/audit/public-release-gates.md). Details and evidence: [release notes](RELEASE_NOTES_v0.3.0-rc1.md), [final RC report](docs/release-v0.3-rc1-final-report.md), [v0.3.0-rc1 stabilization report](docs/release-v0.3-rc1-report.md), [v0.2 test report](docs/release-v0.2-test-report.md), and [v0.2 RC1 release notes](RELEASE_NOTES_v0.2.0-rc1.md).
 
 > **Release candidate (v0.3.0-rc1, branch `feat/autonomous-memory-v0.3`, not published): Auto memory.** A connected
 > host can save, update, and recall lasting memories on its own, per host and only after you turn it on. BIO CE's
