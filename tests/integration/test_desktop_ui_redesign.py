@@ -24,7 +24,7 @@ from bio_ce.core.models import SourceProvenance
 from bio_ce.desktop import PERSONAL_SCOPE, AppDataPaths, BIOCEDesktop, DesktopMemoryService
 from bio_ce.storage.sqlite_store import SQLiteMemoryStore
 from bio_ce.ui.dialogs import ConfirmDialog
-from bio_ce.ui.theme import Theme
+from bio_ce.ui.theme import SIDEBAR_COMPACT_BELOW, Theme
 from bio_ce.ui.widgets import Button
 from tests.tk_support import new_tk_root
 
@@ -184,7 +184,10 @@ class RedesignedDesktopTests(unittest.TestCase):
                 self.assertFalse(app.nav["memories"].label.winfo_ismapped())
                 self.root.geometry(f"{app.theme.px(1200)}x{app.theme.px(760)}")
                 self.root.update()
-                self.assertFalse(app.compact)
+                # Tk keeps a window within the screen, so on a small display (for example a 1024x768 CI
+                # runner) a scaled window cannot reach the full-sidebar width and correctly stays compact.
+                fits = self.root.winfo_screenwidth() >= app.theme.px(SIDEBAR_COMPACT_BELOW)
+                self.assertEqual(app.compact, not fits)
                 app.close()
                 self.app = None
                 self.root = None
