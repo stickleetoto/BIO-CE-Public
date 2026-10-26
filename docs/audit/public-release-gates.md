@@ -5,13 +5,13 @@
 
 Making the source public (Gate A) and publishing the installer as a GitHub pre-release (Gate B) are **separate
 decisions**. Each needs its own explicit approval from the owner. Approving Gate A does not approve Gate B. Gate B
-publishes a file in the public repository, so it can happen only after Gate A or together with it. No push,
-visibility change, setting change, or release has been made.
+publishes a file in the public repository, so it can happen only after Gate A or together with it.
 
-Candidate: local branch `public/v0.3.0-rc1-release`, in the public history after the installer's source commit
-`d433ebd`. The commits after `d433ebd` change only documentation and the installer test harness.
+**Gate A was approved and completed on 2026-10-26:** https://github.com/stickleetoto/BIO-CE-Public (public,
+`main` only, no tags). Its history starts at the installer's source commit `d433ebd`; later commits change only
+documentation, tests, the installer test harness, and the CI workflow. No installer release or tag exists.
 
-### Gate A — make the source public: READY, owner approval needed
+### Gate A — make the source public: COMPLETE (2026-10-26)
 
 | Check | Status | Evidence |
 |---|---|---|
@@ -23,16 +23,11 @@ Candidate: local branch `public/v0.3.0-rc1-release`, in the public history after
 | Documentation | **PASS** | README, `SECURITY.md`, release notes, and known limitations state what is and is not verified; no Windows 10, real-DPI, clean-machine, or CI claim |
 | Tests | **PASS (local)** | 103 passed in a fresh clone and venv using the CI workflow's steps; this is not a CI result |
 | CI workflow file | **PASS (static)** | Valid against GitHub's workflow schema (`check-jsonschema`, a broken control file was rejected); actions pinned to SHAs that match their release tags |
-| Hosted CI run | **Not required for Gate A** | Not passed yet: the first hosted run on the public repository (2026-10-26) started, so the earlier account billing block no longer applies, but it failed while installing dependencies: the runner's Python ships `pipx`, whose `packaging` requirement conflicts with the lock file, so `pip check` failed. The workflow now installs into its own virtual environment; a hosted run of that fix then installed cleanly and ran the suite: 100 passed, 3 skipped (host CLIs not installed, no build), 2 failed because a UI test expected a full-width window on the runner's small screen. That test now accounts for the screen size; a hosted run of that fix is pending. Verify after publication (below) |
+| Hosted CI run | **PASS** | **PASS** on commit `9a59ed4` ([run 40283656213](https://github.com/stickleetoto/BIO-CE-Public/actions/runs/40283656213), 2026-10-26, `windows-2025`, CPython 3.12.10): 100 passed, 3 skipped. The skips are expected on a hosted runner: two host-connection tests need the Codex and Claude Code CLIs, and the packaged-EXE test needs a local installer build; all three pass locally. Two earlier runs failed and were fixed without skipping or weakening tests: the runner's preinstalled `pipx` broke `pip check` (the workflow now uses its own venv), and a DPI layout test assumed a screen wider than the runner's (it now checks the correct layout for the actual screen size) |
 
-**Owner decisions for Gate A:**
-
-1. Approve pushing `public/v0.3.0-rc1-release` and making it public.
-2. Choose the repository. Recommended: a **new** public repository with this branch as `main`. If the existing
-   private repository is reused with a force-push, its earlier private commits and its one Actions run may stay
-   retrievable by SHA.
-3. Enable **private vulnerability reporting** immediately after the repository becomes public. `SECURITY.md`
-   points to it.
+**Gate A decisions (done):** the owner approved a **new** public repository; only the approved commits were
+pushed to `main`, as fast-forwards. The existing private repository was not changed. Private vulnerability
+reporting was enabled right after publication.
 
 ### Gate B — publish the installer as a GitHub pre-release: BLOCKED
 
@@ -43,23 +38,24 @@ Candidate: local branch `public/v0.3.0-rc1-release`, in the public history after
 | Payload content | **PASS** | No development files, personal data, or private names; licenses bundled |
 | Installer E2E, developer's account | **PASS** | 25/25 steps, silent installs, GUI checked by window capture |
 | **Clean Windows install** | **NOT RUN, blocks Gate B** | No VM, Windows Sandbox, or second account available. Run the [clean install checklist](clean-install-checklist.md) |
-| **Hosted CI** | **NOT PASSED, blocks Gate B** | The first hosted run on the public repository (2026-10-26) started, so the earlier account billing block no longer applies, but it failed while installing dependencies: the runner's Python ships `pipx`, whose `packaging` requirement conflicts with the lock file, so `pip check` failed. The workflow now installs into its own virtual environment; a hosted run of that fix then installed cleanly and ran the suite: 100 passed, 3 skipped (host CLIs not installed, no build), 2 failed because a UI test expected a full-width window on the runner's small screen. That test now accounts for the screen size; a hosted run of that fix is pending. Earlier, GitHub refused the private repository's only run before a runner started, for an account billing reason. Needs a passing hosted run of the published commit |
+| Hosted CI | **PASS** | **PASS** on commit `9a59ed4` ([run 40283656213](https://github.com/stickleetoto/BIO-CE-Public/actions/runs/40283656213), 2026-10-26, `windows-2025`, CPython 3.12.10): 100 passed, 3 skipped. The skips are expected on a hosted runner: two host-connection tests need the Codex and Claude Code CLIs, and the packaged-EXE test needs a local installer build; all three pass locally |
 | Code signing | **Not signed: owner decision** | Either sign the installer and programs, or explicitly approve an unsigned pre-release. Release notes and the bundled installation guide state that the file is unsigned and that SmartScreen may warn |
 | Windows 10, real 125%/150% scaling | Not claimed | Not tested; the documents say so |
 
-**Owner decisions for Gate B:** after the clean-install checklist and a hosted CI run pass, approve (1) shipping
+**Owner decisions for Gate B:** after the clean-install checklist passes, approve (1) shipping
 unsigned or signing first, and (2) creating the `v0.3.0-rc1` tag and a GitHub **pre-release** with the installer
 and `SHA256SUMS.txt`. If anything that goes into the installer changes, rebuild and repeat the hash and E2E steps.
 
-### Verify after the source is public
+### Verified after the source became public (2026-10-26)
 
-1. A hosted CI run on the published commit passes. Public repositories get standard GitHub-hosted runners free;
-   check whether the account billing block still applies.
-2. Private vulnerability reporting is on, and the `SECURITY.md` link opens the form.
-3. GitHub detects Apache-2.0; README, release notes, and relative links render correctly.
-4. GitHub secret scanning reports no alerts.
-5. With a new repository, none of the private development SHAs resolve in it.
-6. For Gate B: the uploaded asset's SHA-256 equals `SHA256SUMS.txt`, and the release is marked pre-release.
+1. Hosted CI passes (above); the account billing block does not apply to the public repository.
+2. Private vulnerability reporting is enabled; `SECURITY.md` points to the repository's Security tab.
+3. GitHub detects Apache-2.0; README, LICENSE, SECURITY.md, the release notes, and the workflow on GitHub are
+   byte-identical to the local commit.
+4. Secret scanning and push protection are enabled.
+5. None of the private development SHAs resolve in the public repository.
+6. Still open, for Gate B: the uploaded asset's SHA-256 equals `SHA256SUMS.txt`, and the release is marked
+   pre-release.
 
 ## Pre-public check, 2026-10-25 (superseded by the final gates above)
 

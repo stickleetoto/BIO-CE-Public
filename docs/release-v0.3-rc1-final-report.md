@@ -153,7 +153,7 @@ No unofficial setting or workaround was added.
 
 ## Remaining blockers before a public release
 
-1. **GitHub Actions CI**: resolve the account billing issue, then push with approval and get a real hosted PASS.
+1. ~~**GitHub Actions CI**~~ **Resolved after publication:** **PASS** on commit `9a59ed4` ([run 40283656213](https://github.com/stickleetoto/BIO-CE-Public/actions/runs/40283656213), 2026-10-26, `windows-2025`, CPython 3.12.10): 100 passed, 3 skipped. The skips are expected on a hosted runner: two host-connection tests need the Codex and Claude Code CLIs, and the packaged-EXE test needs a local installer build; all three pass locally.
 2. **Clean Windows account or VM** E2E (no Python or Git), including the interactive wizard and GUI click paths.
 3. **Code signing**, or an explicit decision to ship unsigned.
 4. **Codex Auto memory** waits on an upstream Codex fix.

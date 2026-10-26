@@ -74,7 +74,8 @@ unless you opt in to removing it. Full guide: [Desktop installation](docs/deskto
 ## Verified
 
 - **Automated tests:** 103 tests passed on Windows 11 with official CPython 3.12.10, including 18 synthetic Auto
-  memory scenarios over the real stdio MCP server. The same steps as the CI workflow pass in a fresh venv.
+  memory scenarios over the real stdio MCP server.
+- **GitHub Actions CI:** **PASS** on commit `9a59ed4` ([run 40283656213](https://github.com/stickleetoto/BIO-CE-Public/actions/runs/40283656213), 2026-10-26, `windows-2025`, CPython 3.12.10): 100 passed, 3 skipped. The skips are expected on a hosted runner: two host-connection tests need the Codex and Claude Code CLIs, and the packaged-EXE test needs a local installer build; all three pass locally.
 - **Installer E2E on the developer's Windows 11 account** (synthetic data, isolated Claude Code profile,
   local mock model, silent installs, GUI checked by window capture): 25 of 25 steps passed, from a v0.2.0-rc1 install with data through update, user add/search/edit/retract, backup and restore, Claude Code connection, Auto memory, recall in a new session, review queue, hook removal, pause, revoke, uninstall keeping data, and reinstall. See the final report for the step
   list.
@@ -90,8 +91,6 @@ unless you opt in to removing it. Full guide: [Desktop installation](docs/deskto
   Sandbox, and creating another account was out of scope.
 - **Windows 10**, real 125%/150% display scaling, and clicking through the GUI by hand for this build (v0.2.0-rc1
   was checked that way).
-- **GitHub Actions CI on a hosted runner: not passed yet.** The first hosted run failed while installing dependencies (a conflict with tools preinstalled on the runner, fixed in the workflow); the next run passed 100 tests and failed 2 because a UI test assumed a large screen (fixed in the test; not yet re-run on GitHub). Before that, GitHub refused to start the job for an account billing
-  reason. Local runs of the same steps are not a CI result.
 - **Code signing.**
 - **Codex CLI Auto memory: limited.** Codex's code-mode models are not shown MCP tools
   ([Codex support](docs/codex-support.md)). BIO CE applies no unofficial workaround.
