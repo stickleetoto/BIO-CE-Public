@@ -15,7 +15,7 @@ BIO CE v0.3.0-rc1 is a Windows desktop memory manager backed by a local SQLite/F
 | Codex CLI / Claude Code registration, packaged MCP server, official SDK search/read, disconnect | Verified with isolated host profiles |
 | A real AI model using Auto memory | Claude Code: saved, deduplicated, corrected, and recalled memories in one short synthetic run. Codex CLI: **limited**, its code-mode models are not shown MCP tools ([Codex support](docs/codex-support.md)) |
 | Windows 10, 125%/150% display scaling on real hardware | **NOT VERIFIED** (scaling is covered only by simulated-scale UI tests) |
-| GitHub Actions CI on a hosted runner | **BLOCKED** (the only run was refused by GitHub for an account billing reason before a runner started) |
+| GitHub Actions CI on a hosted runner | **NOT PASSED** (the first hosted run on the public repository (2026-10-26) started, so the earlier account billing block no longer applies, but it failed while installing dependencies: the runner's Python ships `pipx`, whose `packaging` requirement conflicts with the lock file, so `pip check` failed. The workflow now installs into its own virtual environment; a hosted run of that fix is pending) |
 | Code signing | **Not signed** |
 
 Release gates (source publication and installer pre-release are approved separately): [Public Release Gates](docs/audit/public-release-gates.md). Details and evidence: [release notes](RELEASE_NOTES_v0.3.0-rc1.md), [final RC report](docs/release-v0.3-rc1-final-report.md), [v0.3.0-rc1 stabilization report](docs/release-v0.3-rc1-report.md), [v0.2 test report](docs/release-v0.2-test-report.md), and [v0.2 RC1 release notes](RELEASE_NOTES_v0.2.0-rc1.md).

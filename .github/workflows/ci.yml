@@ -30,9 +30,20 @@ jobs:
       - name: Install pinned dependencies and BIO CE
         shell: pwsh
         run: |
-          python -m pip install --disable-pip-version-check -r requirements-mcp.lock.txt -r requirements-test.lock.txt
-          python -m pip install --disable-pip-version-check --no-build-isolation --no-deps -e .
-          python -m pip check
+          # A fresh virtual environment: the runner's Python ships its own tools (for example pipx) whose
+          # requirements are unrelated to BIO CE and would make `pip check` fail.
+          python -m venv (Join-Path $env:RUNNER_TEMP "bio-ce-venv")
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $scripts = Join-Path $env:RUNNER_TEMP "bio-ce-venv\Scripts"
+          $python = Join-Path $scripts "python.exe"
+          & $python -m pip install --disable-pip-version-check -r requirements-mcp.lock.txt -r requirements-test.lock.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & $python -m pip install --disable-pip-version-check --no-build-isolation --no-deps -e .
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & $python -m pip check
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          # Later steps run `python` from this environment.
+          Add-Content -LiteralPath $env:GITHUB_PATH -Value $scripts -Encoding utf8
       - name: Run the test suite
         shell: pwsh
         run: |
