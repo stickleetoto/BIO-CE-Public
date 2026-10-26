@@ -1,0 +1,199 @@
+{
+  "benchmark": "BIO CE SQLite FTS5 synthetic lexical retrieval",
+  "measured_at_utc": "2026-10-20T23:39:03+00:00",
+  "synthetic_data_only": true,
+  "dataset_size": 10000,
+  "warm_searches": 200,
+  "quality_queries": 50,
+  "environment": {
+    "python": "3.12.14",
+    "sqlite": "3.53.1",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "cpu_logical_count": 16,
+    "fts5_table_created": true
+  },
+  "measurements": {
+    "index_preparation_seconds": 52.237308,
+    "index_preparation_components_seconds": {
+      "store_open_and_schema": 0.031687,
+      "base_memory_adds": 52.19399,
+      "edge_case_fixtures": 0.011631
+    },
+    "cold_search_ms": 0.6485,
+    "warm_search_ms": {
+      "p50": 0.3119,
+      "p95": 60.9229,
+      "p99": 62.4025,
+      "samples_by_case": {
+        "unique_hit": {
+          "count": 29,
+          "p50": 0.3482,
+          "p95": 0.4171,
+          "p99": 0.4483
+        },
+        "mixed_hit": {
+          "count": 29,
+          "p50": 59.0131,
+          "p95": 62.4025,
+          "p99": 66.018
+        },
+        "ambiguous_common": {
+          "count": 29,
+          "p50": 59.2889,
+          "p95": 61.9056,
+          "p99": 63.3131
+        },
+        "miss": {
+          "count": 29,
+          "p50": 0.3018,
+          "p95": 0.3376,
+          "p99": 0.3466
+        },
+        "retracted": {
+          "count": 28,
+          "p50": 0.224,
+          "p95": 0.2509,
+          "p99": 0.2807
+        },
+        "namespace_boundary": {
+          "count": 28,
+          "p50": 0.2082,
+          "p95": 0.2345,
+          "p99": 0.3194
+        },
+        "other_namespace_positive_control": {
+          "count": 28,
+          "p50": 0.2995,
+          "p95": 0.367,
+          "p99": 0.4025
+        }
+      }
+    },
+    "cold_query_target_rank": 1,
+    "retrieval_quality_by_difficulty_and_top_k": {
+      "unique_token": {
+        "recall_at_1": 1.0,
+        "mrr_at_1": 1.0,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "recall_at_10": 1.0,
+        "mrr_at_10": 1.0
+      },
+      "rare_plus_common": {
+        "recall_at_1": 1.0,
+        "mrr_at_1": 1.0,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+        "recall_at_10": 1.0,
+        "mrr_at_10": 1.0
+      }
+    },
+    "query_case_results": {
+      "unique_hit": {
+        "result_counts_by_top_k": {
+          "1": 1,
+          "5": 1,
+          "10": 1
+        },
+        "expected_nonempty": true,
+        "passed": true
+      },
+      "mixed_hit": {
+        "result_counts_by_top_k": {
+          "1": 1,
+          "5": 5,
+          "10": 10
+        },
+        "expected_nonempty": true,
+        "passed": true
+      },
+      "ambiguous_common": {
+        "result_counts_by_top_k": {
+          "1": 1,
+          "5": 5,
+          "10": 10
+        },
+        "expected_nonempty": true,
+        "passed": true
+      },
+      "miss": {
+        "result_counts_by_top_k": {
+          "1": 0,
+          "5": 0,
+          "10": 0
+        },
+        "expected_nonempty": false,
+        "passed": true
+      },
+      "retracted": {
+        "result_counts_by_top_k": {
+          "1": 0,
+          "5": 0,
+          "10": 0
+        },
+        "expected_nonempty": false,
+        "passed": true
+      },
+      "namespace_boundary": {
+        "result_counts_by_top_k": {
+          "1": 0,
+          "5": 0,
+          "10": 0
+        },
+        "expected_nonempty": false,
+        "passed": true
+      },
+      "other_namespace_positive_control": {
+        "result_counts_by_top_k": {
+          "1": 1,
+          "5": 1,
+          "10": 1
+        },
+        "expected_nonempty": true,
+        "passed": true
+      }
+    },
+    "valid_revision_round_trip": true,
+    "invalid_revision_rejected": true,
+    "unknown_revision_rejected": true,
+    "namespace_scope_clean": true,
+    "namespace_positive_control": true,
+    "retracted_scope_clean": true,
+    "sqlite_synchronous_pragma": 2,
+    "query_case_expectations_passed": true,
+    "revision_checks_passed": true,
+    "scope_and_retraction_checks_passed": true,
+    "process_cpu_seconds": 19.328125,
+    "process_cpu_percent_of_wall": 29.748,
+    "wall_seconds": 64.972776,
+    "peak_rss_bytes": 27729920,
+    "peak_rss_source": "Windows PeakWorkingSetSize"
+  },
+  "method": {
+    "indexing": "one SQLiteMemoryStore.add and committed revision per base fixture; schema open, base seed, and edge fixtures timed separately",
+    "query_matrix": [
+      "unique-token hit",
+      "rare token plus a common token",
+      "ambiguous common-token hit",
+      "miss",
+      "retracted token",
+      "wrong-namespace miss and matching-namespace positive control"
+    ],
+    "top_k_values": [
+      1,
+      5,
+      10
+    ],
+    "latency_population": "one first search after indexing; warm p50/p95/p99 grouped by query case and across the matrix",
+    "quality": "synthetic exact-target Recall@K and MRR at K=1,5,10 for unique-token and rare-plus-common queries; not semantic quality",
+    "scope": {
+      "project": "benchmark-project",
+      "namespace": "synthetic-fts5"
+    },
+    "other_scope": {
+      "project": "benchmark-project",
+      "namespace": "other-synthetic-namespace"
+    },
+    "freshness": "search results pass the CE final revision freshness check before returning"
+  }
+}

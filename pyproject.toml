@@ -1,0 +1,29 @@
+# Copyright 2026 stickleetoto
+# SPDX-License-Identifier: Apache-2.0
+# BIO CE-7 candidate modification: Apache license metadata added.
+[build-system]
+requires = ["setuptools==84.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bio-community-edition"
+version = "0.3.0rc1"
+description = "A CPU-first local memory manager with a read-only MCP interface"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+classifiers = ["Operating System :: Microsoft :: Windows"]
+dependencies = []
+
+[project.optional-dependencies]
+mcp = ["mcp==2.3.0"]
+
+[project.scripts]
+bio-ce = "bio_ce.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

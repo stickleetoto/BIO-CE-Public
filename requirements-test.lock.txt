@@ -1,0 +1,11 @@
+# Copyright 2026 stickleetoto
+# SPDX-License-Identifier: Apache-2.0
+# BIO CE-7 candidate modification: licensing metadata added; pins unchanged.
+# Test-only tools for the CE-3 reproducibility check, resolved 2026-10-20.
+# Install with: python -m pip install -r requirements-test.lock.txt
+colorama==0.4.6; sys_platform == "win32"
+iniconfig==2.3.0
+packaging==25.0
+pluggy==1.6.0
+Pygments==2.20.0
+pytest==9.0.2

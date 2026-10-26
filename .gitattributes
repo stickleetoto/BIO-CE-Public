@@ -1,0 +1,3 @@
+# Files whose exact bytes are checked (license text, pinned notice hash): never convert line endings.
+LICENSE -text
+packaging/notices/*.rst -text
