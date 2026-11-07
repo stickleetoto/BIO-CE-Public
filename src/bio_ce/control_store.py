@@ -389,6 +389,18 @@ class ControlStore:
             )
             return int(cursor.lastrowid)
 
+    def pending_reviews_like(
+        self, *, kind: str, memory_id: str | None, expected_revision_id: str | None
+    ) -> tuple[ReviewItem, ...]:
+        """Pending items of the same kind for the same memory revision (or new memories when IDs are None)."""
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT * FROM review_queue WHERE status = 'pending' AND kind = ? AND memory_id IS ? "
+                "AND expected_revision_id IS ? ORDER BY review_id",
+                (kind, memory_id, expected_revision_id),
+            ).fetchall()
+        return tuple(_review(row) for row in rows)
+
     def reviews(self, *, status: str | None = REVIEW_PENDING, limit: int = 100) -> tuple[ReviewItem, ...]:
         query, values = "SELECT * FROM review_queue", []
         if status is not None:

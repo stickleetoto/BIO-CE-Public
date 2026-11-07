@@ -40,6 +40,7 @@ from bio_ce.memory_policy import (
     decide_create,
     decide_update,
     detect_secrets,
+    normalize,
 )
 from bio_ce.storage.sqlite_store import SQLiteMemoryStore
 
@@ -237,6 +238,17 @@ class AutoMemoryWriter:
 
     def _queue(self, host: str, kind: str, title: str, content: str | None, why: str, detail: dict[str, Any],
                *, memory_id: str | None = None, expected_revision_id: str | None = None) -> dict[str, Any]:
+        # A host that repeats the same proposal gets the item already waiting for the user, not a copy.
+        wanted = normalize(f"{title}\n{content or ''}")
+        for pending in self.control.pending_reviews_like(kind=kind, memory_id=memory_id,
+                                                         expected_revision_id=expected_revision_id):
+            if normalize(f"{pending.title}\n{pending.content or ''}") == wanted:
+                self.control.record(host=host, connection_id=self.connection_id, action=kind, outcome="duplicate",
+                                    memory_id=memory_id, title=title,
+                                    detail={**detail, "review_id": pending.review_id, "pending": True})
+                return {"status": "queued_for_review", "review_id": pending.review_id,
+                        "reasons": [why, "the same request is already waiting for the user"],
+                        "message": "The user will review this in BIO CE before anything changes."}
         review_id = self.control.enqueue_review(
             host=host, connection_id=self.connection_id, kind=kind, title=title, content=content,
             review_reason=why, memory_id=memory_id, expected_revision_id=expected_revision_id, metadata=detail,
