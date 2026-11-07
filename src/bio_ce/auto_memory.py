@@ -19,8 +19,10 @@ from typing import Any
 from bio_ce.control_store import (
     AccessDenied,
     ControlStore,
+    ControlStoreError,
     REVIEW_APPROVED,
     REVIEW_FAILED,
+    REVIEW_PENDING,
     REVIEW_REJECTED,
     ReviewItem,
 )
@@ -254,8 +256,13 @@ class ReviewService:
         self.scope = scope
 
     def approve(self, review_id: int, *, title: str | None = None, content: str | None = None) -> MemoryRevision:
-        """Apply a queued proposal, optionally with the user's edits."""
-        item = self.control.review(review_id)
+        """Apply a queued proposal, optionally with the user's edits.
+
+        Only a pending item is applied. The memory write and the queue update live in two
+        SQLite files, so the status is checked before anything is written: an item that was
+        already approved, rejected, or failed must never change memories again.
+        """
+        item = self._pending(review_id)
         final_title = title if title is not None else item.title
         final_content = content if content is not None else (item.content or "")
         if item.kind != "retract" and detect_secrets(final_title, final_content):
@@ -288,10 +295,16 @@ class ReviewService:
         return revision
 
     def reject(self, review_id: int) -> ReviewItem:
-        item = self.control.review(review_id)
+        item = self._pending(review_id)
         self.control.resolve_review(review_id, REVIEW_REJECTED, "rejected by the user")
         self.control.record(host=item.host, connection_id=item.connection_id, action=f"review-{item.kind}",
                             outcome="rejected-by-user", memory_id=item.memory_id, title=item.title)
+        return item
+
+    def _pending(self, review_id: int) -> ReviewItem:
+        item = self.control.review(review_id)
+        if item.status != REVIEW_PENDING:
+            raise ControlStoreError("That review item was already handled. Nothing was changed.")
         return item
 
 

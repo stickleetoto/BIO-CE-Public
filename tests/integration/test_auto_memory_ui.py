@@ -160,6 +160,27 @@ class AutoMemoryConnectionsPageTests(unittest.TestCase):
         self.assertEqual(page.review_pill.cget("text").strip("• "), "0")
         self.assertTrue(page.activity_list.winfo_children())
 
+    def test_a_stale_review_card_cannot_apply_or_reject_a_handled_item(self):
+        # U1-D1/D2: a card shown before the item was handled must not save it and must not raise.
+        app = self.app
+        control = self.connections.control
+        review_id = control.enqueue_review(kind="create", title="Prefers tea", content="The user prefers green tea.",
+                                           review_reason="inferred", host="codex",
+                                           connection_id=self.connections.grant.connection_id)
+        app.show_page("connections")
+        page = app.connections
+        stale = control.review(review_id)
+        page.reject_review(stale)
+        with patch.object(app, "notify") as notified:
+            page.approve_review(stale)
+        self.assertEqual(self.service.count(), 0, "a rejected suggestion was saved")
+        self.assertEqual(notified.call_args.args[0], "warning")
+        with patch.object(app, "notify") as notified:
+            page.reject_review(stale)  # used to raise ControlStoreError out of the Tk callback
+        self.assertEqual(notified.call_args.args[0], "warning")
+        self.assertIn("already handled", notified.call_args.args[1])
+        self.assertEqual(control.pending_review_count(), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

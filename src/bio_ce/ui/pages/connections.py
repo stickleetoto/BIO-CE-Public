@@ -570,7 +570,12 @@ class ConnectionsPage(Page):
         self.app.notify("success", f"“{preview(title, 60)}”", title=f"{verb} after your review")
 
     def reject_review(self, item: ReviewItem) -> None:
-        self.app.service.reject_review(self.control, item.review_id)
+        try:
+            self.app.service.reject_review(self.control, item.review_id)
+        except Exception as exc:  # a stale card: the item was already handled
+            self.app.notify("warning", str(exc), title="Couldn't reject the suggestion")
+            self.refresh_activity()
+            return
         self.refresh_activity()
         self.app.notify("info", "Nothing was changed.", title="Suggestion rejected")
 
