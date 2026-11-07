@@ -347,8 +347,10 @@ class MemoriesPage(Page):
         self.detail.pack(fill="both", expand=True)
         self.detail_title.configure(text=record.title)
         self.revision_pill.set(f"Revision {record.revision_number}", "neutral")
-        self.meta_label.configure(text=f"Updated {format_timestamp(record.recorded_at)} · "
-                                       f"Source: {preview(record.source_ref, 48)}")
+        meta = f"Updated {format_timestamp(record.recorded_at)}"
+        if record.source_ref:
+            meta += f" · Source: {preview(record.source_ref, 48)}"
+        self.meta_label.configure(text=meta)
         text = self.reader.text
         text.configure(state="normal")
         text.delete("1.0", tk.END)

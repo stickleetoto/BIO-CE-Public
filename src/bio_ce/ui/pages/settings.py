@@ -95,7 +95,7 @@ class EngineRowWidgets:
     engine_id: str
     active: bool
     pill: Pill
-    button: Button
+    button: Button | None  # None for the engine in use
     frame: tk.Frame
 
 
@@ -229,7 +229,13 @@ class SettingsPage(Page):
         shown = self.app.engine_banner()
         self.engine_banner_title.configure(text=shown.title,
                                            foreground=c.text if shown.connected else c.warning)
-        self.engine_banner_message.configure(text=shown.message)
+        # The separate-databases notice is shown once, below the list.
+        message = "" if shown.message == SEPARATE_DATABASES_NOTE else shown.message
+        self.engine_banner_message.configure(text=message)
+        if message and not self.engine_banner_message.winfo_manager():
+            self.engine_banner_message.pack(fill="x", pady=(self.theme.px(SPACE_XS), 0), before=self.engine_list)
+        elif not message:
+            self.engine_banner_message.pack_forget()
         for child in self.engine_list.winfo_children():
             child.destroy()
         self.engine_rows = {}
@@ -248,10 +254,12 @@ class SettingsPage(Page):
             if entry.active:
                 Pill(top, theme, "In use", "info").pack(side="left", padx=(theme.px(SPACE_XS), 0))
             # Engine switching is not enabled in this version: every choice button stays disabled.
-            button = Button(top, theme, "In use" if entry.active else "Use this engine", variant="subtle")
-            button.pack(side="right")
-            button.set_enabled(False)
-            Tooltip(button, theme, "This engine is in use." if entry.active else SWITCHING_DISABLED)
+            button = None
+            if not entry.active:  # the active row already says "In use"
+                button = Button(top, theme, "Use this engine", variant="subtle")
+                button.pack(side="right")
+                button.set_enabled(False)
+                Tooltip(button, theme, SWITCHING_DISABLED)
             if entry.detail:
                 WrapLabel(inner, entry.detail, font=theme.font("caption"), foreground=c.text_muted,
                           background=c.surface_alt).pack(fill="x", pady=(theme.px(SPACE_XS), 0))
