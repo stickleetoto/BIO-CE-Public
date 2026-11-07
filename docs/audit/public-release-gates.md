@@ -11,6 +11,15 @@ publishes a file in the public repository, so it can happen only after Gate A or
 `main` only, no tags). Its history starts at the installer's source commit `d433ebd`; later commits change only
 documentation, tests, the installer test harness, and the CI workflow. No installer release or tag exists.
 
+> **Status note, 2026-11-07 (two separate facts).**
+> 1. **Published:** a GitHub pre-release `v0.3.0-rc1` exists (published 2026-10-27, marked pre-release, tag at
+>    `3b5d12b`). It carries `BIO-CE-Setup-v0.3.0-rc1.exe`, whose GitHub-reported SHA-256 equals the value recorded
+>    under Gate B below, and `SHA256SUMS.txt` (its contents were not re-read for this note). It stays as published;
+>    it is not replaced.
+> 2. **Gate B checklist: still BLOCKED.** The clean Windows install is NOT RUN and the signing decision is open, as
+>    the table below says. The release existing does not mean those checks passed. Treat the published installer as
+>    a pre-release verified only on the developer's own account.
+
 ### Gate A — make the source public: COMPLETE (2026-10-26)
 
 | Check | Status | Evidence |
