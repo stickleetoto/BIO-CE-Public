@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from tkinter import ttk
 import tkinter as tk
 
@@ -240,6 +241,20 @@ class HostCard(Card):
             WrapLabel(column, check.detail, font=theme.font("caption"), foreground=c.text_secondary).pack(fill="x")
 
 
+PENDING_TEXT = {
+    "create": "Not saved yet. Nothing is stored until you approve it.",
+    "update": "Not changed yet. The memory stays as it is until you approve this.",
+    "retract": "Not retracted yet. The memory stays visible until you approve this.",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewCard:
+    review_id: int
+    status_text: str
+    buttons: tuple
+
+
 class ConnectionsPage(Page):
     key = "connections"
     nav_key = "connections"
@@ -338,6 +353,7 @@ class ConnectionsPage(Page):
                 child.destroy()
         control = self.control
         reviews: tuple[ReviewItem, ...] = control.reviews(limit=50) if control is not None else ()
+        self.review_cards: list[ReviewCard] = []
         activity: tuple[AuditEntry, ...] = control.recent_activity(limit=15) if control is not None else ()
         self.review_pill.set(str(len(reviews)), "warning" if reviews else "neutral")
         if not reviews:
@@ -384,17 +400,24 @@ class ConnectionsPage(Page):
                       background=c.surface_alt).pack(fill="x")
         WrapLabel(inner, f"Why it needs you: {item.review_reason}", font=theme.font("caption"),
                   foreground=c.text_muted, background=c.surface_alt).pack(fill="x", pady=(theme.px(SPACE_XS), 0))
+        status_text = PENDING_TEXT[item.kind]
+        WrapLabel(inner, status_text, font=theme.font("caption_strong"), foreground=c.warning,
+                  background=c.surface_alt).pack(fill="x", pady=(theme.px(SPACE_XS), 0))
         buttons = tk.Frame(inner, background=c.surface_alt)
         buttons.pack(fill="x", pady=(theme.px(SPACE_S), 0))
         approve_text = "Retract memory" if item.kind == "retract" else "Approve"
-        Button(buttons, theme, approve_text, variant="danger" if item.kind == "retract" else "primary",
-               command=lambda: self.approve_review(item)).pack(side="left")
+        made = [Button(buttons, theme, approve_text, variant="danger" if item.kind == "retract" else "primary",
+                       command=lambda: self.approve_review(item))]
+        made[-1].pack(side="left")
         if item.kind != "retract":
-            Button(buttons, theme, "Edit and approve…",
-                   command=lambda: self.approve_review(item, edit=True)).pack(side="left",
-                                                                            padx=(theme.px(SPACE_S), 0))
-        Button(buttons, theme, "Reject", command=lambda: self.reject_review(item)).pack(
-            side="left", padx=(theme.px(SPACE_S), 0))
+            made.append(Button(buttons, theme, "Edit and approve…",
+                               command=lambda: self.approve_review(item, edit=True)))
+            made[-1].pack(side="left", padx=(theme.px(SPACE_S), 0))
+        made.append(Button(buttons, theme, "Reject", command=lambda: self.reject_review(item)))
+        made[-1].pack(side="left", padx=(theme.px(SPACE_S), 0))
+        for button in made:
+            self.app.gate(button, "review")
+        self.review_cards.append(ReviewCard(item.review_id, status_text, tuple(made)))
 
     def focus_default(self) -> None:
         self.focus_set()
@@ -542,6 +565,8 @@ class ConnectionsPage(Page):
         self.app.notify("success", f"Paused {count} connection{'s' if count != 1 else ''}.", title="AI access paused")
 
     def approve_review(self, item: ReviewItem, *, edit: bool = False) -> None:
+        if not self.app.require_action("review"):
+            return
         title, content = item.title, item.content
         if edit:
             edited = ReviewEditDialog(self, self.theme, title=item.title, content=item.content or "",
@@ -570,6 +595,8 @@ class ConnectionsPage(Page):
         self.app.notify("success", f"“{preview(title, 60)}”", title=f"{verb} after your review")
 
     def reject_review(self, item: ReviewItem) -> None:
+        if not self.app.require_action("review"):
+            return
         try:
             self.app.service.reject_review(self.control, item.review_id)
         except Exception as exc:  # a stale card: the item was already handled

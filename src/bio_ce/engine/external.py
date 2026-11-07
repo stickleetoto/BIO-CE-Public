@@ -38,6 +38,7 @@ from bio_ce.engine.contract import (
     EngineProtocolError,
     EngineState,
     EngineStatus,
+    EngineUnauthorized,
     EngineUnavailable,
     MemoryCandidate,
     MemoryView,
@@ -143,6 +144,8 @@ class ExternalEngineAdapter:
             descriptor = parse_descriptor(self._send(OP_DESCRIBE, {
                 "client_protocol_min": CLIENT_PROTOCOL_MIN, "client_protocol_max": CLIENT_PROTOCOL_MAX,
             }))
+        except EngineUnauthorized as exc:
+            return EngineStatus(self.engine_id, EngineState.UNAUTHORIZED, str(exc))
         except EngineUnavailable as exc:
             return EngineStatus(self.engine_id, EngineState.NOT_RUNNING, str(exc))
         except EngineProtocolError as exc:
@@ -170,6 +173,8 @@ class ExternalEngineAdapter:
             return self.connect()
         try:
             answer = self._send(OP_HEALTH, {})
+        except EngineUnauthorized as exc:
+            return EngineStatus(self.engine_id, EngineState.UNAUTHORIZED, str(exc), self._descriptor)
         except (EngineUnavailable, EngineProtocolError) as exc:
             return EngineStatus(self.engine_id, EngineState.NOT_RUNNING, str(exc), self._descriptor)
         if answer.get("state") != "ready":
@@ -181,6 +186,10 @@ class ExternalEngineAdapter:
         return self._effective.get(capability, Support.UNSUPPORTED)
 
     # Reads ----------------------------------------------------------------
+
+    def count(self) -> int | None:
+        """Protocol v1 has no count operation, so the total is unknown."""
+        return None
 
     def list(self, *, limit: int = 100, offset: int = 0) -> tuple[MemoryView, ...]:
         require(self, Capability.MEMORY_LIST)
@@ -247,7 +256,7 @@ class ExternalEngineAdapter:
         if error is not None:
             code = error.get("code") if isinstance(error, Mapping) else None
             if code == "unauthorized":
-                raise EngineUnavailable("The engine refused this connection.")
+                raise EngineUnauthorized("The engine refused this connection.")
             if code == "not_supported":
                 raise EngineProtocolError("the engine does not support this operation")
             raise EngineProtocolError("the engine reported an error")
@@ -267,6 +276,7 @@ class ExternalEngineAdapter:
                 recorded_at=str(item["recorded_at"]),
                 valid_from=item.get("valid_from"),
                 valid_until=item.get("valid_until"),
+                source_ref=str(item.get("source_ref") or "")[:512],
             )
         except (KeyError, TypeError, ValueError, AttributeError) as exc:
             raise EngineProtocolError("the engine returned an invalid memory") from exc

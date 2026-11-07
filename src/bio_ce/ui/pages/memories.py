@@ -8,7 +8,8 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
-from bio_ce.core.models import MemoryNotFoundError, MemoryRevision, RevisionConflictError
+from bio_ce.core.models import MemoryNotFoundError, RevisionConflictError
+from bio_ce.engine.contract import EngineUnavailable, MemoryView, UnsupportedCapability, WriteStatus
 from bio_ce.ui.dialogs import HistoryDialog
 from bio_ce.ui.format import format_timestamp, middle_ellipsis, plural, preview, relative_time
 from bio_ce.ui.pages import Page
@@ -41,16 +42,18 @@ class MemoriesPage(Page):
     def __init__(self, app, master) -> None:
         super().__init__(app, master)
         theme, c = self.theme, self.colors
-        self.selected: MemoryRevision | None = None
-        self.records: dict[str, MemoryRevision] = {}
+        self.selected: MemoryView | None = None
+        self.records: dict[str, MemoryView] = {}
         self.history_dialog: HistoryDialog | None = None
         self._search_after: str | None = None
         self._loaded = 0
         self._total = 0
         self._details_open = False
 
-        Button(self.actions, theme, "Add memory", icon="add", variant="primary",
-               command=app.start_new_memory, tooltip="Add memory (Ctrl+N)").pack(side="right")
+        self.add_button = Button(self.actions, theme, "Add memory", icon="add", variant="primary",
+                                 command=app.start_new_memory, tooltip="Add memory (Ctrl+N)")
+        self.add_button.pack(side="right")
+        app.gate(self.add_button, "create")
         Button(self.actions, theme, "Refresh", icon="refresh", variant="subtle",
                command=self.refresh, tooltip="Reload the list (F5)").pack(side="right", padx=(0, theme.px(SPACE_S)))
 
@@ -142,6 +145,9 @@ class MemoriesPage(Page):
         self.retract_button = Button(actions, theme, "Retract…", icon="retract", variant="danger_subtle",
                                      command=self.retract_selected, tooltip="Hide this memory everywhere (Delete)")
         self.retract_button.pack(side="right")
+        self.app.gate(self.edit_button, "edit")
+        self.app.gate(self.history_button, "history")
+        self.app.gate(self.retract_button, "retract")
         divider(frame, theme).pack(fill="x")
 
         footer = tk.Frame(frame, background=c.surface)
@@ -214,18 +220,28 @@ class MemoriesPage(Page):
         query = self.query.get().strip()
         keep = select or (self.selected.memory_id if self.selected else None)
         self.selected = None  # re-read on reselect so the detail never shows a stale revision
-        service = self.app.service
         try:
-            self._total = service.count()
+            engine = self.app.memory_engine()
+            self._total = engine.count()
             if query:
-                records: list[MemoryRevision] = []
-                for hit in service.search(query, limit=self.SEARCH_LIMIT):
+                records: list[MemoryView] = []
+                for hit in engine.search(query, limit=self.SEARCH_LIMIT):
                     try:
-                        records.append(service.read(hit.memory_id))
+                        records.append(engine.get(hit.memory_id))
                     except MemoryNotFoundError:
                         continue
             else:
-                records = list(service.list(limit=self.PAGE_SIZE))
+                records = list(engine.list(limit=self.PAGE_SIZE))
+        except (EngineUnavailable, UnsupportedCapability) as exc:
+            # Never show another engine's memories in place of the selected one.
+            self._populate([], append=False)
+            self._show_record(None)
+            self.result_label.configure(text="")
+            unsupported = isinstance(exc, UnsupportedCapability)
+            self.app.notify("warning" if unsupported else "error",
+                            str(exc) if unsupported else "BIO CE can't reach the memory engine right now. Nothing from any other engine is shown in its place.",
+                            title="Not available" if unsupported else "Memory engine unavailable")
+            return
         except Exception:
             self.result_label.configure(text="")
             self.app.notify("error", "BIO CE couldn't read your memories. Try again, or restart BIO CE if this "
@@ -240,15 +256,16 @@ class MemoriesPage(Page):
 
     def load_more(self) -> None:
         try:
-            records = list(self.app.service.list(limit=self.PAGE_SIZE, offset=self._loaded))
-            self._total = self.app.service.count()
+            engine = self.app.memory_engine()
+            records = list(engine.list(limit=self.PAGE_SIZE, offset=self._loaded))
+            self._total = engine.count()
         except Exception:
             self.app.notify("error", "BIO CE couldn't load more memories. Try again.", title="Memories unavailable")
             return
         self._populate(records, append=True)
         self._update_states("", self._loaded)
 
-    def _populate(self, records: list[MemoryRevision], *, append: bool) -> None:
+    def _populate(self, records: list[MemoryView], *, append: bool) -> None:
         if not append:
             self.tree.delete(*self.tree.get_children())
             self.records = {}
@@ -275,6 +292,8 @@ class MemoriesPage(Page):
             if shown >= self.SEARCH_LIMIT:
                 label += f" · top {self.SEARCH_LIMIT}"
             self.result_label.configure(text=label)
+        elif self._total is None:  # the engine does not report a total
+            self.result_label.configure(text=f"Showing {plural(shown, 'memory', 'memories')}")
         elif shown < self._total:
             self.result_label.configure(text=f"Showing {shown:,} of {plural(self._total, 'memory', 'memories')}")
         else:
@@ -284,7 +303,8 @@ class MemoriesPage(Page):
             self.no_results.lift()
         else:
             self.no_results.place_forget()
-        if not query and shown < self._total:
+        more = (shown < self._total) if self._total is not None else (shown > 0 and shown % self.PAGE_SIZE == 0)
+        if not query and more:
             self.more_bar.pack(side="bottom", fill="x", before=self.tree.master)
         else:
             self.more_bar.pack_forget()
@@ -304,7 +324,7 @@ class MemoriesPage(Page):
         if self.selected is not None and self.selected.memory_id == selection[0] and self.detail.winfo_manager():
             return
         try:
-            record = self.app.service.read(selection[0])
+            record = self.app.memory_engine().get(selection[0])
         except MemoryNotFoundError:
             self._show_record(None)
             self.app.notify("warning", "This memory is no longer available. It may have been retracted or "
@@ -317,7 +337,7 @@ class MemoriesPage(Page):
             return
         self._show_record(record)
 
-    def _show_record(self, record: MemoryRevision | None) -> None:
+    def _show_record(self, record: MemoryView | None) -> None:
         self.selected = record
         if record is None:
             self.detail.pack_forget()
@@ -328,7 +348,7 @@ class MemoriesPage(Page):
         self.detail_title.configure(text=record.title)
         self.revision_pill.set(f"Revision {record.revision_number}", "neutral")
         self.meta_label.configure(text=f"Updated {format_timestamp(record.recorded_at)} · "
-                                       f"Source: {preview(record.source.source_ref, 48)}")
+                                       f"Source: {preview(record.source_ref, 48)}")
         text = self.reader.text
         text.configure(state="normal")
         text.delete("1.0", tk.END)
@@ -341,7 +361,7 @@ class MemoriesPage(Page):
         values = {
             "memory_id": middle_ellipsis(record.memory_id, 40),
             "revision_id": middle_ellipsis(record.revision_id, 40),
-            "source": f"{record.source.source_type} · {record.source.source_ref}",
+            "source": f"{record.source_type} · {record.source_ref}",
             "recorded": format_timestamp(record.recorded_at),
             "valid_from": format_timestamp(record.valid_from),
             "valid_until": format_timestamp(record.valid_until),
@@ -376,6 +396,8 @@ class MemoriesPage(Page):
         if record is None:
             self.app.notify("info", "Select a memory in the list first.")
             return
+        if not self.app.require_action("retract"):
+            return
         accepted = self.app.confirm(
             title="Retract this memory?",
             message="BIO CE and connected AI hosts will no longer find or read this memory.",
@@ -389,16 +411,29 @@ class MemoriesPage(Page):
         )
         if not accepted:
             return
+        changed = ("This memory changed after you opened it, so nothing was retracted. "
+                   "Review the latest version and try again.")
         try:
-            self.app.service.retract(record)
+            outcome = self.app.memory_engine().retract(record.memory_id, expected_revision_id=record.revision_id)
         except (RevisionConflictError, MemoryNotFoundError):
-            self.app.notify("warning", "This memory changed after you opened it, so nothing was retracted. "
-                            "Review the latest version and try again.", title="Memory changed")
+            self.app.notify("warning", changed, title="Memory changed")
             self.app.data_changed()
+            return
+        except EngineUnavailable:
+            self.app.notify("error", "BIO CE can't reach the memory engine, so nothing was retracted.",
+                            title="Memory engine unavailable")
             return
         except Exception:
             self.app.notify("error", "BIO CE couldn't retract this memory. Nothing was changed.",
                             title="Retraction failed")
+            return
+        if outcome.status is WriteStatus.CONFLICT:
+            self.app.notify("warning", changed, title="Memory changed")
+            self.app.data_changed()
+            return
+        if not outcome.persisted:
+            self.app.notify("warning", "; ".join(outcome.reasons) or "The memory engine did not retract it.",
+                            title="Nothing was retracted")
             return
         self.selected = None
         self.app.data_changed()
@@ -410,8 +445,10 @@ class MemoriesPage(Page):
         if record is None:
             self.app.notify("info", "Select a memory in the list first.")
             return None
+        if not self.app.require_action("history"):
+            return None
         try:
-            revisions = self.app.service.history(record.memory_id)
+            revisions = self.app.memory_engine().history(record.memory_id)
         except Exception:
             self.app.notify("error", "BIO CE couldn't read the history of this memory. Refresh and try again.",
                             title="History unavailable")

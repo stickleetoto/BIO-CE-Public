@@ -103,6 +103,10 @@ class EngineUnavailable(EngineError):
     """The engine is not installed, not running, incompatible, or refused access."""
 
 
+class EngineUnauthorized(EngineUnavailable):
+    """The engine is running but refused this client's or connection's credentials."""
+
+
 class EngineProtocolError(EngineError):
     """The engine answered with something outside the contract; the result is discarded."""
 
@@ -196,6 +200,7 @@ class MemoryView:
     recorded_at: str
     valid_from: str | None = None
     valid_until: str | None = None
+    source_ref: str = ""  # descriptive source text; conveys no trust
 
 
 @dataclass(frozen=True, slots=True)
@@ -281,6 +286,7 @@ class EngineBackend(Protocol):
     def descriptor(self) -> EngineDescriptor: ...
     def status(self) -> EngineStatus: ...
     def support(self, capability: Capability) -> Support: ...
+    def count(self) -> int | None: ...  # None when the engine does not report a total
     def list(self, *, limit: int = 100, offset: int = 0) -> tuple[MemoryView, ...]: ...
     def search(self, query: str, *, limit: int = 50) -> tuple[SearchResultView, ...]: ...
     def get(self, memory_id: str) -> MemoryView: ...
@@ -304,7 +310,8 @@ def require(backend: EngineBackend, capability: Capability) -> None:
 
 __all__ = [
     "CLIENT_PROTOCOL_MAX", "CLIENT_PROTOCOL_MIN", "Capability", "ContextView", "EngineBackend", "EngineBinding",
-    "EngineDescriptor", "EngineError", "EngineProtocolError", "EngineState", "EngineStatus", "EngineUnavailable",
+    "EngineDescriptor", "EngineError", "EngineProtocolError", "EngineState", "EngineStatus", "EngineUnauthorized",
+    "EngineUnavailable",
     "HostSession", "MemoryCandidate", "MemoryView", "Negotiation", "SearchResultView", "StaleEngineBinding",
     "Support", "UnsupportedCapability", "WriteOutcome", "WriteStatus", "effective_capabilities", "negotiate",
     "require", "weaker",

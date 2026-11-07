@@ -8,6 +8,7 @@ from __future__ import annotations
 import tkinter as tk
 
 from bio_ce.connections import HostStatus, auto_memory_support
+from bio_ce.engine.contract import EngineUnavailable
 from bio_ce.ui.format import host_name, plural, preview, relative_time
 from bio_ce.ui.pages import Page
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS
@@ -201,8 +202,13 @@ class DashboardPage(Page):
         super().refresh()
         theme, c = self.theme, self.colors
         try:
-            count = self.app.service.count()
-            recent = self.app.service.list(limit=RECENT_LIMIT)
+            engine = self.app.memory_engine()
+            count = engine.count()
+            recent = engine.list(limit=RECENT_LIMIT)
+        except EngineUnavailable:
+            self.status_pill.set("Engine unavailable", "danger")
+            self.status_detail.configure(text="BIO CE can't reach the memory engine. See Settings → Memory engine.")
+            count, recent = None, ()
         except Exception:
             self.status_pill.set("Needs attention", "danger")
             self.status_detail.configure(text="The memory database could not be read. Restart BIO CE and try again.")

@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import tkinter as tk
 
-from bio_ce.core.models import MemoryNotFoundError, MemoryRevision, RevisionConflictError, ValidationError
+from bio_ce.core.models import MemoryNotFoundError, RevisionConflictError, ValidationError
+from bio_ce.engine.contract import EngineUnavailable, MemoryView, UnsupportedCapability, WriteStatus
+from bio_ce.engine.presentation import outcome_message
 from bio_ce.ui.format import (
     CONTENT_LIMIT,
     DEFAULT_SOURCE,
@@ -28,7 +30,7 @@ class EditorPage(Page):
     def __init__(self, app, master) -> None:
         super().__init__(app, master)
         theme, c = self.theme, self.colors
-        self.editing: MemoryRevision | None = None
+        self.editing: MemoryView | None = None
         self._baseline = ("", DEFAULT_SOURCE, "")
         self.title_value = tk.StringVar(master=self)
         self.source_value = tk.StringVar(master=self, value=DEFAULT_SOURCE)
@@ -108,12 +110,12 @@ class EditorPage(Page):
     def dirty(self) -> bool:
         return self.values() != self._baseline
 
-    def load(self, record: MemoryRevision | None) -> None:
+    def load(self, record: MemoryView | None) -> None:
         self.editing = record
         if record is None:
             title, source, body = "", DEFAULT_SOURCE, ""
         else:
-            title, source, body = record.title, record.source.source_ref, record.content or ""
+            title, source, body = record.title, record.source_ref, record.content or ""
         self.title_value.set(title)
         self.source_value.set(source)
         self.content.set(body)
@@ -172,17 +174,22 @@ class EditorPage(Page):
 
     # Actions --------------------------------------------------------------
 
-    def save_memory(self) -> MemoryRevision | None:
+    def save_memory(self) -> MemoryView | None:
         title, source_ref, content = self.values()
         self._clear_errors()
-        service = self.app.service
+        created = self.editing is None
+        if not self.app.require_action("create" if created else "edit"):
+            return None
         try:
-            if self.editing is None:
-                saved = service.add(title=title, content=content, source_ref=source_ref)
-                created = True
+            engine = self.app.memory_engine()
+            if created:
+                outcome = engine.create(title=title, content=content, source_ref=source_ref)
             else:
-                saved = service.revise(self.editing, title=title, content=content, source_ref=source_ref)
-                created = False
+                outcome = engine.revise(self.editing.memory_id, expected_revision_id=self.editing.revision_id,
+                                        title=title, content=content, source_ref=source_ref)
+            if outcome.status is WriteStatus.CONFLICT:
+                raise RevisionConflictError("the memory changed")
+            saved = engine.get(outcome.memory_id) if outcome.persisted else None
         except ValidationError as exc:
             field, message = validation_feedback(exc)
             if field is not None:
@@ -199,9 +206,27 @@ class EditorPage(Page):
                 action=("Reload latest", self.reload_latest),
             )
             return None
+        except EngineUnavailable:
+            self.app.notify("error", "BIO CE can't reach the memory engine, so nothing was saved. Your text is still "
+                            "here; try again.", title="Memory engine unavailable")
+            return None
+        except UnsupportedCapability as exc:
+            self.app.notify("warning", str(exc), title="Not available")
+            return None
         except Exception:
             self.app.notify("error", "BIO CE couldn't save this memory. Your text is still here; try again.",
                             title="Save failed")
+            return None
+        if saved is None:
+            message = outcome_message(outcome)
+            if outcome.status is WriteStatus.PENDING_REVIEW:
+                # A proposal is not a memory: leave the editor, but never say it was saved.
+                self._baseline = self.values()
+                self.load(None)
+                self.app.show_page("memories")
+                self.app.notify("info", message.message, title=message.title)
+            else:
+                self.app.notify("warning", message.message, title=message.title)
             return None
         self._baseline = self.values()
         self.editing = None
@@ -213,7 +238,7 @@ class EditorPage(Page):
         if self.editing is None:
             return
         try:
-            latest = self.app.service.read(self.editing.memory_id)
+            latest = self.app.memory_engine().get(self.editing.memory_id)
         except MemoryNotFoundError:
             self._baseline = self.values()
             self.app.show_page("memories")

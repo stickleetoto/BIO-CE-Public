@@ -14,7 +14,18 @@ from tkinter import filedialog
 
 import bio_ce
 from bio_ce.connections import HostStatus, MCPConnectionManager
-from bio_ce.core.models import MemoryRevision
+from bio_ce.engine.community import COMMUNITY_ENGINE_ID, CommunityEngineAdapter
+from bio_ce.engine.contract import (
+    Capability,
+    EngineBackend,
+    EngineState,
+    EngineStatus,
+    EngineUnavailable,
+    MemoryView,
+)
+from bio_ce.engine.external import ExternalEngineAdapter
+from bio_ce.engine.presentation import ActionState, EngineBanner, action_states, banner, engine_name
+from bio_ce.engine.switching import DEFAULT_SELECTION, EngineSelection, SwitchPhase
 from bio_ce.storage.backup import BackupError
 from bio_ce.ui.dialogs import ConfirmDialog
 from bio_ce.ui.format import preview
@@ -38,7 +49,7 @@ from bio_ce.ui.theme import (
     app_icon,
     apply_window_chrome,
 )
-from bio_ce.ui.widgets import InfoBar, NavItem, install_mousewheel
+from bio_ce.ui.widgets import InfoBar, NavItem, Tooltip, install_mousewheel
 
 if TYPE_CHECKING:
     from bio_ce.desktop import AppDataPaths, DesktopMemoryService
@@ -65,9 +76,27 @@ class BIOCEDesktop:
         connection_manager: MCPConnectionManager | None = None,
         *,
         theme: Theme | None = None,
+        engine: EngineBackend | None = None,
+        engines: dict[str, EngineBackend] | None = None,
+        engine_selection: EngineSelection | None = None,
     ) -> None:
         self.root = root
         self.service = service
+        # The memory engine this window uses. Community is the default; any other engine must be passed in
+        # explicitly together with its selection. This version never switches engines on its own.
+        self.engine: EngineBackend = engine if engine is not None else CommunityEngineAdapter(service)
+        registry: dict[str, EngineBackend] = {COMMUNITY_ENGINE_ID: self.engine if self.engine.engine_id ==
+                                              COMMUNITY_ENGINE_ID else CommunityEngineAdapter(service)}
+        registry.update(engines or {})
+        registry[self.engine.engine_id] = self.engine
+        registry.setdefault("core", ExternalEngineAdapter("core", None))  # reported as not installed
+        self.engines = registry
+        self.engine_selection = engine_selection or (
+            DEFAULT_SELECTION if self.engine.engine_id == COMMUNITY_ENGINE_ID
+            else EngineSelection(SwitchPhase.ACTIVE, self.engine.engine_id, 0))
+        self.engine_status: EngineStatus | None = None
+        self._engine_statuses: dict[str, EngineStatus] = {}
+        self._actions: dict[str, ActionState] = {}
         self.paths = paths
         self.connection_manager = connection_manager or MCPConnectionManager(service.database, paths.root)
         self.theme = theme or Theme(root)
@@ -90,6 +119,7 @@ class BIOCEDesktop:
         self.sidebar.pack_propagate(False)
         tk.Frame(root, width=1, background=c.border).pack(side="left", fill="y")
         self._build_sidebar()
+        self.refresh_engine_status()
 
         self.main = tk.Frame(root, background=c.bg)
         self.main.pack(side="left", fill="both", expand=True)
@@ -180,6 +210,9 @@ class BIOCEDesktop:
                  background=c.sidebar, foreground=c.text_secondary, anchor="w").pack(fill="x")
         tk.Label(self.sidebar_footer_text, text="You control AI access", font=theme.font("caption"),
                  background=c.sidebar, foreground=c.text_muted, anchor="w").pack(fill="x")
+        self.engine_label = tk.Label(self.sidebar_footer_text, text="", font=theme.font("caption"),
+                                     background=c.sidebar, foreground=c.text_muted, anchor="w", justify="left")
+        self.engine_label.pack(fill="x", pady=(theme.px(SPACE_S), 0))
         tk.Label(self.sidebar_footer_text, text=f"Version {bio_ce.__version__}", font=theme.font("caption"),
                  background=c.sidebar, foreground=c.text_muted, anchor="w").pack(fill="x", pady=(theme.px(SPACE_S), 0))
 
@@ -243,6 +276,7 @@ class BIOCEDesktop:
             self.connections.refresh()
             return
         self.host_statuses(refresh=True)
+        self.refresh_engine_status()
         if self.current is not None:
             self.current.refresh()
 
@@ -279,6 +313,69 @@ class BIOCEDesktop:
         if action is not None and self.root.grab_current() is None:
             action()
         return "break"
+
+    # Memory engine ----------------------------------------------------------
+
+    def refresh_engine_status(self) -> None:
+        """Re-read every engine's status and recompute which actions the active engine allows."""
+        statuses: dict[str, EngineStatus] = {}
+        for engine_id, backend in self.engines.items():
+            try:
+                statuses[engine_id] = backend.status()
+            except Exception:
+                statuses[engine_id] = EngineStatus(engine_id, EngineState.ERROR,
+                                                   "The engine status could not be read.")
+        self._engine_statuses = statuses
+        binding = self.engine_selection.binding
+        self.engine_status = statuses.get(binding.engine_id) if binding is not None else None
+        support = ({capability: self.engine.support(capability) for capability in Capability}
+                   if binding is not None and binding.engine_id == self.engine.engine_id else {})
+        self._actions = action_states(self.engine_selection, self.engine_status, support)
+        if hasattr(self, "engine_label"):
+            c = self.theme.colors
+            self.engine_label.configure(text=self._engine_label_text(),
+                                        foreground=c.text_muted if self.engine_banner().connected else c.warning)
+
+    def _engine_label_text(self) -> str:
+        binding = self.engine_selection.binding
+        if binding is None:
+            return "No engine connected"
+        name = engine_name(binding.engine_id, self.engine_status)
+        if self.engine_status is None or not self.engine_status.ready:
+            state = self.engine_status.state.value.replace("_", " ") if self.engine_status else "error"
+            return f"{name}: {state}"
+        return f"Engine: {name}"
+
+    def engine_statuses(self) -> tuple[EngineStatus, ...]:
+        return tuple(self._engine_statuses.values())
+
+    def engine_banner(self) -> EngineBanner:
+        return banner(self.engine_selection, self.engine_status)
+
+    def allowed(self, action: str) -> ActionState:
+        return self._actions.get(action, ActionState(action, False, "This action is not available."))
+
+    def require_action(self, action: str) -> bool:
+        """True when the active engine allows ``action``; otherwise tell the user why not."""
+        state = self.allowed(action)
+        if not state.enabled:
+            self.notify("warning", state.note or "This action is not available.", title="Not available")
+        return state.enabled
+
+    def gate(self, button, action: str) -> None:
+        """Disable ``button`` when the active engine does not allow ``action``; Community allows all."""
+        state = self.allowed(action)
+        if not state.enabled:
+            button.set_enabled(False)
+            Tooltip(button, self.theme, state.note)
+
+    def memory_engine(self) -> EngineBackend:
+        """The engine for reads and writes now, or :class:`EngineUnavailable`. Never another engine."""
+        if self.engine_selection.binding is None:
+            raise EngineUnavailable("No memory engine is connected.")
+        if self.engine_status is None or not self.engine_status.ready:
+            raise EngineUnavailable("The memory engine is unavailable.")
+        return self.engine
 
     # Shared services ------------------------------------------------------
 
@@ -342,13 +439,14 @@ class BIOCEDesktop:
         if self.current is self.dashboard:
             self.dashboard.refresh()
 
-    def memory_saved(self, saved: MemoryRevision, *, created: bool) -> None:
+    def memory_saved(self, saved: MemoryView, *, created: bool) -> None:
         self.memories.query.set("")
         self.show_page("memories")
         self.data_changed(select=saved.memory_id)
         self.memories.tree.focus_set()
         title = "Memory saved" if created else f"Saved revision {saved.revision_number}"
-        self.notify("success", f"“{preview(saved.title, 60)}” is stored on this PC.", title=title)
+        where = "on this PC" if saved.engine_id == COMMUNITY_ENGINE_ID else f"in {engine_name(saved.engine_id)}"
+        self.notify("success", f"“{preview(saved.title, 60)}” is stored {where}.", title=title)
 
     # Compatibility API (used by tests and older callers) -------------------
 
@@ -369,11 +467,11 @@ class BIOCEDesktop:
         return self.memories.query
 
     @property
-    def selected(self) -> MemoryRevision | None:
+    def selected(self) -> MemoryView | None:
         return self.memories.selected
 
     @property
-    def editing(self) -> MemoryRevision | None:
+    def editing(self) -> MemoryView | None:
         return self.editor.editing
 
     @property
@@ -381,6 +479,8 @@ class BIOCEDesktop:
         return self.memories.tree
 
     def start_new_memory(self) -> None:
+        if not self.require_action("create"):
+            return
         if self.current is self.editor and self.editor.editing is None:
             self.editor.focus_default()
             return
@@ -394,10 +494,12 @@ class BIOCEDesktop:
         if record is None:
             self.notify("info", "Select a memory in the list first.")
             return
+        if not self.require_action("edit"):
+            return
         self.editor.load(record)
         self.show_page("editor")
 
-    def save_memory(self) -> MemoryRevision | None:
+    def save_memory(self) -> MemoryView | None:
         return self.editor.save_memory()
 
     def cancel_edit(self) -> None:
@@ -442,6 +544,8 @@ class BIOCEDesktop:
                         title="Folder unavailable")
 
     def backup_database(self) -> Path | None:
+        if not self.require_action("backup"):
+            return None
         destination = self.ask_save_path(
             title="Save BIO CE backup",
             defaultextension=".sqlite3",
@@ -468,6 +572,8 @@ class BIOCEDesktop:
         return created
 
     def restore_database(self) -> bool:
+        if not self.require_action("restore"):
+            return False
         source = self.ask_open_path(
             title="Choose a BIO CE backup to restore",
             filetypes=(("BIO CE backup", "*.sqlite3"), ("All files", "*.*")),
@@ -515,6 +621,11 @@ class BIOCEDesktop:
             return
         if self.current is self.editor and not self.editor.confirm_leave():
             return
+        for backend in self.engines.values():
+            try:
+                backend.close()  # the Community adapter leaves the service to the line below
+            except Exception:
+                pass
         self.service.close()
         closer = getattr(self.connection_manager, "close", None)
         if callable(closer):

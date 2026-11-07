@@ -104,6 +104,7 @@ def memory_view(revision: MemoryRevision) -> MemoryView:
         recorded_at=revision.recorded_at,
         valid_from=revision.valid_from,
         valid_until=revision.valid_until,
+        source_ref=revision.source.source_ref,
     )
 
 
@@ -167,6 +168,9 @@ class CommunityEngineAdapter:
         return self._descriptor.support(capability)
 
     # Reads ----------------------------------------------------------------
+
+    def count(self) -> int:
+        return self._service.count()
 
     def list(self, *, limit: int = 100, offset: int = 0) -> tuple[MemoryView, ...]:
         return tuple(memory_view(revision) for revision in self._service.list(limit=limit, offset=offset))

@@ -9,7 +9,7 @@ import time
 from typing import Sequence
 import tkinter as tk
 
-from bio_ce.core.models import MemoryRevision
+from bio_ce.engine.contract import MemoryView
 from bio_ce.ui.format import format_timestamp, revision_kind_label
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS, Theme, apply_window_chrome
 from bio_ce.ui.widgets import Button, Field, ScrollFrame, TextArea, WrapLabel
@@ -146,7 +146,7 @@ class ConfirmDialog(Dialog):
 class HistoryDialog(Dialog):
     """Read-only, newest-first view of every revision of one memory."""
 
-    def __init__(self, parent: tk.Misc, theme: Theme, revisions: Sequence[MemoryRevision]) -> None:
+    def __init__(self, parent: tk.Misc, theme: Theme, revisions: Sequence[MemoryView]) -> None:
         super().__init__(parent, theme, "Revision history", resizable=True)
         c = theme.colors
         latest = revisions[-1] if revisions else None
@@ -180,7 +180,7 @@ class HistoryDialog(Dialog):
             text.insert(tk.END, "\n")
             text.insert(
                 tk.END,
-                f"{format_timestamp(revision.recorded_at)} · Source: {revision.source.source_ref}\n",
+                f"{format_timestamp(revision.recorded_at)} · Source: {revision.source_ref}\n",
                 "meta",
             )
             text.insert(tk.END, f"{revision.title}\n", "title")

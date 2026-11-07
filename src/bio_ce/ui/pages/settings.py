@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 import re
 import sys
@@ -13,9 +14,20 @@ import tkinter as tk
 import bio_ce
 from bio_ce.ui.dialogs import TextViewerDialog
 from bio_ce.ui.format import file_size, plural
+from bio_ce.engine.presentation import SEPARATE_DATABASES_NOTE, engine_rows
 from bio_ce.ui.pages import Page
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS
-from bio_ce.ui.widgets import Button, Card, Field, ScrollFrame, WrapLabel, copy_to_clipboard, section_label
+from bio_ce.ui.widgets import (
+    Button,
+    Card,
+    Field,
+    Pill,
+    ScrollFrame,
+    Tooltip,
+    WrapLabel,
+    copy_to_clipboard,
+    section_label,
+)
 
 
 SHORTCUTS = (
@@ -73,6 +85,20 @@ def database_size(database: Path) -> int:
     return total
 
 
+SWITCHING_DISABLED = ("Choosing another engine is not available in this version of BIO CE. "
+                      "Your memories stay in the Community Engine.")
+_PILL_KIND = {"success": "success", "neutral": "neutral", "warning": "warning", "error": "danger"}
+
+
+@dataclass(frozen=True, slots=True)
+class EngineRowWidgets:
+    engine_id: str
+    active: bool
+    pill: Pill
+    button: Button
+    frame: tk.Frame
+
+
 class SettingsPage(Page):
     key = "settings"
     nav_key = "settings"
@@ -86,6 +112,8 @@ class SettingsPage(Page):
         self.scroll = ScrollFrame(self, theme, max_width=900)
         self.scroll.pack(fill="both", expand=True)
         body = self.scroll.body
+
+        self._build_engine_card(body)
 
         storage = self._card(body, "Memory database",
                              "Your memories are stored in this file. Keep it in your user profile so other "
@@ -111,7 +139,9 @@ class SettingsPage(Page):
                             "store them somewhere private.")
         backup_row = tk.Frame(backup, background=c.surface)
         backup_row.pack(fill="x", pady=(theme.px(SPACE_M), 0))
-        Button(backup_row, theme, "Create backup…", icon="backup", command=app.backup_database).pack(side="left")
+        self.backup_button = Button(backup_row, theme, "Create backup…", icon="backup", command=app.backup_database)
+        self.backup_button.pack(side="left")
+        app.gate(self.backup_button, "backup")
         tk.Frame(backup, height=1, background=c.border).pack(fill="x", pady=theme.px(SPACE_L))
         tk.Label(backup, text="Restore from a backup", font=theme.font("body_strong"), background=c.surface,
                  foreground=c.text, anchor="w").pack(fill="x")
@@ -121,8 +151,10 @@ class SettingsPage(Page):
             fill="x", pady=(theme.px(SPACE_XS), 0))
         restore_row = tk.Frame(backup, background=c.surface)
         restore_row.pack(fill="x", pady=(theme.px(SPACE_M), 0))
-        Button(restore_row, theme, "Restore from backup…", icon="restore", variant="danger_subtle",
-               command=app.restore_database).pack(side="left")
+        self.restore_button = Button(restore_row, theme, "Restore from backup…", icon="restore",
+                                     variant="danger_subtle", command=app.restore_database)
+        self.restore_button.pack(side="left")
+        app.gate(self.restore_button, "restore")
 
         privacy = self._card(body, "Privacy and security", None)
         for icon, heading, text in PRIVACY_POINTS:
@@ -167,6 +199,69 @@ class SettingsPage(Page):
         self.notices_button.set_enabled(self.notices_path.is_file())
         tk.Frame(body, height=theme.px(SPACE_S), background=c.bg).pack()
 
+    # Memory engine -------------------------------------------------------------------------------
+
+    def _build_engine_card(self, body: tk.Misc) -> None:
+        theme, c = self.theme, self.colors
+        card = self._card(body, "Memory engine",
+                          "The engine stores and finds your memories. BIO CE includes the Community Engine; other "
+                          "engines are installed separately.")
+        self.engine_banner_title = tk.Label(card, font=theme.font("body_strong"), background=c.surface,
+                                            foreground=c.text, anchor="w")
+        self.engine_banner_title.pack(fill="x", pady=(theme.px(SPACE_M), 0))
+        self.engine_banner_message = WrapLabel(card, font=theme.font("body"), foreground=c.text_secondary)
+        self.engine_banner_message.pack(fill="x", pady=(theme.px(SPACE_XS), 0))
+        self.engine_list = tk.Frame(card, background=c.surface)
+        self.engine_list.pack(fill="x", pady=(theme.px(SPACE_M), 0))
+        self.engine_note = WrapLabel(card, SEPARATE_DATABASES_NOTE, font=theme.font("caption"),
+                                     foreground=c.text_muted)
+        self.engine_note.pack(fill="x", pady=(theme.px(SPACE_S), 0))
+        row = tk.Frame(card, background=c.surface)
+        row.pack(fill="x", pady=(theme.px(SPACE_S), 0))
+        self.engine_check_button = Button(row, theme, "Check again", icon="refresh", variant="subtle",
+                                          command=self.check_engines, tooltip="Check each engine's status again")
+        self.engine_check_button.pack(side="left")
+        self.engine_rows: dict[str, EngineRowWidgets] = {}
+        self.render_engines()
+
+    def render_engines(self) -> None:
+        theme, c = self.theme, self.colors
+        shown = self.app.engine_banner()
+        self.engine_banner_title.configure(text=shown.title,
+                                           foreground=c.text if shown.connected else c.warning)
+        self.engine_banner_message.configure(text=shown.message)
+        for child in self.engine_list.winfo_children():
+            child.destroy()
+        self.engine_rows = {}
+        for entry in engine_rows(self.app.engine_selection, self.app.engine_statuses()):
+            frame = tk.Frame(self.engine_list, background=c.surface_alt, highlightthickness=1,
+                             highlightbackground=c.accent if entry.active else c.border)
+            frame.pack(fill="x", pady=(0, theme.px(SPACE_S)))
+            inner = tk.Frame(frame, background=c.surface_alt)
+            inner.pack(fill="x", padx=theme.px(SPACE_M), pady=theme.px(SPACE_S))
+            top = tk.Frame(inner, background=c.surface_alt)
+            top.pack(fill="x")
+            tk.Label(top, text=entry.name, font=theme.font("body_strong"), background=c.surface_alt,
+                     foreground=c.text, anchor="w").pack(side="left")
+            pill = Pill(top, theme, entry.state_text, _PILL_KIND.get(entry.tone, "neutral"))
+            pill.pack(side="left", padx=(theme.px(SPACE_S), 0))
+            if entry.active:
+                Pill(top, theme, "In use", "info").pack(side="left", padx=(theme.px(SPACE_XS), 0))
+            # Engine switching is not enabled in this version: every choice button stays disabled.
+            button = Button(top, theme, "In use" if entry.active else "Use this engine", variant="subtle")
+            button.pack(side="right")
+            button.set_enabled(False)
+            Tooltip(button, theme, "This engine is in use." if entry.active else SWITCHING_DISABLED)
+            if entry.detail:
+                WrapLabel(inner, entry.detail, font=theme.font("caption"), foreground=c.text_muted,
+                          background=c.surface_alt).pack(fill="x", pady=(theme.px(SPACE_XS), 0))
+            self.engine_rows[entry.engine_id] = EngineRowWidgets(entry.engine_id, entry.active, pill, button, frame)
+
+    def check_engines(self) -> None:
+        self.app.refresh_engine_status()
+        self.render_engines()
+        self.app.notify("info", self.app.engine_banner().title, title="Memory engine checked")
+
     def _card(self, body: tk.Misc, title: str, description: str | None) -> tk.Frame:
         theme, c = self.theme, self.colors
         card = Card(body, theme, padding=SPACE_L + 4)
@@ -193,9 +288,10 @@ class SettingsPage(Page):
     def refresh(self) -> None:
         super().refresh()
         try:
-            count = self.app.service.count()
+            count = self.app.memory_engine().count()
         except Exception:
             count = None
+        self.render_engines()
         size = database_size(self.app.paths.user_database)
         parts = [plural(count, "active memory", "active memories") if count is not None else "Memory count unavailable",
                  f"{file_size(size)} on disk"]
