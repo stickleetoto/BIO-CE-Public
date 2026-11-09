@@ -1,0 +1,128 @@
+# Copyright 2026 stickleetoto
+# SPDX-License-Identifier: Apache-2.0
+#
+# Release qualification on a disposable Windows runner: tests, installer build, payload verification,
+# packaged MCP/hook checks, and the installer upgrade/uninstall/reinstall run. Started by hand only.
+# It publishes nothing: results are kept as workflow artifacts. A runner is a clean, isolated Windows
+# machine, but it has Python and Git installed, so it does not replace a Python-free clean-PC check.
+name: BIO CE release qualification
+
+on:
+  workflow_dispatch:
+    inputs:
+      previous_release:
+        description: "Published release to upgrade from"
+        required: true
+        default: "v0.3.0-rc1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-qualification-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    env:
+      INNO_SETUP_VERSION: "6.7.3"
+    steps:
+      # Third-party actions are pinned to full commit SHAs (same pins as ci.yml).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12.10"
+
+      - name: Pinned environment
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $python = (Resolve-Path .venv\Scripts\python.exe).Path
+          & $python -m pip install --disable-pip-version-check -r requirements-mcp.lock.txt -r requirements-test.lock.txt -r requirements-build.lock.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & $python -m pip install --disable-pip-version-check --no-build-isolation --no-deps -e .
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & $python -m pip check
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "BIO_PYTHON=$python" -Encoding utf8
+          New-Item -ItemType Directory -Force -Path qualification | Out-Null
+
+      - name: Test suite
+        shell: pwsh
+        run: |
+          & $env:BIO_PYTHON -m pytest -q -rs --junitxml qualification\pytest.xml *> qualification\pytest.log
+          $code = $LASTEXITCODE
+          Get-Content qualification\pytest.log -Tail 40
+          exit $code
+
+      - name: Inno Setup (signature-checked, per-user)
+        shell: pwsh
+        run: |
+          $setup = Join-Path $env:RUNNER_TEMP "innosetup-$env:INNO_SETUP_VERSION.exe"
+          Invoke-WebRequest -Uri "https://files.jrsoftware.org/is/6/innosetup-$env:INNO_SETUP_VERSION.exe" -OutFile $setup
+          $signature = Get-AuthenticodeSignature -LiteralPath $setup
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notlike '*Pyrsys B.V.*') {
+            throw "Inno Setup installer signature is not the expected publisher: $($signature.Status) $($signature.SignerCertificate.Subject)"
+          }
+          "inno_setup_installer_sha256=$((Get-FileHash -Algorithm SHA256 -LiteralPath $setup).Hash.ToLowerInvariant())" | Tee-Object -Append qualification\toolchain.txt
+          $process = Start-Process -FilePath $setup -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER', '/SP-' -Wait -PassThru
+          if ($process.ExitCode) { throw "Inno Setup install failed with $($process.ExitCode)" }
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          & .\packaging\build_windows.ps1 -Python $env:BIO_PYTHON *> qualification\build.log
+          $code = $LASTEXITCODE
+          Get-Content qualification\build.log -Tail 10
+          if ($code) { exit $code }
+
+      - name: Verify payload (hashes, leaks, test code, licenses)
+        shell: pwsh
+        env:
+          BIO_CE_PRIVATE_HASHES: ${{ secrets.BIO_CE_PRIVATE_HASHES }}
+        run: |
+          $version = (& $env:BIO_PYTHON -I -c "import sys; sys.path.insert(0, 'packaging'); import build_assets, tomllib; print(build_assets.display_version(tomllib.load(open('pyproject.toml','rb'))['project']['version']))").Trim()
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "BIO_VERSION=$version" -Encoding utf8
+          & $env:BIO_PYTHON packaging\verify_release.py --repo . --build-root "build\$version" --dist-root "dist\$version" --report qualification\verify-release.json
+          exit $LASTEXITCODE
+
+      - name: Packaged MCP executable
+        shell: pwsh
+        run: |
+          & $env:BIO_PYTHON -m pytest -q -rs tests\integration\test_packaged_mcp_exe.py
+          exit $LASTEXITCODE
+
+      - name: Installer upgrade, uninstall, reinstall (synthetic data)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS_RELEASE: ${{ inputs.previous_release }}  # passed as data, never spliced into the script
+        run: |
+          if ($env:PREVIOUS_RELEASE -notmatch '^v\d+\.\d+\.\d+(-rc\d+)?$') { throw "unexpected release tag: $env:PREVIOUS_RELEASE" }
+          $previous = Join-Path $env:RUNNER_TEMP 'previous-release'
+          gh release download $env:PREVIOUS_RELEASE --repo $env:GITHUB_REPOSITORY --dir $previous --pattern '*.exe' --pattern 'SHA256SUMS.txt'
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $sums = (Get-Content (Join-Path $previous 'SHA256SUMS.txt')) -split '\s+'
+          $setup = Join-Path $previous $sums[1]
+          if ((Get-FileHash -Algorithm SHA256 -LiteralPath $setup).Hash.ToLowerInvariant() -ne $sums[0]) { throw 'previous release does not match its SHA256SUMS.txt' }
+          & $env:BIO_PYTHON tests\host_harness\release_e2e.py qualification\release-e2e $setup "dist\$env:BIO_VERSION\BIO-CE-Setup-v$env:BIO_VERSION.exe" "build\$env:BIO_VERSION\build-manifest.json"
+          $code = $LASTEXITCODE
+          Get-Content qualification\release-e2e\results.jsonl
+          exit $code
+
+      - name: Keep evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: bio-ce-release-qualification-${{ github.run_id }}
+          path: |
+            qualification/
+            dist/
+            build/*/build-manifest.json
+          if-no-files-found: warn
+          retention-days: 14
