@@ -54,7 +54,7 @@ be safe, create a backup in Settings first. Connected AI hosts keep working with
 
 ## Verified for this candidate
 
-- 176+ automated tests on the development PC; the packaged MCP server against the official MCP SDK.
+- 177 automated tests on the development PC (plus the installer compile test in the real environment); the packaged MCP server against the official MCP SDK.
 - Release payload check: installer hash, every payload file against the build manifest, no bundled Universal CRT,
   no test code, no credentials or build-machine identity, license notices for every bundled component.
 - Installer run on the developer's Windows account with synthetic data: install v0.3.0-rc1, create data with it,
