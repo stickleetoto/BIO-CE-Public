@@ -33,3 +33,9 @@
 - FTS5 recall is lexical. Korean words with attached particles (e.g. "배포를" vs "배포") may not match each other, so per-prompt recall can miss related memories.
 - Settings backups cover `memories.sqlite3` only; the AI audit log and review queue in `control.sqlite3` are not backed up or restored.
 - Automatic retraction is disabled by design; every retraction request waits for the user.
+
+## v0.4.0-rc1 (candidate)
+
+- BIO CE uses only its built-in Community Engine. Settings → Memory engine lists BIO Core as not installed; choosing another engine is disabled in this version, and BIO CE never switches engines on its own. Each engine would keep its own memories; nothing is copied between engines.
+- Repeated identical review requests are merged only when their normalized title and text match exactly. A reworded repeat still creates a second review item, and two hosts sending the same request at the same moment can, rarely, create two.
+- The installer runs for this candidate used the developer's own Windows account, including one run inside another app's MSIX package context where Windows redirected `%LOCALAPPDATA%` and one run started through Explorer. A clean Windows PC without Python or Git is still **not verified**.
