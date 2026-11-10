@@ -58,8 +58,9 @@ jobs:
           $testExitCode = $LASTEXITCODE
           Get-Content $logFile
           exit $testExitCode
-      - name: Preserve pytest logs on failure
-        if: failure()
+      - name: Keep pytest log and JUnit XML
+        # Always, so a passing run also leaves JUnit evidence.
+        if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: windows-pytest-logs-${{ github.run_id }}
