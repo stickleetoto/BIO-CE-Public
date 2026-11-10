@@ -63,8 +63,9 @@ jobs:
       - name: Inno Setup (signature-checked, per-user)
         shell: pwsh
         run: |
+          # Official Inno Setup downloads are GitHub release assets (the old files.jrsoftware.org path returns 404).
           $setup = Join-Path $env:RUNNER_TEMP "innosetup-$env:INNO_SETUP_VERSION.exe"
-          Invoke-WebRequest -Uri "https://files.jrsoftware.org/is/6/innosetup-$env:INNO_SETUP_VERSION.exe" -OutFile $setup
+          Invoke-WebRequest -Uri "https://github.com/jrsoftware/issrc/releases/download/is-$($env:INNO_SETUP_VERSION.Replace('.', '_'))/innosetup-$env:INNO_SETUP_VERSION.exe" -OutFile $setup
           $signature = Get-AuthenticodeSignature -LiteralPath $setup
           if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notlike '*Pyrsys B.V.*') {
             throw "Inno Setup installer signature is not the expected publisher: $($signature.Status) $($signature.SignerCertificate.Subject)"
