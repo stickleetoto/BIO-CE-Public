@@ -16,6 +16,9 @@ for this user, never touches the user's real Codex/Claude settings, and removes 
 It must run outside any MSIX app container.
 
 Usage: python release_e2e.py OUT_DIR PREVIOUS_SETUP CANDIDATE_SETUP CANDIDATE_MANIFEST
+       python release_e2e.py OUT_DIR --clean-install-only CANDIDATE_SETUP CANDIDATE_MANIFEST
+         (first install of the candidate on a machine without BIO CE: install, first-run notice, first
+          launch, installed MCP server and hook, uninstall, cleanup)
 """
 
 from __future__ import annotations
@@ -144,7 +147,69 @@ def host_registration(run: Run, root: Path, app_exe: Path, tag: str) -> None:
         sys.frozen = False
 
 
+def clean_install(out: Path, candidate: Path, manifest: Path) -> int:
+    """First install of the candidate where BIO CE never was, then uninstall and leave the machine as found."""
+    run = Run(out)
+    start = base.machine_state()
+    if any(start.values()) or SPECIAL_DIR.exists():
+        run.step("preflight-no-existing-install-or-data", False, state=start)
+        return 2
+    run.step("preflight-no-existing-install-or-data", True, state=start)
+    from bio_ce.control_store import ControlStore, MODE_AUTO_MEMORY, control_database_for
+    from bio_ce.desktop import AppDataPaths, DesktopMemoryService, save_privacy_acknowledgement
+
+    gui_env = dict(os.environ, CLAUDE_CONFIG_DIR=str(out / "gui-profile" / ".claude"),
+                   CODEX_HOME=str(out / "gui-profile" / "codex"))
+    expected = json.loads(manifest.read_text(encoding="utf-8-sig"))["version"]
+    try:
+        ok = base.install(run, candidate, "clean-install")
+        total, mismatched = base.installed_matches_manifest(manifest)
+        entry = uninstall_entry() or {}
+        run.step("clean-install-candidate", ok and not mismatched and entry.get("DisplayVersion") == expected
+                 and base.SHORTCUT.is_file(), version=entry.get("DisplayVersion"), files=total,
+                 mismatched=mismatched[:10])
+        fresh = out / "first-run-profile"
+        fresh.mkdir(exist_ok=True)
+        consent = base.launch_and_capture(run, dict(gui_env, LOCALAPPDATA=str(fresh)), "gui-first-run-notice")
+        run.step("first-run-notice-closed-creates-nothing", consent["window"] and consent["exit"] == 0
+                 and not any(fresh.iterdir()), **consent)
+        paths = AppDataPaths.under(DATA_ROOT)
+        save_privacy_acknowledgement(paths.settings_file)  # what accepting the notice records
+        (DATA_ROOT / MARKER).write_text("created by tests/host_harness/release_e2e.py", encoding="utf-8")
+        launched = base.launch_and_capture(run, gui_env, "gui-first-launch")
+        run.step("first-launch-creates-database", launched["window"] and launched["exit"] == 0
+                 and DATABASE.is_file(), **launched, integrity=base.integrity() if DATABASE.is_file() else None)
+        service = DesktopMemoryService(DATABASE)
+        service.add(title="배포 일정", content="배포는 매주 금요일 오후에 진행한다.", source_ref="user-input")
+        service.close()
+        control = ControlStore(control_database_for(DATABASE))
+        grant, token = control.create_grant("claude", mode=MODE_AUTO_MEMORY)
+        control.close()
+        _gui, mcp_exe = installed()
+        calls = asyncio.run(asyncio.wait_for(mcp_calls(mcp_exe, grant.connection_id, token), timeout=120))
+        run.step("installed-mcp-search-create-and-duplicate-proposal", calls["search_top"] == "배포 일정"
+                 and calls["create"] == "created" and calls["proposal"] == "queued_for_review"
+                 and calls["same_review"], **calls)
+        hook = run_hook(mcp_exe, grant.connection_id, token)
+        run.step("installed-hook-context", hook["exit"] == 0 and "배포는 매주 금요일" in hook["context"])
+        app_exe, _mcp = installed()
+        host_registration(run, out, app_exe, "clean-install")
+        kept = base.sha256(DATABASE)
+        removed = base.uninstall(run, "clean-install")
+        run.step("uninstall-removes-app-keeps-data", removed and not base.SHORTCUT.exists()
+                 and not (APP_DIR / "BIO-CE.exe").exists() and base.sha256(DATABASE) == kept,
+                 state=base.machine_state())
+    except Exception:
+        run.step("unexpected-error", False, traceback=traceback.format_exc())
+    finally:
+        base.cleanup(run)
+        (out / "done").write_text("finished", encoding="utf-8")
+    return 0 if all(entry["ok"] for entry in run.results) else 1
+
+
 def main(argv: list[str]) -> int:
+    if argv[1:2] == ["--clean-install-only"]:
+        return clean_install(Path(argv[0]).resolve(), Path(argv[2]).resolve(), Path(argv[3]).resolve())
     out, previous, candidate, manifest = (Path(arg).resolve() for arg in argv[:4])
     run = Run(out)
     start = base.machine_state()

@@ -97,21 +97,42 @@ jobs:
           & $env:BIO_PYTHON -m pytest -q -rs tests\integration\test_packaged_mcp_exe.py
           exit $LASTEXITCODE
 
+      - name: Clean install of the candidate (unattended)
+        shell: pwsh
+        run: |
+          # First install on a machine that never had BIO CE: install, first-run notice, first launch,
+          # installed MCP server and hook, uninstall, cleanup. No keyboard or mouse input is sent.
+          & $env:BIO_PYTHON tests\host_harness\release_e2e.py qualification\clean-install --clean-install-only `
+            "dist\$env:BIO_VERSION\BIO-CE-Setup-v$env:BIO_VERSION.exe" "build\$env:BIO_VERSION\build-manifest.json"
+          $code = $LASTEXITCODE
+          & $env:BIO_PYTHON tests\host_harness\results_to_junit.py qualification\clean-install\results.jsonl qualification\junit-clean-install.xml clean-install
+          Get-Content qualification\clean-install\results.jsonl
+          exit $code
+
       - name: Installer upgrade, uninstall, reinstall (synthetic data)
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           PREVIOUS_RELEASE: ${{ inputs.previous_release }}  # passed as data, never spliced into the script
         run: |
-          if ($env:PREVIOUS_RELEASE -notmatch '^v\d+\.\d+\.\d+(-rc\d+)?$') { throw "unexpected release tag: $env:PREVIOUS_RELEASE" }
+          # Previous releases come from the PUBLIC repository (a private mirror has no releases) and must match a
+          # pinned SHA-256. To allow another release, verify its hash first and add it here.
+          $pinned = @{
+            'v0.3.0-rc1' = '2d79e7d4c9dff1187ff90149a1bc7418f014f9c0209a6c984ffa5d2d741572ee'
+          }
+          if (-not $pinned.ContainsKey($env:PREVIOUS_RELEASE)) { throw "no pinned SHA-256 for release: $env:PREVIOUS_RELEASE" }
           $previous = Join-Path $env:RUNNER_TEMP 'previous-release'
-          gh release download $env:PREVIOUS_RELEASE --repo $env:GITHUB_REPOSITORY --dir $previous --pattern '*.exe' --pattern 'SHA256SUMS.txt'
+          gh release download $env:PREVIOUS_RELEASE --repo stickleetoto/BIO-CE-Public --dir $previous --pattern '*.exe' --pattern 'SHA256SUMS.txt'
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           $sums = (Get-Content (Join-Path $previous 'SHA256SUMS.txt')) -split '\s+'
-          $setup = Join-Path $previous $sums[1]
-          if ((Get-FileHash -Algorithm SHA256 -LiteralPath $setup).Hash.ToLowerInvariant() -ne $sums[0]) { throw 'previous release does not match its SHA256SUMS.txt' }
+          $setup = Join-Path $previous $sums[1].TrimStart('*')
+          $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $setup).Hash.ToLowerInvariant()
+          if ($actual -ne $sums[0] -or $actual -ne $pinned[$env:PREVIOUS_RELEASE]) {
+            throw "previous release hash $actual does not match SHA256SUMS.txt and the pinned value"
+          }
           & $env:BIO_PYTHON tests\host_harness\release_e2e.py qualification\release-e2e $setup "dist\$env:BIO_VERSION\BIO-CE-Setup-v$env:BIO_VERSION.exe" "build\$env:BIO_VERSION\build-manifest.json"
           $code = $LASTEXITCODE
+          & $env:BIO_PYTHON tests\host_harness\results_to_junit.py qualification\release-e2e\results.jsonl qualification\junit-release-e2e.xml release-e2e
           Get-Content qualification\release-e2e\results.jsonl
           exit $code
 
