@@ -38,4 +38,5 @@
 
 - BIO CE uses only its built-in Community Engine. Settings → Memory engine lists BIO Core as not installed; choosing another engine is disabled in this version, and BIO CE never switches engines on its own. Each engine would keep its own memories; nothing is copied between engines.
 - Repeated identical review requests are merged only when their normalized title and text match exactly. A reworded repeat still creates a second review item, and two hosts sending the same request at the same moment can, rarely, create two.
-- The installer runs for this candidate used the developer's own Windows account, including one run inside another app's MSIX package context where Windows redirected `%LOCALAPPDATA%` and one run started through Explorer. A clean Windows PC without Python or Git is still **not verified**.
+- The installer and the programs it installs are **not code-signed**; Windows SmartScreen may warn about a downloaded copy. Check the SHA-256 in the release notes before running it.
+- The unattended clean install ran on a fresh GitHub-hosted Windows runner, which has Python and Git installed. Other installer runs used the developer's own Windows account, including one inside another app's MSIX package context where Windows redirected `%LOCALAPPDATA%` and one started through Explorer. A Windows PC without Python or Git is still **not verified**.
