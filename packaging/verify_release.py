@@ -29,7 +29,7 @@ import getpass
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import re
 import subprocess
 import sys
@@ -63,9 +63,13 @@ def identity_patterns(repo: Path) -> dict[str, bytes]:
     except (OSError, subprocess.SubprocessError):
         email = ""
     values["git e-mail"] = email
+    # Shared account names (hosted CI runners) are not a personal identity: third-party wheels built on
+    # hosted runners already contain C:\Users\runneradmin.
+    shared = {"runneradmin", "user", "admin"}
     patterns = {}
     for name, value in values.items():
-        if value and len(value) >= 4 and value.lower() not in {"runneradmin", "user", "admin"}:
+        if value and len(value) >= 4 and value.lower() not in shared and \
+                PureWindowsPath(value).name.lower() not in shared:
             patterns[name] = re.escape(value.encode("utf-8"))
     return patterns
 

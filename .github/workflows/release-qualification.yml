@@ -50,6 +50,19 @@ jobs:
           & $python -m pip check
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "BIO_PYTHON=$python" -Encoding utf8
+          # The installer is built in its own environment without test packages: PyInstaller bundles
+          # whatever an optional import finds (anyio imports _pytest when pytest is installed).
+          $buildVenv = Join-Path $env:RUNNER_TEMP 'bio-ce-build-venv'
+          python -m venv $buildVenv
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $buildPython = (Resolve-Path (Join-Path $buildVenv 'Scripts\python.exe')).Path
+          & $buildPython -m pip install --disable-pip-version-check -r requirements-mcp.lock.txt -r requirements-build.lock.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & $buildPython -m pip install --disable-pip-version-check --no-build-isolation --no-deps -e .
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & $buildPython -m pip check
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "BIO_BUILD_PYTHON=$buildPython" -Encoding utf8
           New-Item -ItemType Directory -Force -Path qualification | Out-Null
 
       - name: Test suite
@@ -77,7 +90,7 @@ jobs:
       - name: Build installer
         shell: pwsh
         run: |
-          & .\packaging\build_windows.ps1 -Python $env:BIO_PYTHON *> qualification\build.log
+          & .\packaging\build_windows.ps1 -Python $env:BIO_BUILD_PYTHON *> qualification\build.log
           $code = $LASTEXITCODE
           Get-Content qualification\build.log -Tail 10
           if ($code) { exit $code }
