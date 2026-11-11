@@ -20,7 +20,7 @@ import tomllib
 from typing import Mapping, Sequence
 import uuid
 
-from bio_ce import codex_options, host_hooks
+from bio_ce import codex_options, host_hooks, memory_skill
 from bio_ce.control_store import (
     AccessDenied,
     ControlStore,
@@ -64,6 +64,9 @@ class HostStatus:
     hooks_installed: bool = False
     # Codex only: whether BIO CE's entry shows its tools in code mode (codex_options states), else None.
     code_mode: str | None = None
+    # The BIO CE memory skill file (memory_skill states), and for Codex its optional AGENTS.md block.
+    skill: str | None = None
+    agents_block: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +79,15 @@ class CodeModeResult:
     detail: str
     backup_file: Path | None = None
     codex_version: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SkillResult:
+    """One skill file change. ``state``: installed, updated, unchanged, kept_modified, removed, absent."""
+
+    state: str
+    path: Path
+    backup_file: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,7 +198,10 @@ class MCPConnectionManager:
             )
             return HostStatus(host, True, True, mode=grant.mode, connection_id=grant.connection_id,
                               hooks_installed=hooks,
-                              code_mode=self._code_mode_state() if host == "codex" else None)
+                              code_mode=self._code_mode_state() if host == "codex" else None,
+                              skill=memory_skill.file_state(self.memory_skill_path(host)),
+                              agents_block=(memory_skill.agents_state(memory_skill.agents_path(self.env))
+                                            if host == "codex" else None))
         if self._matches_legacy_server(entry):
             return HostStatus(host, True, True, legacy=True, mode=MODE_READ_ONLY)
         return HostStatus(host, True, False, True)
@@ -315,7 +330,8 @@ class MCPConnectionManager:
             raise MCPConnectionError(f"BIO CE could not update {path.name}; it was left unchanged.") from exc
         return backup
 
-    def disconnect(self, host: str, *, approved: bool = False) -> ConnectionResult:
+    def disconnect(self, host: str, *, approved: bool = False, remove_skill: bool = False,
+                   remove_modified_skill: bool = False) -> ConnectionResult:
         if approved is not True:
             raise MCPConnectionConsentRequired("Host removal requires explicit user approval.")
         host = _validate_host(host)
@@ -351,7 +367,92 @@ class MCPConnectionManager:
                 host_hooks.remove_hooks(hooks_file, self._server_executable())
         except (OSError, ValueError, MCPConnectionError):
             pass  # hooks of a revoked connection print nothing, so leaving them is harmless
+        if remove_skill:
+            try:
+                self._remove_skill_files(host, remove_modified_skill)
+            except (OSError, MCPConnectionError):
+                pass  # a leftover skill only names tools that no longer answer
         return ConnectionResult(host, False, False, backup_file)
+
+    # Memory skill --------------------------------------------------------------------------------
+
+    def memory_skill_path(self, host: str) -> Path:
+        return memory_skill.skill_path(_validate_host(host), self.env)
+
+    def install_memory_skill(self, host: str, *, approved: bool = False, replace_modified: bool = False,
+                             agents_md: bool = False) -> tuple[SkillResult, SkillResult | None]:
+        """Install or update the memory skill (and, for Codex if asked, the AGENTS.md block)."""
+        if approved is not True:
+            raise MCPConnectionConsentRequired("Installing the memory skill requires explicit user approval.")
+        host = _validate_host(host)
+        status = self.status(host)
+        if not status.connected or status.connection_id is None:
+            raise MCPConnectionError("Connect this host first; the skill uses its BIO CE connection.")
+        path = self.memory_skill_path(host)
+        state = memory_skill.file_state(path)
+        if state == memory_skill.CURRENT:
+            skill = SkillResult("unchanged", path)
+        elif state == memory_skill.MODIFIED and not replace_modified:
+            skill = SkillResult("kept_modified", path)
+        else:
+            backup = self._backup_config(f"{host}-skill", path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            self._replace_file(path, memory_skill.render().encode("utf-8"))
+            skill = SkillResult("installed" if state == memory_skill.ABSENT else "updated", path, backup)
+        agents = None
+        if agents_md and host == "codex":
+            agents = self._install_agents_block(replace_modified)
+        return skill, agents
+
+    def remove_memory_skill(self, host: str, *, approved: bool = False,
+                            remove_modified: bool = False) -> tuple[SkillResult, SkillResult | None]:
+        if approved is not True:
+            raise MCPConnectionConsentRequired("Removing the memory skill requires explicit user approval.")
+        return self._remove_skill_files(_validate_host(host), remove_modified)
+
+    def _remove_skill_files(self, host: str, remove_modified: bool) -> tuple[SkillResult, SkillResult | None]:
+        path = self.memory_skill_path(host)
+        state = memory_skill.file_state(path)
+        if state == memory_skill.ABSENT:
+            skill = SkillResult("absent", path)
+        elif state == memory_skill.MODIFIED and not remove_modified:
+            skill = SkillResult("kept_modified", path)
+        else:
+            backup = self._backup_config(f"{host}-skill", path)
+            path.unlink()
+            try:
+                path.parent.rmdir()  # only if the user put nothing else there
+            except OSError:
+                pass
+            skill = SkillResult("removed", path, backup)
+        agents = None
+        if host == "codex":
+            agents_file = memory_skill.agents_path(self.env)
+            agents_state = memory_skill.agents_state(agents_file)
+            if agents_state == memory_skill.MODIFIED and not remove_modified:
+                agents = SkillResult("kept_modified", agents_file)
+            elif agents_state != memory_skill.ABSENT:
+                backup = self._backup_config("codex-agents", agents_file)
+                text = agents_file.read_text(encoding="utf-8")
+                self._replace_file(agents_file, memory_skill.without_agents_block(text).encode("utf-8"))
+                agents = SkillResult("removed", agents_file, backup)
+        return skill, agents
+
+    def _install_agents_block(self, replace_modified: bool) -> SkillResult:
+        path = memory_skill.agents_path(self.env)
+        state = memory_skill.agents_state(path)
+        if state == memory_skill.CURRENT:
+            return SkillResult("unchanged", path)
+        if state == memory_skill.MODIFIED and not replace_modified:
+            return SkillResult("kept_modified", path)
+        backup = self._backup_config("codex-agents", path)
+        try:
+            text = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            text = ""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._replace_file(path, memory_skill.with_agents_block(text).encode("utf-8"))
+        return SkillResult("installed" if state == memory_skill.ABSENT else "updated", path, backup)
 
     # Codex code mode -----------------------------------------------------------------------------
 
@@ -923,6 +1024,7 @@ __all__ = [
     "AutoMemorySupport",
     "CodeModeResult",
     "ConnectionResult",
+    "SkillResult",
     "DiagnosticCheck",
     "HostStatus",
     "MCPConnectionConflict",
