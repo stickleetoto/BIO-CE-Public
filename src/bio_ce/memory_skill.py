@@ -83,6 +83,10 @@ Store only what the user stated, or confirmed when you asked. Use `evidence` "us
 
 Write one or two sentences that say what and why. Keep the title short.
 
+One decision per memory. Save each decision, rejected option, and rule as its own memory, so each one can be
+found, updated, or replaced on its own. For example, "notes go in SQLite", "Click was rejected for Typer", and
+"every command needs a test" are three memories, not one memory that lists all three.
+
 Good memories (lasting, stated by the user, with the reason):
 
 - "Use pytest, not unittest, for new tests: fixtures keep the setup short." (decision)

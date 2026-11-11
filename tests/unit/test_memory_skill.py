@@ -20,8 +20,9 @@ from bio_ce.mcp_server import TOOL_NAMES
 from bio_ce.memory_policy import CATEGORIES, CHANGE_TYPES, EVIDENCE, TRUSTED_EVIDENCE
 from bio_ce.storage.sqlite_store import SQLiteMemoryStore
 
-# The v1 text as shipped. Changing SKILL_TEMPLATE needs SKILL_VERSION 2 and a new SHIPPED_DIGESTS entry.
-V1_DIGEST = "40b5e90a6794dc620ed146a45513a7feda8e53d9031f86aaab8eeb80a3aaf2a5"
+# The v1 text as it will ship in 0.4.1 (updated before release on 2026-11-11: one decision per memory).
+# After a release, changing SKILL_TEMPLATE needs SKILL_VERSION 2 and a new SHIPPED_DIGESTS entry.
+V1_DIGEST = "4f1c4a2a3938b374d8825043df5aa1690619be8878aba2d4af37f93f773e746b"
 WAS_LINE = re.compile(r"\nWas: (?P<previous>[^\n]+)\Z")
 
 
@@ -70,6 +71,8 @@ class SkillTextTests(unittest.TestCase):
             "`Was: <the previous decision, in one line>`",
             "Progress status",
             "Guesses",
+            "One decision per memory.",
+            "are three memories, not one memory that lists all three",
         ):
             self.assertIn(rule, self.text)
         good = self.text.split("Good memories")[1].split("Bad memories")[0]

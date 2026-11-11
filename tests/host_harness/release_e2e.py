@@ -258,10 +258,32 @@ def main(argv: list[str]) -> int:
                  and pending["status"] == "queued_for_review" and "배포는 매주 금요일" in previous_hook["context"])
         before = snapshot(user_backup)
 
-        # 2. upgrade --------------------------------------------------------------------------
+        # 2. upgrade while a connected host still runs the previous MCP server ------------------------
+        # Like a Codex conversation left open: the server's stdin stays open, so it keeps running and
+        # holds BIO-CE-MCP.exe. Setup (CloseApplications=yes) must close it, log it, and replace the files.
+        running = subprocess.Popen(
+            [str(previous_mcp), "mcp-stdio", "--db", str(DATABASE), "--connection", grant.connection_id],
+            stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            env=dict(os.environ, BIO_CE_CONNECTION_TOKEN=token), creationflags=subprocess.CREATE_NO_WINDOW)
+        time.sleep(3)
+        running_before = running.poll() is None
         ok = base.install(run, candidate, "upgrade")
+        try:
+            running.wait(30)
+        except subprocess.TimeoutExpired:
+            pass
+        closed_by_setup = running.poll() is not None
+        if not closed_by_setup:
+            running.kill()
+            running.wait(10)
+        log_text = (out / "setup-upgrade.log").read_text(encoding="utf-8", errors="replace") \
+            if (out / "setup-upgrade.log").is_file() else ""
+        log_lines = [line.strip()[-160:] for line in log_text.splitlines()
+                     if "application" in line.lower() and ("shut" in line.lower() or "close" in line.lower())][:6]
         total, mismatched = base.installed_matches_manifest(manifest)
         entry = uninstall_entry() or {}
+        run.step("upgrade-closes-running-mcp-server", running_before and ok and closed_by_setup and not mismatched,
+                 running_before=running_before, closed_by_setup=closed_by_setup, setup_log=log_lines)
         run.step("upgrade-to-candidate", ok and not mismatched and entry.get("DisplayVersion") != previous_version,
                  version=entry.get("DisplayVersion"), files=total, mismatched=mismatched[:10])
         run.step("upgrade-preserves-all-user-data", snapshot(user_backup) == before,
