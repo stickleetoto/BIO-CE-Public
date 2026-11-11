@@ -260,7 +260,7 @@ def main(argv: list[str]) -> int:
 
         # 2. upgrade while a connected host still runs the previous MCP server ------------------------
         # Like a Codex conversation left open: the server's stdin stays open, so it keeps running and
-        # holds BIO-CE-MCP.exe. Setup (CloseApplications=yes) must close it, log it, and replace the files.
+        # holds BIO-CE-MCP.exe. Setup (CloseApplications=force) must close it, log it, and replace the files.
         running = subprocess.Popen(
             [str(previous_mcp), "mcp-stdio", "--db", str(DATABASE), "--connection", grant.connection_id],
             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,

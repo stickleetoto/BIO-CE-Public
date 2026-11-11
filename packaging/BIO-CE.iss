@@ -51,7 +51,10 @@ Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
 ShowLanguageDialog=auto
-CloseApplications=yes
+; A connected AI host keeps BIO-CE-MCP.exe running. It is a console program without a window, so the
+; Restart Manager cannot ask it to close; force closes it (Setup still asks first unless it runs silently,
+; and logs it). A write interrupted this way is rolled back by SQLite.
+CloseApplications=force
 ; Must match bio_ce.desktop.INSTANCE_MUTEX_NAME.
 AppMutex=BIO-CE-Desktop-SingleInstance
 RestartApplications=no

@@ -111,7 +111,10 @@ class InnoScriptPolicyTests(unittest.TestCase):
         from bio_ce.desktop import INSTANCE_MUTEX_NAME
 
         self.assertEqual(self.setting("AppMutex"), INSTANCE_MUTEX_NAME)
-        self.assertEqual(self.setting("CloseApplications"), "yes")
+        # "force": a connected AI host keeps the windowless BIO-CE-MCP.exe running, which the Restart Manager
+        # cannot ask to close; with "yes" an upgrade left old files in place (release E2E, 2026-11-11).
+        self.assertEqual(self.setting("CloseApplications"), "force")
+        self.assertEqual(self.setting("RestartApplications"), "no")
 
     def test_program_folder_cannot_overlap_the_data_folder(self):
         self.assertIn("function PrepareToInstall", self.script)
