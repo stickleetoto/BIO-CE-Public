@@ -213,7 +213,7 @@ class BIOCEDesktop:
         self.engine_label = tk.Label(self.sidebar_footer_text, text="", font=theme.font("caption"),
                                      background=c.sidebar, foreground=c.text_muted, anchor="w", justify="left")
         self.engine_label.pack(fill="x", pady=(theme.px(SPACE_S), 0))
-        tk.Label(self.sidebar_footer_text, text=f"Version {bio_ce.__version__}", font=theme.font("caption"),
+        tk.Label(self.sidebar_footer_text, text=f"Version {bio_ce.display_version()}", font=theme.font("caption"),
                  background=c.sidebar, foreground=c.text_muted, anchor="w").pack(fill="x", pady=(theme.px(SPACE_S), 0))
 
     def _on_resize(self, event) -> None:

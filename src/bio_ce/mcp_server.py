@@ -34,6 +34,7 @@ from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field
 
+from bio_ce import display_version
 from bio_ce.auto_memory import AutoMemoryWriter
 from bio_ce.server_lifetime import ServerLifetime, idle_seconds_from, parent_process_id
 from bio_ce.control_store import AccessDenied, ControlStore, ControlStoreError, control_database_for
@@ -136,6 +137,7 @@ def create_mcp_server(
     store = SQLiteMemoryStore(database_path, read_only=True)
     server = MCPServer(
         "BIO CE Memory",
+        version=display_version(),
         instructions=(
             "Long-term memory for the user, stored locally by BIO CE. This server is bound to project "
             f"{scope.project!r}, namespace {scope.namespace!r}. You can omit project and namespace on every "

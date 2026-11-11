@@ -179,7 +179,7 @@ class SettingsPage(Page):
                      anchor="w").grid(row=index, column=1, sticky="w", padx=(theme.px(SPACE_M), 0))
 
         about = self._card(body, "About BIO CE", None)
-        tk.Label(about, text=f"BIO Community Edition {bio_ce.__version__} · {release_channel(bio_ce.__version__)}",
+        tk.Label(about, text=f"BIO Community Edition {bio_ce.display_version()} · {release_channel(bio_ce.__version__)}",
                  font=theme.font("body"), background=c.surface, foreground=c.text, anchor="w").pack(
             fill="x", pady=(theme.px(SPACE_XS), 0))
         WrapLabel(about, "Copyright 2026 stickleetoto. Licensed under the Apache License 2.0. This build is "
