@@ -29,6 +29,10 @@ you to turn off SmartScreen, Microsoft Defender, or any other protection.
 - **Not code-signed.** The installer and the programs it installs have no digital signature (see above).
 - **Not verified on a PC without Python.** The automated clean install ran on a fresh GitHub-hosted Windows
   runner, which has Python and Git installed. A Windows PC without Python or Git has not been tested.
+- **Uninstalling does not disconnect AI hosts.** The uninstaller does not edit Codex or Claude Code settings. If
+  you uninstall while a host is connected, its MCP server entry and session hooks still point to the removed
+  program, and the host may report that they cannot start. Disconnect each host on the Connections page before
+  uninstalling, or remove the `bio-ce` entries from the host's settings afterwards.
 - More limitations, including items not yet verified, are listed under "Not verified" below and in
   `docs/known-limitations.md`.
 
@@ -75,14 +79,15 @@ be safe, create a backup in Settings first. Connected AI hosts keep working with
   Codex registration and hook install/remove in isolated profiles, revocation, backup and restore including
   recovery from a backup made before the upgrade, uninstall keeping data, reinstall into a folder whose name has
   Korean letters, spaces, and `#`, and full cleanup.
+- By hand on the developer's PC with this exact installer: backup and restore by clicking in the installed app
+  (including a backup file name with Korean letters, spaces, and `#`, and cancelling a restore), and the
+  uninstaller's interactive "also remove my data" question (No keeps data and is the default; Yes removes it).
 
 ## Not verified
 
 - **A Windows PC without Python or Git.** The clean install ran on a hosted runner that has both.
 - Claude Code and Codex registration from the installed app on the runner (neither CLI is installed there); it
   was verified on the developer's account.
-- Backup and restore by clicking in the installed app (the same code passes the automated UI tests).
-- The uninstaller's interactive "also remove my data" question (silent uninstalls always keep data, by design).
 - Real 125%/150% display scaling, Windows 10, screen readers.
 - Whether real AI models decide on their own to use BIO CE's memory tools. Codex Auto memory remains **limited**.
 - BIO Core: not part of this release.
