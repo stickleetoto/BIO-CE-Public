@@ -27,6 +27,7 @@ import logging
 import os
 from pathlib import Path
 import sqlite3
+import threading
 from contextlib import AbstractContextManager, nullcontext
 from typing import Annotated, Any, Callable, TypeVar
 
@@ -36,7 +37,7 @@ from pydantic import Field
 
 from bio_ce import display_version
 from bio_ce.auto_memory import AutoMemoryWriter
-from bio_ce.server_lifetime import ServerLifetime, idle_seconds_from, parent_process_id
+from bio_ce.server_lifetime import ServerLifetime, idle_seconds_from, parent_process_id, release_seconds_from
 from bio_ce.control_store import AccessDenied, ControlStore, ControlStoreError, control_database_for
 from bio_ce.core.models import (
     MemoryNotFoundError,
@@ -67,13 +68,86 @@ _logger = logging.getLogger("bio_ce.mcp")
 _T = TypeVar("_T")
 
 
+class _Connections:
+    """The server's long-lived SQLite connections: opened on demand and closed while the server is idle.
+
+    Releasing closes both connections and checkpoints the write-ahead logs, so an idle server holds no
+    database file open (a restore in the desktop app, or an upgrade, is then not blocked). The next
+    request opens them again.
+    """
+
+    def __init__(self, database: Path, control: ControlStore | None) -> None:
+        self.database = database
+        self.managed = control is not None
+        self._control = control
+        self._store: SQLiteMemoryStore | None = None
+        self._lock = threading.RLock()
+
+    def store(self) -> SQLiteMemoryStore:
+        with self._lock:
+            if self._store is None:
+                self._store = SQLiteMemoryStore(self.database, read_only=True)
+            return self._store
+
+    def control(self) -> ControlStore | None:
+        with self._lock:
+            if self.managed and self._control is None:
+                self._control = ControlStore(control_database_for(self.database))
+            return self._control
+
+    def release(self) -> None:
+        with self._lock:
+            self.close()
+            for path in (self.database, control_database_for(self.database)):
+                _checkpoint(path)
+
+    def close(self) -> None:
+        with self._lock:
+            if self._store is not None:
+                self._store.close()
+                self._store = None
+            if self._control is not None:
+                self._control.close()
+                self._control = None
+
+
+def _checkpoint(path: Path) -> None:
+    """Fold a leftover write-ahead log back into the database file. Best effort: busy is fine."""
+    if not path.with_name(path.name + "-wal").exists():
+        return
+    try:
+        connection = sqlite3.connect(f"{path.as_uri()}?mode=rw", uri=True, timeout=1)
+    except sqlite3.Error:
+        return
+    try:
+        connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    except sqlite3.Error:
+        pass
+    finally:
+        connection.close()
+
+
+class _StoreProxy:
+    """Lets tool code use ``store`` while the connection behind it is opened on demand."""
+
+    def __init__(self, connections: _Connections) -> None:
+        self._connections = connections
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._connections.store(), name)
+
+
 class _Access:
     """Per-call authorization against the grant stored in the control database."""
 
-    def __init__(self, control: ControlStore | None, connection_id: str | None, scope: MemoryScope) -> None:
-        self.control = control
+    def __init__(self, connections: _Connections, connection_id: str | None, scope: MemoryScope) -> None:
+        self._connections = connections
         self.connection_id = connection_id
         self.scope = scope
+
+    @property
+    def control(self) -> ControlStore | None:
+        return self._connections.control()
 
     def require_read(self) -> None:
         if self.control is None:
@@ -90,9 +164,10 @@ class _Access:
             raise ToolError("BIO CE access is paused for this connection. The user can resume it in BIO CE.")
 
     def writer(self, database: Path, scope: MemoryScope) -> AutoMemoryWriter:
-        if self.control is None:
+        control = self.control
+        if control is None:
             raise ToolError("This is a read-only v0.2 connection. Reconnect the host in BIO CE to use Auto memory.")
-        return AutoMemoryWriter(database, self.control, scope=scope, connection_id=self.connection_id)
+        return AutoMemoryWriter(database, control, scope=scope, connection_id=self.connection_id)
 
 
 def create_mcp_server(
@@ -103,6 +178,7 @@ def create_mcp_server(
     connection_id: str | None = None,
     token: str | None = None,
     activity: Callable[[], AbstractContextManager[Any]] | None = None,
+    release_hook: list[Callable[[], None]] | None = None,
 ) -> tuple[MCPServer, Callable[[], None]]:
     """Build a server bound to exactly one existing database scope; also return its close function.
 
@@ -111,6 +187,7 @@ def create_mcp_server(
     Reads use a long-lived SQLite ``mode=ro`` connection. Each permitted write
     opens a short-lived writable connection inside one atomic transaction.
     ``activity`` (optional) wraps every tool request, for example to reset an idle timer.
+    ``release_hook`` (optional) receives a function that closes the database connections while idle.
     """
     request_activity = activity or nullcontext
     database_path = Path(database).expanduser().resolve()
@@ -133,8 +210,12 @@ def create_mcp_server(
             raise ValueError("a server without a BIO CE connection needs an explicit project and namespace")
         scope = MemoryScope(project, namespace)
         mode_note = "This connection is read-only."
-    access = _Access(control, connection_id, scope)
-    store = SQLiteMemoryStore(database_path, read_only=True)
+    connections = _Connections(database_path, control)
+    if release_hook is not None:
+        release_hook.append(connections.release)
+    access = _Access(connections, connection_id, scope)
+    store = _StoreProxy(connections)
+    connections.store()  # fail at startup, not on the first call, if the database cannot be opened
     server = MCPServer(
         "BIO CE Memory",
         version=display_version(),
@@ -288,9 +369,7 @@ def create_mcp_server(
         ))
 
     def close() -> None:
-        store.close()
-        if control is not None:
-            control.close()
+        connections.close()
 
     return server, close
 
@@ -304,15 +383,18 @@ def run_mcp_stdio(
 ) -> int:
     """Run the local stdio server; stdout is reserved for MCP protocol frames."""
     token = os.environ.get(TOKEN_ENVIRONMENT_VARIABLE) if connection_id else None
+    release: list[Callable[[], None]] = []
     lifetime = ServerLifetime(
         lambda _reason: _end_process(close),
         idle_seconds=idle_seconds_from(os.environ),
         parent_pid=parent_process_id(),
+        release_seconds=release_seconds_from(os.environ),
+        on_release=lambda: release[0]() if release else None,
     )
     try:
         server, close = create_mcp_server(
             database, project=project, namespace=namespace, connection_id=connection_id, token=token,
-            activity=lifetime.activity,
+            activity=lifetime.activity, release_hook=release,
         )
     except AccessDenied as exc:
         _logger.error("%s", exc)

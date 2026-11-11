@@ -22,8 +22,10 @@ import unittest
 
 from mcp import Client, StdioServerParameters, stdio_client
 
+from bio_ce.control_store import MODE_AUTO_MEMORY, ControlStore, control_database_for
 from bio_ce.demo_fixture import DEMO_NAMESPACE, DEMO_PROJECT, seed_synthetic_mcp_demo
-from bio_ce.server_lifetime import IDLE_ENVIRONMENT_VARIABLE, process_alive
+from bio_ce.desktop import BackupConflictError, DesktopMemoryService
+from bio_ce.server_lifetime import IDLE_ENVIRONMENT_VARIABLE, RELEASE_ENVIRONMENT_VARIABLE, process_alive
 
 _FLAGS = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 # A virtual environment's python.exe is a stub that starts the real interpreter as its child, so killing
@@ -109,6 +111,54 @@ class ServerLifetimeTests(unittest.TestCase):
                     self.assertFalse(result.is_error)
 
         asyncio.run(asyncio.wait_for(exercise(), timeout=60))
+
+    def _restore_while_a_server_is_connected(self, release: str) -> tuple[bool, bool]:
+        """Restore a backup in the desktop app while a managed MCP server is connected but idle.
+
+        Returns (restore succeeded, the server still answers afterwards and sees the restored data)."""
+        database = self.root / f"personal-{release}.sqlite3"
+        service = DesktopMemoryService(database)
+        self.addCleanup(service.close)
+        service.add(title="Before backup", content="synthetic backup restore marker before", source_ref="user-input")
+        backup = service.create_backup(self.root / f"backup-{release}.sqlite3")
+        service.add(title="After backup", content="synthetic restore marker after", source_ref="user-input")
+        with ControlStore(control_database_for(database)) as control:
+            grant, token = control.create_grant("codex", project="bio-ce-personal", namespace="default")
+            control.set_mode(grant.connection_id, MODE_AUTO_MEMORY)
+        environment = dict(os.environ, PYTHONPATH=PYTHONPATH, BIO_CE_CONNECTION_TOKEN=token,
+                           **{RELEASE_ENVIRONMENT_VARIABLE: release})
+        parameters = StdioServerParameters(command=PYTHON, args=[
+            "-m", "bio_ce", "mcp-stdio", "--db", str(database), "--connection", grant.connection_id], env=environment)
+        stderr = tempfile.TemporaryFile(mode="w+t", encoding="utf-8")
+        self.addCleanup(stderr.close)
+        outcome: dict[str, bool] = {}
+
+        async def exercise() -> None:
+            async with Client(stdio_client(parameters, errlog=stderr)) as client:
+                first = await client.call_tool("bio_memory_search", {"query": "marker", "limit": 5})
+                self.assertFalse(first.is_error)
+                await asyncio.sleep(4)  # longer than the release time (2 s) when it is on
+                try:
+                    service.restore_backup(backup)
+                    outcome["restored"] = True
+                except BackupConflictError:
+                    outcome["restored"] = False
+                after = await client.call_tool("bio_memory_search", {"query": "marker", "limit": 5})
+                titles = {hit["title"] for hit in after.structured_content["results"]} if not after.is_error else set()
+                outcome["answers"] = not after.is_error and (
+                    titles == {"Before backup"} if outcome["restored"] else bool(titles))
+
+        asyncio.run(asyncio.wait_for(exercise(), timeout=90))
+        return outcome["restored"], outcome["answers"]
+
+    def test_an_idle_server_releases_the_database_so_a_restore_works(self):
+        restored, answers = self._restore_while_a_server_is_connected("2")
+        self.assertTrue(restored, "the restore was blocked although the connected server was idle")
+        self.assertTrue(answers, "the server did not reopen the database and see the restored memories")
+        # Control: with releasing turned off, the connected server keeps the database open and blocks it.
+        restored, answers = self._restore_while_a_server_is_connected("0")
+        self.assertFalse(restored)
+        self.assertTrue(answers)
 
     def test_server_exits_when_the_process_that_started_it_ends(self):
         # The launcher keeps a copy of the server's stdin in a holder process, so stdin never reaches EOF:
