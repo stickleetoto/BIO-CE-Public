@@ -27,6 +27,7 @@ import logging
 import os
 from pathlib import Path
 import sqlite3
+from contextlib import AbstractContextManager, nullcontext
 from typing import Annotated, Any, Callable, TypeVar
 
 from mcp.server import MCPServer
@@ -34,6 +35,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field
 
 from bio_ce.auto_memory import AutoMemoryWriter
+from bio_ce.server_lifetime import ServerLifetime, idle_seconds_from, parent_process_id
 from bio_ce.control_store import AccessDenied, ControlStore, ControlStoreError, control_database_for
 from bio_ce.core.models import (
     MemoryNotFoundError,
@@ -99,6 +101,7 @@ def create_mcp_server(
     namespace: str | None = None,
     connection_id: str | None = None,
     token: str | None = None,
+    activity: Callable[[], AbstractContextManager[Any]] | None = None,
 ) -> tuple[MCPServer, Callable[[], None]]:
     """Build a server bound to exactly one existing database scope; also return its close function.
 
@@ -106,7 +109,9 @@ def create_mcp_server(
     different ``project``/``namespace``. A legacy (connection-less) server needs both.
     Reads use a long-lived SQLite ``mode=ro`` connection. Each permitted write
     opens a short-lived writable connection inside one atomic transaction.
+    ``activity`` (optional) wraps every tool request, for example to reset an idle timer.
     """
+    request_activity = activity or nullcontext
     database_path = Path(database).expanduser().resolve()
     control: ControlStore | None = None
     if connection_id is not None:
@@ -141,6 +146,10 @@ def create_mcp_server(
     )
 
     def guarded_read(name: str, action: Callable[[], _T]) -> _T:
+        with request_activity():
+            return _guarded_read(name, action)
+
+    def _guarded_read(name: str, action: Callable[[], _T]) -> _T:
         access.require_read()
         try:
             return action()
@@ -155,6 +164,10 @@ def create_mcp_server(
             raise ToolError("Memory storage is unavailable.") from None
 
     def guarded_write(name: str, action: Callable[[AutoMemoryWriter], dict[str, Any]]) -> dict[str, Any]:
+        with request_activity():
+            return _guarded_write(name, action)
+
+    def _guarded_write(name: str, action: Callable[[AutoMemoryWriter], dict[str, Any]]) -> dict[str, Any]:
         writer = access.writer(database_path, scope)
         try:
             return action(writer)
@@ -289,9 +302,15 @@ def run_mcp_stdio(
 ) -> int:
     """Run the local stdio server; stdout is reserved for MCP protocol frames."""
     token = os.environ.get(TOKEN_ENVIRONMENT_VARIABLE) if connection_id else None
+    lifetime = ServerLifetime(
+        lambda _reason: _end_process(close),
+        idle_seconds=idle_seconds_from(os.environ),
+        parent_pid=parent_process_id(),
+    )
     try:
         server, close = create_mcp_server(
-            database, project=project, namespace=namespace, connection_id=connection_id, token=token
+            database, project=project, namespace=namespace, connection_id=connection_id, token=token,
+            activity=lifetime.activity,
         )
     except AccessDenied as exc:
         _logger.error("%s", exc)
@@ -299,11 +318,20 @@ def run_mcp_stdio(
     except ValueError as exc:
         _logger.error("%s", exc)
         return 2
+    lifetime.start()
     try:
-        server.run("stdio")
+        server.run("stdio")  # returns when the host closes stdin
     finally:
         close()
     return 0
+
+
+def _end_process(close: Callable[[], None]) -> None:
+    """End a server whose host is gone or idle. The stdin reader cannot be interrupted, so exit directly."""
+    try:
+        close()
+    finally:
+        os._exit(0)
 
 
 def _require_exact_scope(configured: MemoryScope, project: str | None, namespace: str | None) -> None:
