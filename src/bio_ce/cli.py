@@ -44,7 +44,16 @@ def main(argv: list[str] | None = None) -> int:
     hook.add_argument("--token", required=True)
     hook.add_argument("--project", help="optional; must match the connection's scope")
     hook.add_argument("--namespace", help="optional; must match the connection's scope")
+    check = commands.add_parser(
+        "host-check",
+        help="read-only: exit 100+mask if an AI host still starts this installation's MCP server (for the uninstaller)",
+    )
+    check.add_argument("--app-dir", required=True, help="the BIO CE installation folder")
     args = parser.parse_args(argv)
+    if args.command == "host-check":
+        from bio_ce.host_check import main as host_check
+
+        return host_check(args.app_dir)
     if args.command == "hook":
         import io
         import sys

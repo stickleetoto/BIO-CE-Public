@@ -78,10 +78,22 @@ english.LaunchApp=Start BIO CE
 english.RemoveDataPrompt=Also remove BIO CE local data (memories, settings, and MCP configuration backups)?%n%n%1%n%nThis is not a secure erase and cannot be undone. Choose No to keep your data.
 english.RemoveDataFailed=Some BIO CE data could not be removed because it is in use. Close any AI host that uses BIO CE and delete this folder manually:%n%n%1
 english.DataDirRefused=Choose a program folder outside the BIO CE data folder:%n%n%1
+english.HostsStillConnected=BIO CE is still connected to:%n%n%1%nUninstalling does not change their settings, so they would keep pointing to the removed program and may show start-up errors.%n%nCancel the uninstall so you can disconnect first?%n%nYes: cancel the uninstall.%nNo: uninstall anyway.
+english.DisconnectFirst=Open BIO CE, select Connections, and disconnect each host. Then run the uninstall again.
+english.HostCodex=Codex (CLI · desktop app)
+english.HostClaude=Claude Code
+english.PartMcp=MCP server
+english.PartHooks=session hooks
 korean.LaunchApp=BIO CE 시작
 korean.RemoveDataPrompt=BIO CE 로컬 데이터(기억, 설정, MCP 설정 백업)도 삭제할까요?%n%n%1%n%n안전 삭제가 아니며 되돌릴 수 없습니다. 데이터를 보존하려면 [아니요]를 선택하세요.
 korean.RemoveDataFailed=사용 중인 파일이 있어 일부 BIO CE 데이터를 삭제하지 못했습니다. BIO CE를 사용하는 AI 호스트를 종료한 뒤 다음 폴더를 직접 삭제하세요:%n%n%1
 korean.DataDirRefused=BIO CE 데이터 폴더 밖의 프로그램 폴더를 선택하세요:%n%n%1
+korean.HostsStillConnected=BIO CE가 아직 다음에 연결되어 있습니다:%n%n%1%n제거해도 이 설정은 바뀌지 않으므로, 삭제된 프로그램을 계속 가리켜 시작 오류가 날 수 있습니다.%n%n먼저 연결을 해제할 수 있도록 제거를 취소할까요?%n%n[예]: 제거 취소%n[아니요]: 그래도 제거
+korean.DisconnectFirst=BIO CE를 열고 Connections에서 각 호스트의 연결을 해제한 뒤 다시 제거하세요.
+korean.HostCodex=Codex (CLI · 데스크톱 앱)
+korean.HostClaude=Claude Code
+korean.PartMcp=MCP 서버
+korean.PartHooks=세션 훅
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -147,6 +159,54 @@ begin
   Result := '';
   if OverlapsDataRoot(ExpandConstant('{app}')) then
     Result := FmtMessage(CustomMessage('DataDirRefused'), [DataRoot()]);
+end;
+
+function HostLine(const Name: String; HasMcp, HasHooks: Boolean): String;
+var
+  Parts: String;
+begin
+  Result := '';
+  if not (HasMcp or HasHooks) then
+    Exit;
+  Parts := '';
+  if HasMcp then
+    Parts := CustomMessage('PartMcp');
+  if HasHooks then
+  begin
+    if Parts <> '' then
+      Parts := Parts + ', ';
+    Parts := Parts + CustomMessage('PartHooks');
+  end;
+  Result := '- ' + Name + ' (' + Parts + ')' + #13#10;
+end;
+
+{ Before anything is removed: ask the installed MCP program (read-only) whether Codex or Claude Code still
+  start it. Exit code 100 + mask: 1 Codex MCP, 2 Codex hooks, 4 Claude MCP, 8 Claude hooks. Any failure to
+  check never blocks the uninstall. Silent uninstalls only log the result. }
+function InitializeUninstall(): Boolean;
+var
+  Code, Mask: Integer;
+  Hosts: String;
+begin
+  Result := True;
+  if not Exec(ExpandConstant('{app}\MCP\BIO-CE-MCP.exe'),
+              'host-check --app-dir "' + ExpandConstant('{app}') + '"', '', SW_HIDE,
+              ewWaitUntilTerminated, Code) then
+    Exit;
+  if (Code < 101) or (Code > 115) then
+    Exit;
+  Mask := Code - 100;
+  Log(Format('BIO CE is still referenced by host settings (mask %d).', [Mask]));
+  if UninstallSilent() then
+    Exit;
+  Hosts := HostLine(CustomMessage('HostCodex'), (Mask and 1) <> 0, (Mask and 2) <> 0)
+         + HostLine(CustomMessage('HostClaude'), (Mask and 4) <> 0, (Mask and 8) <> 0);
+  if MsgBox(FmtMessage(CustomMessage('HostsStillConnected'), [Hosts]), mbConfirmation,
+            MB_YESNO or MB_DEFBUTTON1) = IDYES then
+  begin
+    MsgBox(CustomMessage('DisconnectFirst'), mbInformation, MB_OK);
+    Result := False;
+  end;
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
