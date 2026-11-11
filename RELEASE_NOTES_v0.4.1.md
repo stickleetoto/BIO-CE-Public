@@ -1,15 +1,16 @@
 <!-- Copyright 2026 stickleetoto | Apache-2.0 -->
-# BIO CE v0.4.1 — Release Notes (draft)
+# BIO CE v0.4.1-rc1 — Release Notes (candidate)
 
-**Status: in development, not released.** The version number in the app is still 0.4.0-rc1 until the release is
-prepared.
+**Status: candidate, not published.**
 
 ## Fixed
 
-- **MCP servers no longer pile up.** The Codex desktop app keeps one BIO CE server per conversation open, so
-  servers accumulated for as long as the app ran. A server now also ends when the program that started it ends,
-  or after one hour without a request (`BIO_CE_MCP_IDLE_SECONDS`, `0` turns this off). A request in progress always
-  finishes first.
+- **Idle MCP servers no longer hold the database.** The Codex desktop app keeps one BIO CE server per conversation
+  open. After 60 seconds without a request, a server now closes its database connections (the next request opens
+  them again), so a restore in the app is no longer blocked by a connected but idle AI tool. A server also ends
+  when the program that started it ends.
+- **Upgrading with a connected AI tool.** Setup closes running BIO CE MCP servers before it replaces them (it asks
+  first; a silent install closes them and logs it), so no stale program file is left behind.
 
 ## Added
 
@@ -40,7 +41,7 @@ prepared.
 
 ## Known limitations
 
-See `docs/known-limitations.md` (v0.4.1 section). In short: the idle limit's effect on a long Codex conversation
-is not verified, BIO CE cannot check the Codex desktop app's bundled version, the skill's effect on real models
+See `docs/known-limitations.md` (v0.4.1 section). In short: idle servers stay until their conversation closes,
+an upgrade ends open conversations' access to BIO CE, BIO CE cannot check the Codex desktop app's bundled version, the skill's effect on real models
 is not evaluated at scale, the installer and programs are not code-signed, and a PC without Python has not been
 tested.

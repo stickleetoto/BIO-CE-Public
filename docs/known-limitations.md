@@ -36,7 +36,8 @@
 
 ## v0.4.1 (in development)
 
-- After one hour without a request, BIO CE's MCP server ends (so idle servers do not pile up). Whether a host starts a new server by itself on the next request in the same conversation has **not been verified** for the Codex desktop app; if a tool call fails after a long pause, start a new conversation. The limit can be changed with `BIO_CE_MCP_IDLE_SECONDS`.
+- Codex keeps one BIO CE MCP server per open conversation and does not start a new one if it ends, so BIO CE does not end idle servers: they stay until the conversation or Codex closes. An idle server uses little memory and, after 60 seconds, holds no database file open. Setting `BIO_CE_MCP_IDLE_SECONDS` ends idle servers, but then the next memory call in that conversation fails (verified with Codex 0.166 and the desktop app's 0.167).
+- Upgrading closes running BIO CE MCP servers (Setup asks first; a silent install closes them and logs it). Open Codex or Claude Code conversations then need a new conversation to use BIO CE again.
 - The Codex code-mode option needs Codex 0.166 or later. BIO CE checks the command-line tool's version; it cannot check the version bundled with the Codex desktop app.
 - The memory skill only says when to use BIO CE; whether a real model follows it on its own has not been evaluated at scale. The server's memory policy still decides what may be stored.
 - Uninstalling now warns when Codex or Claude Code still start this installation, but it still does not change their settings: disconnect in BIO CE first. The warning only appears in an interactive uninstall.

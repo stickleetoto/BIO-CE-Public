@@ -7,10 +7,12 @@ BIO CE uses the official Python MCP SDK and stdio transport. At startup, the ser
 (`BIO-CE-MCP.exe mcp-stdio`) themselves; it opens the database directly. You can close the BIO CE app: connected AI
 tools keep using your memories.
 
-**Server lifetime (0.4.1).** A server ends when its host closes stdin, when the process that started it ends, or
-after one hour without a request (`BIO_CE_MCP_IDLE_SECONDS`, in seconds; `0` turns the limit off). This stops
-servers from piling up under hosts that keep one server per conversation open, such as the Codex desktop app. A
-request in progress always finishes first. A host that needs BIO CE again starts a new server.
+**Server lifetime (0.4.1).** A server ends when its host closes stdin or when the process that started it ends.
+Hosts that keep one server per conversation open, such as the Codex desktop app, do not start a new server if it
+ends on its own, so an idle server is not ended (`BIO_CE_MCP_IDLE_SECONDS` can set a limit; the default `0` means
+none). Instead, after 60 seconds without a request (`BIO_CE_MCP_RELEASE_SECONDS`) it closes its database
+connections and folds the write-ahead log back into the database file, so it does not block a restore or an
+upgrade; the next request opens them again. A request in progress always finishes first.
 
 ## Exposed tools
 

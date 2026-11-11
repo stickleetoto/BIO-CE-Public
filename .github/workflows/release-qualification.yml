@@ -13,7 +13,7 @@ on:
       previous_release:
         description: "Published release to upgrade from"
         required: true
-        default: "v0.3.0-rc1"
+        default: "v0.4.0-rc1"
 
 permissions:
   contents: read
@@ -133,6 +133,7 @@ jobs:
           # pinned SHA-256. To allow another release, verify its hash first and add it here.
           $pinned = @{
             'v0.3.0-rc1' = '2d79e7d4c9dff1187ff90149a1bc7418f014f9c0209a6c984ffa5d2d741572ee'
+            'v0.4.0-rc1' = 'fd5ca6e21d5fb44d1aee8505a2c7f92e2d332ba39c59015c095e878b3b044e09'
           }
           if (-not $pinned.ContainsKey($env:PREVIOUS_RELEASE)) { throw "no pinned SHA-256 for release: $env:PREVIOUS_RELEASE" }
           $previous = Join-Path $env:RUNNER_TEMP 'previous-release'
