@@ -16,7 +16,7 @@ CONTENT_LIMIT = 100_000
 SOURCE_LIMIT = 512
 DEFAULT_SOURCE = "user-input"
 
-HOST_NAMES = {"codex": "Codex CLI", "claude": "Claude Code"}
+HOST_NAMES = {"codex": "Codex (CLI · desktop app)", "claude": "Claude Code"}
 HOST_COMMANDS = {"codex": "codex", "claude": "claude"}
 
 _FIELD_LABELS = {

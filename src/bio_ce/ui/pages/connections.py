@@ -1,7 +1,7 @@
 # Copyright 2026 stickleetoto
 # SPDX-License-Identifier: Apache-2.0
 
-"""Connections: register BIO CE's read-only MCP server with Codex CLI or Claude Code."""
+"""Connections: register BIO CE's MCP server with Codex (CLI and desktop app) or Claude Code."""
 
 from __future__ import annotations
 
@@ -9,12 +9,15 @@ from dataclasses import dataclass
 from tkinter import ttk
 import tkinter as tk
 
+from bio_ce import codex_options, memory_skill
 from bio_ce.connections import (
+    CodeModeResult,
     ConnectionResult,
     DiagnosticCheck,
     HostStatus,
     MCPConnectionConflict,
     MCPConnectionError,
+    SkillResult,
     auto_memory_support,
 )
 from bio_ce.control_store import (
@@ -25,7 +28,7 @@ from bio_ce.control_store import (
     AuditEntry,
     ReviewItem,
 )
-from bio_ce.ui.dialogs import ReviewEditDialog
+from bio_ce.ui.dialogs import ReviewEditDialog, TextViewerDialog
 from bio_ce.ui.format import HOST_COMMANDS, host_name, preview, relative_time
 from bio_ce.ui.pages import Page
 from bio_ce.ui.pages.dashboard import host_pill
@@ -34,8 +37,27 @@ from bio_ce.ui.widgets import Button, Card, Pill, ScrollFrame, WrapLabel, captio
 
 
 HOST_DESCRIPTIONS = {
-    "codex": "OpenAI’s command-line coding agent",
-    "claude": "Anthropic’s command-line coding agent",
+    "codex": "OpenAI’s coding agent. The command-line tool and the desktop app use the same settings, so one "
+             "connection covers both.",
+    "claude": "Anthropic’s command-line coding agent. The Claude desktop chat app is not supported.",
+}
+APP_CLOSED_NOTE = "You can close the BIO CE app: connected AI tools keep using your memories."
+SKILL_LABELS = {
+    memory_skill.ABSENT: "Not installed",
+    memory_skill.CURRENT: "Installed",
+    memory_skill.OUTDATED: "Installed · update available",
+    memory_skill.MODIFIED: "Installed · edited by you",
+}
+SKILL_ACTIONS = {
+    memory_skill.ABSENT: "Install",
+    memory_skill.CURRENT: "Remove",
+    memory_skill.OUTDATED: "Update",
+    memory_skill.MODIFIED: "Replace",
+}
+CODE_MODE_LABELS = {
+    codex_options.APPLIED: "On: BIO CE’s tools are shown in Codex code mode",
+    codex_options.MISSING: "Off",
+    codex_options.USER_SET: "Set by you in Codex settings",
 }
 PROVIDER_EXAMPLES = {
     "codex": "usually OpenAI, or another provider you configured in Codex",
@@ -156,6 +178,29 @@ class HostCard(Card):
         self.hooks_label.pack(side="left")
         self.hooks_button = Button(hooks, theme, "Install", variant="link", command=lambda: page.toggle_hooks(host))
         self.hooks_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
+        self.code_mode_label: tk.Label | None = None
+        self.code_mode_button: Button | None = None
+        if host == "codex":
+            code_mode = tk.Frame(self.access, background=c.surface)
+            code_mode.pack(fill="x", pady=(theme.px(SPACE_S), 0))
+            tk.Label(code_mode, text="Code mode", font=theme.font("body_strong"), background=c.surface,
+                     foreground=c.text, width=12, anchor="w").pack(side="left")
+            self.code_mode_label = tk.Label(code_mode, text="", font=theme.font("body"), background=c.surface,
+                                            foreground=c.text_secondary, anchor="w")
+            self.code_mode_label.pack(side="left")
+            self.code_mode_button = Button(code_mode, theme, "Apply", variant="link",
+                                           command=lambda: page.apply_code_mode(host))
+        skill = tk.Frame(self.access, background=c.surface)
+        skill.pack(fill="x", pady=(theme.px(SPACE_S), 0))
+        tk.Label(skill, text="Memory skill", font=theme.font("body_strong"), background=c.surface,
+                 foreground=c.text, width=12, anchor="w").pack(side="left")
+        self.skill_label = tk.Label(skill, text="", font=theme.font("body"), background=c.surface,
+                                    foreground=c.text_secondary, anchor="w")
+        self.skill_label.pack(side="left")
+        self.skill_button = Button(skill, theme, "Install", variant="link", command=lambda: page.toggle_skill(host))
+        self.skill_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
+        Button(skill, theme, "Preview", variant="link", command=lambda: page.preview_skill(host)).pack(
+            side="left", padx=(theme.px(SPACE_XS), 0))
         self.progress = ttk.Progressbar(body, mode="indeterminate", style="BIO.Horizontal.TProgressbar")
 
         actions = tk.Frame(body, background=c.surface)
@@ -173,6 +218,8 @@ class HostCard(Card):
 
     def apply(self, status: HostStatus | None) -> None:
         self.status = status
+        self.support = auto_memory_support(self.host, status.code_mode if status is not None else None)
+        self.support_detail.configure(text=self.support.detail)
         text, kind = host_pill(status)
         self.pill.set(text, kind)
         self.message.configure(text=host_message(self.host, status))
@@ -184,6 +231,15 @@ class HostCard(Card):
             self.hooks_label.configure(text="On: recalls memories at session start and per prompt"
                                        if status.hooks_installed else "Off")
             self.hooks_button.set_text("Remove" if status.hooks_installed else "Install")
+            if self.code_mode_label is not None and self.code_mode_button is not None:
+                self.code_mode_label.configure(text=CODE_MODE_LABELS.get(status.code_mode or "", "Unknown"))
+                if status.code_mode == codex_options.MISSING:
+                    self.code_mode_button.pack(side="left", padx=(self.page.theme.px(SPACE_S), 0))
+                else:
+                    self.code_mode_button.pack_forget()
+            skill = status.skill or memory_skill.ABSENT
+            self.skill_label.configure(text=SKILL_LABELS.get(skill, "Unknown"))
+            self.skill_button.set_text(SKILL_ACTIONS.get(skill, "Install"))
         else:
             self.access.pack_forget()
         if status is not None and status.connected and status.legacy:
@@ -288,9 +344,11 @@ class ConnectionsPage(Page):
                   "uncertain changes and every retraction for your review. BIO CE changes a host’s settings only "
                   "after you confirm, and never calls an AI model itself. Memories a host reads become part of that "
                   "conversation and "
-                  "may be sent to the host’s AI model provider (for example OpenAI for Codex CLI or Anthropic for "
+                  "may be sent to the host’s AI model provider (for example OpenAI for Codex or Anthropic for "
                   "Claude Code) under that provider’s terms.", font=theme.font("body"), foreground=c.text_secondary,
                   background=c.info_bg).pack(fill="x", pady=(theme.px(2), 0))
+        WrapLabel(column, APP_CLOSED_NOTE, font=theme.font("body_strong"), foreground=c.text,
+                  background=c.info_bg).pack(fill="x", pady=(theme.px(SPACE_S), 0))
 
         self.cards: dict[str, HostCard] = {}
         for host in ("codex", "claude"):
@@ -426,6 +484,17 @@ class ConnectionsPage(Page):
 
     def connect_host(self, host: str) -> None:
         name = host_name(host)
+        manager = self.app.connection_manager
+        skill_path = manager.memory_skill_path(host)
+        options = [("skill", f"Also install the BIO CE memory skill, which tells {name} when to search and save "
+                    f"memories. Location: {skill_path}", True)]
+        if host == "codex":
+            options.append(("agents", "Also add the same guidance to Codex’s AGENTS.md (only needed if Codex does "
+                            "not pick up the skill). Location: " + str(skill_path.parents[2] / "AGENTS.md"), False))
+        code_mode_point = (("If Codex is version 0.166 or later, BIO CE also adds one option to its own entry so "
+                            "Codex shows BIO CE’s tools in code mode. It checks the result and puts your settings "
+                            "back if Codex does not accept it.",) if host == "codex" else ())
+        choices: dict[str, bool] = {key: default for key, _label, default in options}
         if not self.app.confirm(
             title=f"Connect {name}?",
             message=f"BIO CE will use {name}’s own command to add one MCP server entry named “bio-ce” "
@@ -440,21 +509,44 @@ class ConnectionsPage(Page):
                 "values for other servers and is stored locally without encryption.",
                 "BIO CE then runs a local read-only check against your database. No AI model is called and no "
                 "memory is written.",
+                *code_mode_point,
             ),
             confirm_text="Connect",
+            options=options,
+            choices=choices,
+            links=(("Preview the memory skill…", lambda dialog: self._show_skill(host, dialog)),),
         ):
             return
         card = self.cards[host]
         card.set_busy("Connecting…")
         card.show_checks(())
+
+        def work():
+            result = manager.connect(host, approved=True)
+            skill = None
+            if choices.get("skill") or choices.get("agents"):
+                try:
+                    skill = manager.install_memory_skill(host, approved=True, agents_md=bool(choices.get("agents")))
+                except MCPConnectionError as exc:
+                    skill = exc
+            return result, skill
+
         self.app.run_task(
-            lambda: self.app.connection_manager.connect(host, approved=True),
-            lambda result: self._connected(host, result),
+            work,
+            lambda outcome: self._connected(host, *outcome),
             lambda error: self._failed(host, error, "connect"),
         )
 
     def disconnect_host(self, host: str) -> None:
         name = host_name(host)
+        status = self.cards[host].status
+        skill = (status.skill if status is not None else None) or memory_skill.ABSENT
+        options = []
+        if skill != memory_skill.ABSENT:
+            edited = skill == memory_skill.MODIFIED
+            options.append(("remove_skill", "Also remove the BIO CE memory skill"
+                            + (" (you edited it; a backup copy is kept)" if edited else ""), not edited))
+        choices: dict[str, bool] = {key: default for key, _label, default in options}
         if not self.app.confirm(
             title=f"Disconnect {name}?",
             message=f"BIO CE will remove only its own “bio-ce” entry from {name}. Other MCP servers stay "
@@ -462,13 +554,18 @@ class ConnectionsPage(Page):
             points=("The current MCP settings are backed up first.",
                     "Your memories are not changed. You can connect again at any time."),
             confirm_text="Disconnect",
+            options=options,
+            choices=choices,
         ):
             return
         card = self.cards[host]
         card.set_busy("Disconnecting…")
         card.show_checks(())
+        remove_skill = bool(choices.get("remove_skill"))
         self.app.run_task(
-            lambda: self.app.connection_manager.disconnect(host, approved=True),
+            lambda: self.app.connection_manager.disconnect(
+                host, approved=True, remove_skill=remove_skill,
+                remove_modified_skill=remove_skill and skill == memory_skill.MODIFIED),
             lambda result: self._disconnected(host, result),
             lambda error: self._failed(host, error, "disconnect"),
         )
@@ -538,6 +635,79 @@ class ConnectionsPage(Page):
             lambda _result: self._hooks_done(host, installing),
             lambda error: self._failed(host, error, "hooks"),
         )
+
+    def apply_code_mode(self, host: str) -> None:
+        if not self.app.confirm(
+            title="Show BIO CE’s tools in Codex code mode?",
+            message="BIO CE will add one line to its own “bio-ce” entry in Codex’s settings: "
+                    "omit_tools_from = [\"code_mode\"].",
+            points=(
+                "This needs Codex 0.166 or later; BIO CE checks the version first.",
+                "Codex’s settings file is backed up first. BIO CE checks the result with Codex and puts the previous "
+                "file back if Codex does not accept it.",
+                "Other MCP servers and settings are not changed.",
+            ),
+            confirm_text="Apply",
+        ):
+            return
+        card = self.cards[host]
+        card.set_busy("Updating Codex…")
+        self.app.run_task(
+            lambda: self.app.connection_manager.apply_codex_code_mode(approved=True),
+            lambda result: self._code_mode_done(host, result),
+            lambda error: self._failed(host, error, "code mode"),
+        )
+
+    def _code_mode_done(self, host: str, result: CodeModeResult) -> None:
+        self._finish(host)
+        kind = "success" if result.state in ("applied", "already_applied") else "warning"
+        self.app.notify(kind, result.detail, title="Codex code mode")
+
+    def _show_skill(self, host: str, parent: tk.Misc | None = None) -> None:
+        path = self.app.connection_manager.memory_skill_path(host)
+        body = f"Location: {path}\n\n{memory_skill.render()}"
+        TextViewerDialog(parent or self, self.theme, "BIO CE memory skill", body).show(modal=parent is not None)
+
+    def preview_skill(self, host: str) -> None:
+        self._show_skill(host)
+
+    def toggle_skill(self, host: str) -> None:
+        name = host_name(host)
+        status = self.cards[host].status
+        state = (status.skill if status is not None else None) or memory_skill.ABSENT
+        manager = self.app.connection_manager
+        path = manager.memory_skill_path(host)
+        if state == memory_skill.CURRENT:
+            if not self.app.confirm(
+                title=f"Remove the memory skill from {name}?",
+                message=f"BIO CE will delete {path}.",
+                points=("A backup copy is kept in your BIO CE folder.", "Your memories and the connection stay."),
+                confirm_text="Remove",
+            ):
+                return
+            work = lambda: manager.remove_memory_skill(host, approved=True)
+        else:
+            replacing = state == memory_skill.MODIFIED
+            if not self.app.confirm(
+                title=(f"Replace your edited memory skill in {name}?" if replacing
+                       else f"{'Update' if state == memory_skill.OUTDATED else 'Install'} the memory skill for {name}?"),
+                message=f"The skill tells {name} when to search BIO CE and what to save. It goes to {path}.",
+                points=(("Your edited file is backed up to your BIO CE folder first.",) if replacing else ())
+                + ("BIO CE’s server still decides what may be stored; the skill only says when to use it.",),
+                confirm_text="Replace" if replacing else "Install",
+                danger=replacing,
+                links=(("Preview the memory skill…", lambda dialog: self._show_skill(host, dialog)),),
+            ):
+                return
+            work = lambda: manager.install_memory_skill(host, approved=True, replace_modified=replacing)
+        card = self.cards[host]
+        card.set_busy("Updating the memory skill…")
+        self.app.run_task(work, lambda results: self._skill_done(host, results),
+                          lambda error: self._failed(host, error, "skill"))
+
+    def _skill_done(self, host: str, results) -> None:
+        self._finish(host)
+        self.app.notify("success", _skill_message(host_name(host), results[0]), title="Memory skill")
 
     def _hooks_done(self, host: str, installed: bool) -> None:
         self._finish(host)
@@ -619,7 +789,7 @@ class ConnectionsPage(Page):
         self.cards[host].set_busy(None)
         self.app.hosts_changed()
 
-    def _connected(self, host: str, result: ConnectionResult) -> None:
+    def _connected(self, host: str, result: ConnectionResult, skill=None) -> None:
         self._finish(host)
         name = host_name(host)
         if result.already_configured:
@@ -628,6 +798,13 @@ class ConnectionsPage(Page):
             message = f"{name} can now search and read your memories."
             if result.backup_file is not None:
                 message += " A backup of its previous MCP settings was saved."
+        if result.code_mode is not None:
+            message += " " + result.code_mode.detail
+        if isinstance(skill, BaseException):
+            message += " The memory skill was not installed: " + str(skill)
+        elif skill is not None:
+            message += " " + _skill_message(name, skill[0])
+        message += " " + APP_CLOSED_NOTE
         self.app.notify("success", message, title=f"{name} connected")
 
     def _disconnected(self, host: str, result: ConnectionResult) -> None:
@@ -658,7 +835,8 @@ class ConnectionsPage(Page):
         self._finish(host)
         name = host_name(host)
         titles = {"connect": f"Couldn't connect {name}", "disconnect": f"Couldn't disconnect {name}",
-                  "diagnose": f"Couldn't check {name}", "hooks": f"Couldn't update {name}'s hooks"}
+                  "diagnose": f"Couldn't check {name}", "hooks": f"Couldn't update {name}'s hooks",
+                  "code mode": "Couldn't update Codex code mode", "skill": "Couldn't update the memory skill"}
         if isinstance(error, MCPConnectionConflict):
             message = f"{error} Nothing was changed."
             kind = "warning"
@@ -672,4 +850,15 @@ class ConnectionsPage(Page):
         self.app.notify(kind, message, title=titles[action])
 
 
-__all__ = ["ConnectionsPage", "HostCard", "host_message"]
+def _skill_message(name: str, result: SkillResult) -> str:
+    return {
+        "installed": f"The memory skill is installed for {name}.",
+        "updated": f"The memory skill for {name} is up to date now.",
+        "unchanged": f"The memory skill for {name} was already up to date.",
+        "kept_modified": f"You edited the memory skill for {name}, so BIO CE left it as it is.",
+        "removed": f"The memory skill was removed from {name}.",
+        "absent": f"{name} had no memory skill to remove.",
+    }.get(result.state, f"Memory skill: {result.state}.")
+
+
+__all__ = ["APP_CLOSED_NOTE", "ConnectionsPage", "HostCard", "host_message"]

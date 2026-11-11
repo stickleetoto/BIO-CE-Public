@@ -10,11 +10,17 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from bio_ce.connections import ConnectionResult, HostStatus
+from bio_ce.connections import CodeModeResult, ConnectionResult, HostStatus, SkillResult
 from bio_ce.control_store import ControlStore, MODE_AUTO_MEMORY, MODE_PAUSED, control_database_for
 from bio_ce.desktop import AppDataPaths, BIOCEDesktop, DesktopMemoryService
 from bio_ce.ui.dialogs import ReviewEditDialog
 from tests.integration.test_desktop_ui_redesign import new_root
+
+
+def _all_widgets(widget):
+    for child in widget.winfo_children():
+        yield child
+        yield from _all_widgets(child)
 
 
 class FakeManagedConnections:
@@ -24,14 +30,16 @@ class FakeManagedConnections:
         self.control = ControlStore(control_database_for(database))
         self.grant, _token = self.control.create_grant("codex")
         self.hooks = False
-        self.calls: list[tuple[str, str]] = []
+        self.skill = "absent"
+        self.code_mode = "missing"
+        self.calls: list[tuple] = []
 
     def status(self, host: str) -> HostStatus:
         if host == "claude":
             return HostStatus("claude", True, True, legacy=True, mode="read_only")
         grant = self.control.grant(self.grant.connection_id)
         return HostStatus("codex", True, grant.active, mode=grant.mode, connection_id=grant.connection_id,
-                          hooks_installed=self.hooks)
+                          hooks_installed=self.hooks, code_mode=self.code_mode, skill=self.skill)
 
     def set_mode(self, host: str, mode: str):
         self.calls.append(("set_mode", mode))
@@ -51,8 +59,32 @@ class FakeManagedConnections:
         self.calls.append(("connect", host))
         return ConnectionResult(host, True, False, None)
 
-    def disconnect(self, host: str, *, approved: bool = False) -> ConnectionResult:
+    def disconnect(self, host: str, *, approved: bool = False, remove_skill: bool = False,
+                   remove_modified_skill: bool = False) -> ConnectionResult:
+        self.calls.append(("disconnect", host, remove_skill))
         return ConnectionResult(host, False, False, None)
+
+    def memory_skill_path(self, host: str) -> Path:
+        return Path(f"C:/fake/{host}/skills/bio-ce-memory/SKILL.md")
+
+    def install_memory_skill(self, host: str, *, approved: bool = False, replace_modified: bool = False,
+                             agents_md: bool = False):
+        assert approved is True
+        self.calls.append(("install_skill", host, agents_md, replace_modified))
+        self.skill = "current"
+        return SkillResult("installed", self.memory_skill_path(host)), None
+
+    def remove_memory_skill(self, host: str, *, approved: bool = False, remove_modified: bool = False):
+        assert approved is True
+        self.calls.append(("remove_skill", host))
+        self.skill = "absent"
+        return SkillResult("removed", self.memory_skill_path(host)), None
+
+    def apply_codex_code_mode(self, *, approved: bool = False):
+        assert approved is True
+        self.calls.append(("apply_code_mode", "codex"))
+        self.code_mode = "applied"
+        return CodeModeResult("applied", "BIO CE's tools and instructions are now shown in Codex code mode.")
 
     def diagnose(self, host: str, *, run_server_check: bool = True):
         return ()
@@ -119,6 +151,55 @@ class AutoMemoryConnectionsPageTests(unittest.TestCase):
         with patch.object(app, "confirm", return_value=True):
             app.connections.pause_all()
         self.assertEqual(self.connections.status("codex").mode, MODE_PAUSED)
+
+    def test_code_mode_skill_rows_and_notes(self):
+        app = self.app
+        app.show_page("connections")
+        page = app.connections
+        codex, claude = page.cards["codex"], page.cards["claude"]
+        self.root.update()
+        texts = " ".join(str(w.cget("text")) for w in _all_widgets(page) if "text" in w.keys())
+        self.assertIn("You can close the BIO CE app: connected AI tools keep using your memories.", texts)
+        self.assertIn("The Claude desktop chat app is not supported.", texts)
+        self.assertIn("Codex (CLI · desktop app)", texts)
+        self.assertNotIn("0.164", codex.support_detail.cget("text"))
+
+        self.assertEqual(codex.code_mode_label.cget("text"), "Off")
+        self.assertTrue(codex.code_mode_button.winfo_manager(), "Apply is offered while the option is missing")
+        self.assertIsNone(claude.code_mode_label, "only Codex has a code mode row")
+        with patch.object(app, "confirm", return_value=True) as asked:
+            page.apply_code_mode("codex")
+        self.assertIn("0.166 or later", " ".join(asked.call_args.kwargs["points"]))
+        app.tasks.wait(10)
+        self.root.update()
+        self.assertIn(("apply_code_mode", "codex"), self.connections.calls)
+        self.assertTrue(codex.code_mode_label.cget("text").startswith("On"))
+        self.assertFalse(codex.code_mode_button.winfo_manager())
+        self.assertIn("verified with Codex 0.166", codex.support_detail.cget("text"))
+        self.assertTrue(codex.support_pill.cget("text").endswith("Limited"), "Codex stays Limited (decision F1)")
+
+        self.assertEqual(codex.skill_label.cget("text"), "Not installed")
+        self.assertEqual(codex.skill_button.text, "Install")
+        with patch.object(app, "confirm", return_value=True) as asked:
+            page.toggle_skill("codex")
+        self.assertTrue(asked.call_args.kwargs["links"], "the skill can be previewed before installing")
+        app.tasks.wait(10)
+        self.root.update()
+        self.assertIn(("install_skill", "codex", False, False), self.connections.calls)
+        self.assertEqual(codex.skill_label.cget("text"), "Installed")
+        self.assertEqual(codex.skill_button.text, "Remove")
+
+        with patch.object(app, "confirm", return_value=False) as asked:
+            page.disconnect_host("codex")
+        options = {key: default for key, _label, default in asked.call_args.kwargs["options"]}
+        self.assertEqual(options, {"remove_skill": True}, "an unedited skill is removed with the connection by default")
+        self.connections.skill = "modified"
+        app.hosts_changed()
+        self.root.update()
+        with patch.object(app, "confirm", return_value=False) as asked:
+            page.disconnect_host("codex")
+        options = {key: default for key, _label, default in asked.call_args.kwargs["options"]}
+        self.assertEqual(options, {"remove_skill": False}, "a skill the user edited is kept by default")
 
     def test_review_queue_approve_edit_retract_and_reject(self):
         app = self.app

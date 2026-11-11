@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import time
-from typing import Sequence
+from typing import Callable, Sequence
 import tkinter as tk
 
 from bio_ce.engine.contract import MemoryView
@@ -100,7 +100,12 @@ class ConfirmDialog(Dialog):
         danger: bool = False,
         points: Sequence[str] = (),
         quote: str | None = None,
+        options: Sequence[tuple[str, str, bool]] = (),
+        choices: dict[str, bool] | None = None,
+        links: Sequence[tuple[str, Callable[[tk.Misc], None]]] = (),
     ) -> None:
+        """``options`` are (key, label, default) check boxes; when the user confirms, their values are
+        written into ``choices``. ``links`` are (label, action) buttons; the action gets this dialog."""
         super().__init__(parent, theme, title)
         c = theme.colors
         wrap = theme.px(420)
@@ -130,13 +135,36 @@ class ConfirmDialog(Dialog):
                      foreground=c.text_muted).pack(side="left", anchor="n", padx=(0, theme.px(SPACE_S)))
             tk.Label(row, text=point, font=theme.font("body"), background=c.surface, foreground=c.text_secondary,
                      anchor="w", justify="left", wraplength=wrap - theme.px(16)).pack(side="left", fill="x")
-        confirm = self.add_button(confirm_text, lambda: self.finish(True), variant="danger" if danger else "primary")
+        self.option_vars: dict[str, tk.BooleanVar] = {}
+        for key, label, default in options:
+            variable = tk.BooleanVar(self, value=default)
+            self.option_vars[key] = variable
+            tk.Checkbutton(column, text=label, variable=variable, font=theme.font("body"), background=c.surface,
+                           foreground=c.text, activebackground=c.surface, activeforeground=c.text,
+                           selectcolor=c.surface_alt, anchor="w", justify="left", wraplength=wrap - theme.px(24),
+                           highlightthickness=0, borderwidth=0).pack(fill="x", pady=(theme.px(SPACE_S), 0))
+        for label, action in links:
+            Button(column, theme, label, variant="link", command=lambda act=action: self._open_link(act)).pack(
+                anchor="w", pady=(theme.px(SPACE_XS), 0))
+        self._choices = choices
+
+        def confirmed() -> None:
+            if self._choices is not None:
+                self._choices.update({key: bool(variable.get()) for key, variable in self.option_vars.items()})
+            self.finish(True)
+
+        confirm = self.add_button(confirm_text, confirmed, variant="danger" if danger else "primary")
         cancel = self.add_button(cancel_text, self.cancel)
         self.result = False
         self._default_focus = cancel if danger else confirm
 
     def cancel(self) -> None:
         self.finish(False)
+
+    def _open_link(self, action: Callable[[tk.Misc], None]) -> None:
+        action(self)
+        if self.winfo_exists():
+            self.grab_set()  # a nested dialog took the grab; take it back
 
     def ask(self) -> bool:
         self.present(focus=self._default_focus)
@@ -213,8 +241,9 @@ class TextViewerDialog(Dialog):
         self.view.pack(fill="both", expand=True)
         self.close_button = self.add_button("Close", self.cancel, variant="primary")
 
-    def show(self) -> "TextViewerDialog":
-        self.present(focus=self.close_button, modal=False, size=(self.theme.px(760), self.theme.px(580)))
+    def show(self, *, modal: bool = False) -> "TextViewerDialog":
+        """Non-modal by default; modal when opened from another modal dialog, which holds the input grab."""
+        self.present(focus=self.close_button, modal=modal, size=(self.theme.px(760), self.theme.px(580)))
         return self
 
 

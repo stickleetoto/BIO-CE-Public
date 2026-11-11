@@ -112,17 +112,34 @@ AUTO_MEMORY_SUPPORT = {
     ),
     "codex": AutoMemorySupport(
         "codex", "limited", "Limited",
-        "Codex CLI runs its standard models in code mode, which does not show MCP tools or their instructions "
-        "to the model (an open Codex issue, unfixed through 0.164). BIO CE's server and tools work, and calls "
-        "succeed when the model uses them, but the model is usually not told they exist. With session hooks "
-        "installed and trusted in Codex, BIO CE tells it where to find them; this was not verified with a real "
-        "model.",
+        "Codex runs its standard models in code mode, which may not show MCP tools or their instructions to the "
+        "model directly. Codex 0.166 and later have an option that shows them; BIO CE adds it when you connect "
+        "(or select Apply below). BIO CE's server and tools work, and calls succeed when the model uses them. "
+        "The Codex desktop app reads the same settings as the command-line tool.",
     ),
 }
 
+_CODEX_CODE_MODE_SHOWN = (
+    "Codex runs its standard models in code mode. BIO CE set Codex's omit_tools_from = [\"code_mode\"] option "
+    "for its server, so the model sees BIO CE's tools and instructions (verified with Codex 0.166). Calls work "
+    "when the model uses them; whether it uses memory on its own has not been verified yet. The Codex desktop "
+    "app reads the same settings as the command-line tool."
+)
+_CODEX_CODE_MODE_USER_SET = (
+    "Codex runs its standard models in code mode, which may not show MCP tools or their instructions to the "
+    "model directly. Your Codex settings already set omit_tools_from for bio-ce in another way, so BIO CE left "
+    "it as it is. BIO CE's server and tools work, and calls succeed when the model uses them."
+)
 
-def auto_memory_support(host: str) -> AutoMemorySupport:
-    return AUTO_MEMORY_SUPPORT.get(host) or AutoMemorySupport(host, "unverified", "Not verified", "")
+
+def auto_memory_support(host: str, code_mode: str | None = None) -> AutoMemorySupport:
+    """How well a host's model can use BIO CE. For Codex, ``code_mode`` is HostStatus.code_mode."""
+    support = AUTO_MEMORY_SUPPORT.get(host) or AutoMemorySupport(host, "unverified", "Not verified", "")
+    if host == "codex" and code_mode == codex_options.APPLIED:
+        return AutoMemorySupport(host, support.level, support.summary, _CODEX_CODE_MODE_SHOWN)
+    if host == "codex" and code_mode == codex_options.USER_SET:
+        return AutoMemorySupport(host, support.level, support.summary, _CODEX_CODE_MODE_USER_SET)
+    return support
 
 
 @dataclass(frozen=True, slots=True)
@@ -999,7 +1016,7 @@ class MCPConnectionManager:
 
 
 def host_name_for(host: str) -> str:
-    return {"codex": "Codex CLI", "claude": "Claude Code"}.get(host, host)
+    return {"codex": "Codex (CLI · desktop app)", "claude": "Claude Code"}.get(host, host)
 
 
 def _validate_host(host: str) -> str:

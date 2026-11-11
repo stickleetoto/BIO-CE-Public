@@ -19,6 +19,7 @@ from bio_ce.connections import (
     HostStatus,
     MCPConnectionConflict,
     MCPConnectionError,
+    SkillResult,
 )
 from bio_ce.core.models import SourceProvenance
 from bio_ce.desktop import PERSONAL_SCOPE, AppDataPaths, BIOCEDesktop, DesktopMemoryService
@@ -57,11 +58,26 @@ class FakeConnections:
         self.statuses[host] = HostStatus(host, True, True)
         return ConnectionResult(host, True, False, Path("backup.toml"))
 
-    def disconnect(self, host: str, *, approved: bool = False) -> ConnectionResult:
+    def disconnect(self, host: str, *, approved: bool = False, remove_skill: bool = False,
+                   remove_modified_skill: bool = False) -> ConnectionResult:
         assert approved is True
         self.calls.append(("disconnect", host))
         self.statuses[host] = HostStatus(host, True, False)
         return ConnectionResult(host, False, False, Path("backup.toml"))
+
+    def memory_skill_path(self, host: str) -> Path:
+        return Path(f"C:/fake/{host}/skills/bio-ce-memory/SKILL.md")
+
+    def install_memory_skill(self, host: str, *, approved: bool = False, replace_modified: bool = False,
+                             agents_md: bool = False):
+        assert approved is True
+        self.calls.append(("install_skill", host))
+        return SkillResult("installed", self.memory_skill_path(host)), None
+
+    def remove_memory_skill(self, host: str, *, approved: bool = False, remove_modified: bool = False):
+        assert approved is True
+        self.calls.append(("remove_skill", host))
+        return SkillResult("removed", self.memory_skill_path(host)), None
 
     def diagnose(self, host: str, *, run_server_check: bool = True):
         self.calls.append(("diagnose", host))
@@ -379,6 +395,12 @@ class RedesignedDesktopTests(unittest.TestCase):
         disclosure = " ".join(declined.call_args.kwargs["points"])
         self.assertIn("may be sent to the AI model provider", disclosure)
         self.assertIn("OpenAI", disclosure)
+        self.assertIn("0.166 or later", disclosure, "the code-mode option is disclosed before connecting")
+        options = {key: (label, default) for key, label, default in declined.call_args.kwargs["options"]}
+        self.assertTrue(options["skill"][1], "installing the skill is checked by default")
+        self.assertIn("skills", options["skill"][0], "the dialog names where the skill goes")
+        self.assertFalse(options["agents"][1], "the AGENTS.md block is not checked by default")
+        self.assertTrue(declined.call_args.kwargs["links"], "the skill can be previewed")
         self.connections.release.clear()
         with patch.object(app, "confirm", return_value=True):
             app.connect_host("codex")
@@ -391,8 +413,9 @@ class RedesignedDesktopTests(unittest.TestCase):
         self.connections.release.set()
         app.tasks.wait(10)
         self.assertFalse(card.busy)
-        self.assertEqual(self.connections.calls, [("connect", "codex")])
+        self.assertEqual(self.connections.calls, [("connect", "codex"), ("install_skill", "codex")])
         self.assertIn("Read only", card.pill.cget("text"))
+        self.assertIn("keep using your memories", app.infobar.message)
         self.assertEqual(card.primary.text, "Disconnect")
         self.assertEqual(app.infobar.kind, "success")
         app.show_page("dashboard")
