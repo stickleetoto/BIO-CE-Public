@@ -20,7 +20,7 @@ import tomllib
 from typing import Mapping, Sequence
 import uuid
 
-from bio_ce import host_hooks
+from bio_ce import codex_options, host_hooks
 from bio_ce.control_store import (
     AccessDenied,
     ControlStore,
@@ -62,6 +62,20 @@ class HostStatus:
     mode: str | None = None
     connection_id: str | None = None
     hooks_installed: bool = False
+    # Codex only: whether BIO CE's entry shows its tools in code mode (codex_options states), else None.
+    code_mode: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CodeModeResult:
+    """Outcome of adding Codex's code-mode option. ``state``: applied, already_applied, user_set,
+    unsupported, not_applied (the file could not be edited safely), or restored (written, failed the
+    check, and the previous file was put back)."""
+
+    state: str
+    detail: str
+    backup_file: Path | None = None
+    codex_version: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,6 +119,7 @@ class ConnectionResult:
     connected: bool
     already_configured: bool
     backup_file: Path | None
+    code_mode: CodeModeResult | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,7 +185,8 @@ class MCPConnectionManager:
                 host_hooks.hooks_path(host, self.env), self._server_executable(), grant.connection_id
             )
             return HostStatus(host, True, True, mode=grant.mode, connection_id=grant.connection_id,
-                              hooks_installed=hooks)
+                              hooks_installed=hooks,
+                              code_mode=self._code_mode_state() if host == "codex" else None)
         if self._matches_legacy_server(entry):
             return HostStatus(host, True, True, legacy=True, mode=MODE_READ_ONLY)
         return HostStatus(host, True, False, True)
@@ -230,7 +246,8 @@ class MCPConnectionManager:
             raise MCPConnectionError(
                 "BIO CE MCP verification failed; the host registration was rolled back."
             ) from exc
-        return ConnectionResult(host, True, False, backup_file)
+        code_mode = self._apply_code_mode() if host == "codex" else None
+        return ConnectionResult(host, True, False, backup_file, code_mode)
 
     def set_mode(self, host: str, mode: str) -> Grant:
         """Change what a connected host may do. Running servers apply it on their next call."""
@@ -325,6 +342,8 @@ class MCPConnectionManager:
                 "BIO CE revoked this connection but could not remove its host entry. "
                 "The configuration backup was retained."
             )
+        if host == "codex":
+            self._remove_orphan_code_mode_marker()
         try:
             hooks_file = host_hooks.hooks_path(host, self.env)
             if hooks_file.is_file():
@@ -333,6 +352,115 @@ class MCPConnectionManager:
         except (OSError, ValueError, MCPConnectionError):
             pass  # hooks of a revoked connection print nothing, so leaving them is harmless
         return ConnectionResult(host, False, False, backup_file)
+
+    # Codex code mode -----------------------------------------------------------------------------
+
+    def codex_version(self) -> tuple[tuple[int, int, int] | None, str]:
+        """The installed Codex CLI version, and the text it printed (for messages)."""
+        try:
+            completed = self._run_cli("codex", ("--version",))
+        except MCPConnectionError:
+            return None, ""
+        lines = (completed.stdout or "").strip().splitlines()
+        shown = lines[0][:80] if lines else ""
+        return (codex_options.parse_codex_version(shown) if completed.returncode == 0 else None), shown
+
+    def apply_codex_code_mode(self, *, approved: bool = False) -> CodeModeResult:
+        """Add ``omit_tools_from = ["code_mode"]`` to BIO CE's Codex entry (for a connection made earlier)."""
+        if approved is not True:
+            raise MCPConnectionConsentRequired("Changing Codex settings requires explicit user approval.")
+        status = self.status("codex")
+        if not status.connected or status.connection_id is None or status.legacy:
+            raise MCPConnectionError("Connect Codex in BIO CE first.")
+        return self._apply_code_mode()
+
+    def _code_mode_state(self) -> str | None:
+        path = self._config_path("codex")
+        try:
+            return codex_options.option_state(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, ValueError):
+            return None
+
+    def _apply_code_mode(self) -> CodeModeResult:
+        """Write the option after a verified connection. The connection itself is never undone here."""
+        version, shown = self.codex_version()
+        if not codex_options.version_supported(version):
+            minimum = ".".join(map(str, codex_options.MINIMUM_CODEX_VERSION))
+            found = f"found {shown}" if shown else "its version could not be read"
+            return CodeModeResult("unsupported", f"Codex {minimum} or later is needed ({found}).", None,
+                                  shown or None)
+        path = self._config_path("codex")
+        for _attempt in range(2):
+            try:
+                original = path.read_bytes()
+                raw = original.decode("utf-8")
+                state = codex_options.option_state(raw)
+            except (OSError, UnicodeError, ValueError):
+                return CodeModeResult("not_applied", "Codex's settings file could not be read.", None, shown)
+            if state == codex_options.APPLIED:
+                return CodeModeResult("already_applied", "BIO CE's tools are already shown in code mode.", None,
+                                      shown)
+            if state == codex_options.USER_SET:
+                return CodeModeResult("user_set", "Codex's settings already set omit_tools_from for bio-ce "
+                                      "differently; BIO CE left it as it is.", None, shown)
+            if state != codex_options.MISSING:
+                return CodeModeResult("not_applied", "BIO CE's entry was not found in Codex's settings.", None,
+                                      shown)
+            try:
+                updated = codex_options.add_option(raw)
+            except ValueError as exc:
+                return CodeModeResult("not_applied", f"BIO CE could not add the option safely ({exc}).", None,
+                                      shown)
+            backup = self._backup_config("codex-code-mode", path)
+            if path.read_bytes() != original:
+                continue  # Codex (or another app) rewrote the file meanwhile: start over once
+            self._replace_file(path, updated.encode("utf-8"))
+            if self._code_mode_written_correctly(path):
+                return CodeModeResult("applied", "BIO CE's tools and instructions are now shown in Codex code "
+                                      "mode.", backup, shown)
+            self._restore_file(path, backup, original)
+            return CodeModeResult("restored", "Codex did not accept the option, so BIO CE put the previous "
+                                  "settings back.", backup, shown)
+        return CodeModeResult("not_applied", "Codex's settings kept changing; BIO CE left them as they are.",
+                              None, shown)
+
+    def _code_mode_written_correctly(self, path: Path) -> bool:
+        try:
+            if codex_options.option_state(path.read_text(encoding="utf-8")) != codex_options.APPLIED:
+                return False
+            entry = self._read_entry("codex")
+            if entry is None or self._grant_for_entry("codex", entry) is None:
+                return False
+            # Codex validates the whole file; a non-zero exit means it no longer reads its settings.
+            return self._run_cli("codex", ("mcp", "get", SERVER_NAME)).returncode == 0
+        except (OSError, UnicodeError, ValueError, MCPConnectionError):
+            return False
+
+    def _restore_file(self, path: Path, backup: Path | None, original: bytes) -> None:
+        self._replace_file(path, original)
+        try:
+            healthy = self._run_cli("codex", ("mcp", "get", SERVER_NAME)).returncode == 0
+        except MCPConnectionError:
+            healthy = False
+        if path.read_bytes() != original or not healthy:
+            where = f" A copy is in {backup}." if backup is not None else ""
+            raise MCPConnectionError("BIO CE could not confirm that Codex's settings were restored." + where)
+
+    @staticmethod
+    def _replace_file(path: Path, data: bytes) -> None:
+        temporary = path.with_name(f"{path.name}.bio-ce-tmp")
+        temporary.write_bytes(data)
+        os.replace(temporary, path)
+
+    def _remove_orphan_code_mode_marker(self) -> None:
+        path = self._config_path("codex")
+        try:
+            raw = path.read_text(encoding="utf-8")
+            cleaned = codex_options.remove_orphan_marker(raw)
+        except (OSError, UnicodeError, ValueError):
+            return
+        if cleaned != raw:
+            self._replace_file(path, cleaned.encode("utf-8"))
 
     def _revoke_host(self, host: str) -> None:
         for grant in self.control.grants():
@@ -793,6 +921,7 @@ def _file_digest(path: Path) -> str | None:
 __all__ = [
     "AUTO_MEMORY_SUPPORT",
     "AutoMemorySupport",
+    "CodeModeResult",
     "ConnectionResult",
     "DiagnosticCheck",
     "HostStatus",

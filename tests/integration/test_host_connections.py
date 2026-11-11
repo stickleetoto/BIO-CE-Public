@@ -11,7 +11,7 @@ import tempfile
 import tomllib
 import unittest
 
-from bio_ce import host_hooks
+from bio_ce import codex_options, host_hooks
 from bio_ce.connections import (
     MCPConnectionError,
     MCPConnectionManager,
@@ -125,6 +125,16 @@ class HostConnectionIntegrationTests(unittest.TestCase):
         status = manager.status(host)
         self.assertTrue(status.connected)
         self.assertEqual(status.mode, "read_only", "Auto memory must be off by default")
+        if host == "codex":
+            # The real Codex CLI accepts BIO CE's code-mode option (0.166+), or BIO CE leaves it out.
+            version, _shown = manager.codex_version()
+            expected = "applied" if codex_options.version_supported(version) else "unsupported"
+            self.assertEqual(result.code_mode.state, expected, result.code_mode.detail)
+            if expected == "applied":
+                self.assertEqual(status.code_mode, codex_options.APPLIED)
+                self.assertEqual(manager._run_cli("codex", ("mcp", "get", "bio-ce")).returncode, 0)
+        else:
+            self.assertIsNone(result.code_mode)
         self.assertFalse(status.legacy)
 
         approvals = host_hooks.tool_approval_path(host, manager.env)
@@ -149,6 +159,8 @@ class HostConnectionIntegrationTests(unittest.TestCase):
         self.assertFalse(manager.control.grant(connection_id).active)
         self.assertFalse(manager.status(host).hooks_installed)
         self.assertFalse(host_hooks.tool_approval_enabled(host, approvals))
+        if host == "codex":
+            self.assertNotIn(codex_options.MARKER, manager._config_path(host).read_text(encoding="utf-8"))
 
     def test_codex_user_scope_registration_sdk_verification_and_removal(self):
         self._exercise_host("codex")
