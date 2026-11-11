@@ -76,6 +76,13 @@ Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"
 english.ConfirmUninstall=Remove %1 from this Windows user?%n%nYour memories, settings, and backups in your AppData\Local\BIO-CE folder are kept unless you choose to remove them in the next step. Disconnect Codex or Claude on the BIO CE Connections page first; uninstall does not edit host MCP settings.
 korean.ConfirmUninstall=이 Windows 사용자에서 %1을(를) 제거할까요?%n%nAppData\Local\BIO-CE 폴더의 기억, 설정, 백업은 다음 단계에서 삭제를 직접 선택하지 않는 한 보존됩니다. Codex 또는 Claude 연결은 먼저 BIO CE의 Connections 화면에서 해제하세요. 제거 프로그램은 호스트 MCP 설정을 수정하지 않습니다.
 
+; The finish page says that open AI host conversations need a new start after an update: Setup closes the
+; running BIO CE MCP servers, and Codex does not start them again in the same conversation.
+english.FinishedLabel=Setup has finished installing [name] on your computer. The application may be launched by selecting the installed shortcuts.%n%nIf you updated an earlier version: start a new conversation in Codex or Claude Code. Conversations that were open during the update can no longer reach BIO CE.
+english.FinishedLabelNoIcons=Setup has finished installing [name] on your computer.%n%nIf you updated an earlier version: start a new conversation in Codex or Claude Code. Conversations that were open during the update can no longer reach BIO CE.
+korean.FinishedLabel=컴퓨터에 [name] 설치를 완료했습니다. 설치된 바로 가기를 선택하여 응용 프로그램을 시작할 수 있습니다.%n%n이전 버전을 업데이트했다면 Codex와 Claude Code에서 새 대화를 시작하세요. 업데이트 중에 열려 있던 대화는 더 이상 BIO CE에 연결되지 않습니다.
+korean.FinishedLabelNoIcons=컴퓨터에 [name] 설치를 완료했습니다.%n%n이전 버전을 업데이트했다면 Codex와 Claude Code에서 새 대화를 시작하세요. 업데이트 중에 열려 있던 대화는 더 이상 BIO CE에 연결되지 않습니다.
+
 [CustomMessages]
 english.LaunchApp=Start BIO CE
 english.RemoveDataPrompt=Also remove BIO CE local data (memories, settings, and MCP configuration backups)?%n%n%1%n%nThis is not a secure erase and cannot be undone. Choose No to keep your data.

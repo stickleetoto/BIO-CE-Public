@@ -116,6 +116,17 @@ class InnoScriptPolicyTests(unittest.TestCase):
         self.assertEqual(self.setting("CloseApplications"), "force")
         self.assertEqual(self.setting("RestartApplications"), "no")
 
+    def test_finish_page_says_to_start_new_ai_conversations_after_an_update(self):
+        # Setup force-closes running MCP servers and Codex does not start them again in the same conversation.
+        for language, note in (("english", "start a new conversation in Codex or Claude Code"),
+                               ("korean", "Codex와 Claude Code에서 새 대화를 시작하세요")):
+            for message in ("FinishedLabel", "FinishedLabelNoIcons"):
+                with self.subTest(language=language, message=message):
+                    lines = [line for line in self.script.splitlines() if line.startswith(f"{language}.{message}=")]
+                    self.assertEqual(len(lines), 1)
+                    self.assertIn(note, lines[0])
+                    self.assertIn("[name]", lines[0])
+
     def test_program_folder_cannot_overlap_the_data_folder(self):
         self.assertIn("function PrepareToInstall", self.script)
         self.assertIn("OverlapsDataRoot(ExpandConstant('{app}'))", self.script)

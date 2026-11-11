@@ -3,6 +3,15 @@
 
 **Status: candidate, not published.**
 
+## Updating
+
+- **From v0.4.0-rc1:** run the v0.4.1-rc1 installer over the existing installation; your memories, settings,
+  and AI connections are kept. Close Codex and Claude Code before you install.
+- **After updating, start new conversations in Codex and Claude Code.** Setup closes the BIO CE MCP servers that
+  AI hosts are running so it can replace them, and Codex does not start BIO CE again inside a conversation that
+  was open during the update: memory tools fail there until you start a new conversation. The last page of the
+  installer says so too.
+
 ## Fixed
 
 - **Idle MCP servers no longer hold the database.** The Codex desktop app keeps one BIO CE server per conversation

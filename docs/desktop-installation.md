@@ -69,6 +69,11 @@ Run a newer BIO CE installer. Setup finds the existing installation, offers to c
 under `%LOCALAPPDATA%\BIO-CE` untouched. Installing into the same folder keeps existing Codex/Claude
 connections valid because the MCP server path does not change.
 
+**After an update, start new conversations in Codex and Claude Code.** Setup closes the BIO CE MCP servers that
+AI hosts are running (it asks first; a silent install closes them and records it in its log). Codex does not
+start BIO CE again inside a conversation that was open during the update, so memory tools fail there; a new
+conversation works. To avoid this, close Codex and Claude Code before you update.
+
 ## Uninstall
 
 1. In BIO CE, open **Connections** and disconnect Codex CLI and Claude Code. Uninstall does not edit host
