@@ -34,8 +34,9 @@
 - Settings backups cover `memories.sqlite3` only; the AI audit log and review queue in `control.sqlite3` are not backed up or restored.
 - Automatic retraction is disabled by design; every retraction request waits for the user.
 
-## v0.4.1 (in development)
+## v0.4.1-rc1 (pre-release)
 
+- The installer and the programs it installs are **not code-signed**. A Windows PC without Python or Git has **not been verified**; the automated clean install ran on a GitHub-hosted runner that has both.
 - Codex keeps one BIO CE MCP server per open conversation and does not start a new one if it ends, so BIO CE does not end idle servers: they stay until the conversation or Codex closes. An idle server uses little memory and, after 60 seconds, holds no database file open. Setting `BIO_CE_MCP_IDLE_SECONDS` ends idle servers, but then the next memory call in that conversation fails (verified with Codex 0.166 and the desktop app's 0.167).
 - Upgrading closes running BIO CE MCP servers (Setup asks first; a silent install closes them and logs it). Open Codex or Claude Code conversations then need a new conversation to use BIO CE again.
 - The Codex code-mode option needs Codex 0.166 or later. BIO CE checks the command-line tool's version; it cannot check the version bundled with the Codex desktop app.
