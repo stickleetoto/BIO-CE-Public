@@ -34,6 +34,14 @@
 - Settings backups cover `memories.sqlite3` only; the AI audit log and review queue in `control.sqlite3` are not backed up or restored.
 - Automatic retraction is disabled by design; every retraction request waits for the user.
 
+## v0.4.1 (in development)
+
+- After one hour without a request, BIO CE's MCP server ends (so idle servers do not pile up). Whether a host starts a new server by itself on the next request in the same conversation has **not been verified** for the Codex desktop app; if a tool call fails after a long pause, start a new conversation. The limit can be changed with `BIO_CE_MCP_IDLE_SECONDS`.
+- The Codex code-mode option needs Codex 0.166 or later. BIO CE checks the command-line tool's version; it cannot check the version bundled with the Codex desktop app.
+- The memory skill only says when to use BIO CE; whether a real model follows it on its own has not been evaluated at scale. The server's memory policy still decides what may be stored.
+- Uninstalling now warns when Codex or Claude Code still start this installation, but it still does not change their settings: disconnect in BIO CE first. The warning only appears in an interactive uninstall.
+- The Claude desktop chat app is not supported; Claude Code is.
+
 ## v0.4.0-rc1 (candidate)
 
 - BIO CE uses only its built-in Community Engine. Settings → Memory engine lists BIO Core as not installed; choosing another engine is disabled in this version, and BIO CE never switches engines on its own. Each engine would keep its own memories; nothing is copied between engines.

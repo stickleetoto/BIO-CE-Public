@@ -3,6 +3,15 @@
 
 BIO CE uses the official Python MCP SDK and stdio transport. At startup, the server opens one existing SQLite database in read-only URI mode and is bound to exactly one project and namespace. A server started by a desktop-app connection takes that scope from the connection's grant (v0.3); a server without a connection (v0.2 entries, the synthetic demo) takes it from `--project` and `--namespace`.
 
+**The desktop app does not need to be running.** Codex and Claude Code start BIO CE's MCP server
+(`BIO-CE-MCP.exe mcp-stdio`) themselves; it opens the database directly. You can close the BIO CE app: connected AI
+tools keep using your memories.
+
+**Server lifetime (0.4.1).** A server ends when its host closes stdin, when the process that started it ends, or
+after one hour without a request (`BIO_CE_MCP_IDLE_SECONDS`, in seconds; `0` turns the limit off). This stops
+servers from piling up under hosts that keep one server per conversation open, such as the Codex desktop app. A
+request in progress always finishes first. A host that needs BIO CE again starts a new server.
+
 ## Exposed tools
 
 | Tool | Inputs | Output |

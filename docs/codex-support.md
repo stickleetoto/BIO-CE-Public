@@ -1,7 +1,26 @@
 <!-- Copyright 2026 stickleetoto | Apache-2.0 -->
-# Codex CLI Support Status (BIO CE v0.3.0-rc1)
+# Codex Support Status
 
-Date: 2026-10-24 · Codex CLI 0.162.1 (installed, tested) · Latest stable Codex release: 0.164.0 (2026-10-23, **not tested**)
+> **Update for BIO CE 0.4.1 (2026-11-11).** Codex 0.166 has an official per-server option,
+> `mcp_servers.<id>.omit_tools_from = ["code_mode"]`, that shows a server's tools and instructions to code-mode
+> models. With Codex 0.166.0 it exposed BIO CE's tools and server instructions in a mock-model probe, and one
+> approved real-model session called BIO CE when asked to. From 0.4.1, **Connect adds this option** to BIO CE's
+> own `[mcp_servers.bio-ce]` entry when the Codex CLI is 0.166 or later: the settings file is backed up, the
+> result is checked with `codex mcp get bio-ce`, and the previous file is restored if Codex rejects it. A value
+> the user set, an older or unknown Codex, or an unusual file layout is left unchanged; the Connections page
+> then offers *Apply* or explains why. The support level stays **Limited** until a real model is shown to use
+> BIO CE on its own.
+>
+> **The Codex desktop app uses the same settings** (`CODEX_HOME`, by default `%USERPROFILE%\.codex`) as the
+> command-line tool, so one connection covers both. The app bundles its own Codex version, which BIO CE cannot
+> check; a version that does not know the option ignores it.
+>
+> BIO CE 0.4.1 can also install a **memory skill** (`skills/bio-ce-memory/SKILL.md` under the Codex settings
+> folder) that tells the model when to search and save, and, only if the user asks, the same text as a marked
+> block in Codex's `AGENTS.md`. The sections below describe the 0.162 measurements behind the original
+> "Limited" status.
+
+Date of the original measurements: 2026-10-24 · Codex CLI 0.162.1
 
 **Status: Connected — Auto memory LIMITED.** BIO CE registers with Codex, Codex starts BIO CE's server and lists
 its tools, and tool calls succeed. Codex's standard (catalog) models, however, run in *code mode*, which shows the
@@ -75,7 +94,7 @@ deferred tools, or tool search.
 
 | Option | Why not |
 |---|---|
-| `features.code_mode.direct_only_tool_namespaces = ["mcp__bio_ce"]` | Community workaround from #32101, not documented as a supported setting, wildcards unsupported. It would also change how Codex treats tools globally for the user. |
+| `features.code_mode.direct_only_tool_namespaces = ["mcp__bio_ce"]` | A global Codex setting that changes how Codex treats tools for the user. BIO CE 0.4.1 uses the per-server `omit_tools_from` option instead, which only affects BIO CE's own entry. |
 | `--enable code_mode_tool_search` | Marked under development; it did not expose BIO CE's tools in the probe, and #55512 reports tool search failing on 0.163. |
 | `required = true` for the BIO CE server | Did not expose the tools in code mode, and Codex then refuses to start whenever BIO CE is unavailable. |
 | `--dangerously-bypass-hook-trust`, approval or sandbox bypasses | Not used by the product or by these probes. Users approve hooks themselves. |
