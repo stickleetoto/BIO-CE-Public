@@ -76,7 +76,8 @@ class DashboardPage(Page):
         self.status_card = Card(stats, theme, padding=SPACE_L + 2)
         self.count_card = Card(stats, theme, padding=SPACE_L + 2)
         self.hosts_card = Card(stats, theme, padding=SPACE_L + 2)
-        self._stat_cards = (self.status_card, self.count_card, self.hosts_card)
+        self.review_card = Card(stats, theme, padding=SPACE_L + 2)
+        self._stat_cards = (self.status_card, self.count_card, self.hosts_card, self.review_card)
 
         caption_label(self.status_card.body, theme, "BIO CE status").pack(fill="x")
         self.status_pill = Pill(self.status_card.body, theme, "Ready", "success")
@@ -99,6 +100,15 @@ class DashboardPage(Page):
         self.hosts_detail = caption_label(self.hosts_card.body, theme, "of 2 hosts connected",
                                           muted=True)
         self.hosts_detail.pack(fill="x")
+
+        caption_label(self.review_card.body, theme, "Needs your review").pack(fill="x")
+        self.review_value = tk.Label(self.review_card.body, text="0", font=theme.font("stat"), background=c.surface,
+                                     foreground=c.text, anchor="w", cursor="hand2")
+        self.review_value.pack(fill="x")
+        self.review_detail = Button(self.review_card.body, theme, "Open review queue", variant="link",
+                                    command=lambda: app.show_page("connections"))
+        self.review_detail.pack(anchor="w")
+        self.review_value.bind("<ButtonRelease-1>", lambda _e: app.show_page("connections"))
 
         lower = tk.Frame(body, background=c.bg)
         lower.pack(fill="both", expand=True, pady=(theme.px(SPACE_L), 0))
@@ -129,11 +139,15 @@ class DashboardPage(Page):
             row.pack(fill="x", pady=theme.px(1))
             glyph = row.track(tk.Label(row.body, text=theme.icon("terminal"), font=theme.icon_font("normal"),
                                        background=c.surface, foreground=c.text_secondary, width=2))
-            glyph.pack(side="left", padx=(theme.px(SPACE_XS), theme.px(SPACE_S)), pady=theme.px(SPACE_S + 2))
-            row.track(tk.Label(row.body, text=host_name(host), font=theme.font("body"), background=c.surface,
-                               foreground=c.text, anchor="w")).pack(side="left", fill="x", expand=True)
-            pill = Pill(row.body, theme)
-            pill.pack(side="right", padx=theme.px(SPACE_XS))
+            glyph.pack(side="left", anchor="n", padx=(theme.px(SPACE_XS), theme.px(SPACE_S)),
+                       pady=theme.px(SPACE_S + 2))
+            # Name and status on separate lines: a long host name and a long status never clip each other.
+            column = row.track(tk.Frame(row.body, background=c.surface))
+            column.pack(side="left", fill="x", expand=True, pady=theme.px(SPACE_S))
+            row.track(tk.Label(column, text=host_name(host), font=theme.font("body"), background=c.surface,
+                               foreground=c.text, anchor="w")).pack(fill="x")
+            pill = Pill(column, theme)
+            pill.pack(anchor="w", pady=(theme.px(2), 0))
             row.track(pill, paint=False)
             self.host_rows[host] = pill
         note = WrapLabel(self.connections_card.body, "Connected hosts can search and read memories. With Auto "
@@ -174,7 +188,7 @@ class DashboardPage(Page):
         gap = self.theme.px(SPACE_M)
         for card in self._stat_cards:
             card.grid_forget()
-        for index in range(3):
+        for index in range(len(self._stat_cards)):
             self.stats.columnconfigure(index, weight=0, uniform="")
         if mode == "narrow":
             for row, card in enumerate(self._stat_cards):
@@ -254,6 +268,13 @@ class DashboardPage(Page):
                 connected += 1
         self.hosts_value.configure(text=str(connected))
         self.hosts_detail.configure(text=f"of {plural(len(self.host_rows), 'host')} connected")
+        self.show_review_count(self.app.pending_review_count())
+
+    def show_review_count(self, reviews: int | None) -> None:
+        c = self.colors
+        self.review_value.configure(text="—" if reviews is None else str(reviews),
+                                    foreground=c.warning if reviews else c.text)
+        self.review_detail.set_text("Open review queue" if reviews else "Nothing waiting")
 
 
 __all__ = ["DashboardPage", "host_pill"]

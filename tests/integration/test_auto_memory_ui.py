@@ -201,6 +201,30 @@ class AutoMemoryConnectionsPageTests(unittest.TestCase):
         options = {key: default for key, _label, default in asked.call_args.kwargs["options"]}
         self.assertEqual(options, {"remove_skill": False}, "a skill the user edited is kept by default")
 
+    def test_pending_reviews_show_on_dashboard_and_sidebar_and_host_status_is_not_clipped(self):
+        app, control = self.app, self.connections.control
+        app.show_page("dashboard")
+        self.root.update()
+        self.assertEqual(app.dashboard.review_value.cget("text"), "0")
+        self.assertFalse(app.nav["connections"].badge.winfo_manager(), "no badge while nothing waits")
+        for index in range(3):
+            control.enqueue_review(host="codex", connection_id=self.connections.grant.connection_id, kind="create",
+                                   title=f"Synthetic review {index}", content="synthetic", review_reason="test")
+        app.show_page("memories")
+        app.show_page("dashboard")
+        self.root.update()
+        self.assertEqual(app.dashboard.review_value.cget("text"), "3")
+        self.assertEqual(app.nav["connections"].badge.cget("text"), "3")
+        self.assertTrue(app.nav["connections"].badge.winfo_manager())
+        # The status pill sits on its own line under the host name, inside the card.
+        control.set_mode(self.connections.grant.connection_id, MODE_AUTO_MEMORY)
+        app.hosts_changed()
+        self.root.update()
+        pill = app.dashboard.host_rows["codex"]
+        card = app.dashboard.connections_card
+        self.assertLessEqual(pill.winfo_rootx() + pill.winfo_reqwidth(), card.winfo_rootx() + card.winfo_width())
+        self.assertGreaterEqual(pill.winfo_rootx(), card.winfo_rootx())
+
     def test_review_queue_approve_edit_retract_and_reject(self):
         app = self.app
         control = self.connections.control

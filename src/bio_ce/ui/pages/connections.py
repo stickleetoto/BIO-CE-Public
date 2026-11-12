@@ -414,6 +414,9 @@ class ConnectionsPage(Page):
         self.review_cards: list[ReviewCard] = []
         activity: tuple[AuditEntry, ...] = control.recent_activity(limit=15) if control is not None else ()
         self.review_pill.set(str(len(reviews)), "warning" if reviews else "neutral")
+        refresh_badges = getattr(self.app, "refresh_badges", None)
+        if refresh_badges is not None:
+            refresh_badges()
         if not reviews:
             caption_label(self.review_list, theme, "Nothing to review.", muted=True).pack(fill="x")
         for item in reviews:

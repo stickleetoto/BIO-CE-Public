@@ -257,6 +257,7 @@ class BIOCEDesktop:
         target.actions.pack(side="right")
         for nav_key, item in self.nav.items():
             item.set_selected(nav_key == target.nav_key)
+        self.refresh_badges()
         self.refresh_header()
         target.on_show()
         target.focus_default()
@@ -430,7 +431,26 @@ class BIOCEDesktop:
             else:
                 self.current.refresh()
 
+    def pending_review_count(self) -> int | None:
+        """Review items waiting for the user, or None when the control database cannot be read."""
+        control = getattr(self.connection_manager, "control", None)
+        if control is None:
+            return None
+        try:
+            return int(control.pending_review_count())
+        except Exception:  # noqa: BLE001 - a count must never break the window
+            return None
+
+    def refresh_badges(self) -> None:
+        reviews = self.pending_review_count()
+        if "connections" in self.nav:
+            self.nav["connections"].set_badge(reviews or 0)
+        dashboard = getattr(self, "dashboard", None)
+        if dashboard is not None:
+            dashboard.show_review_count(reviews)
+
     def hosts_changed(self) -> None:
+        self.refresh_badges()
         self.host_statuses(refresh=True)
         self.dashboard.stale = True
         for host, card in self.connections.cards.items():

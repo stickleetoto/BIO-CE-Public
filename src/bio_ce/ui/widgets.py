@@ -290,8 +290,12 @@ class NavItem(tk.Frame):
         self.icon_label.pack(side="left", padx=(theme.px(9), theme.px(4)), pady=theme.px(8))
         self.label = tk.Label(self.row, text=text, font=theme.font("body"), anchor="w", borderwidth=0)
         self.label.pack(side="left", fill="x", expand=True, padx=(theme.px(6), theme.px(8)))
+        # A count of things waiting for the user (for example review items); hidden at 0.
+        self.badge = tk.Label(self.row, text="", font=theme.font("caption_strong"), borderwidth=0,
+                              background=c.warning, foreground=c.bg, padx=theme.px(6))
+        self.badge_count = 0
         Tooltip(self, theme, f"{text} ({shortcut})" if shortcut else text)
-        for part in (self, self.row, self.indicator, self.icon_label, self.label):
+        for part in (self, self.row, self.indicator, self.icon_label, self.label, self.badge):
             part.bind("<Enter>", self._on_enter, add="+")
             part.bind("<Leave>", self._on_leave, add="+")
             part.bind("<ButtonRelease-1>", self._on_click, add="+")
@@ -303,11 +307,21 @@ class NavItem(tk.Frame):
         self.selected = selected
         self._paint()
 
+    def set_badge(self, count: int) -> None:
+        self.badge_count = max(0, int(count))
+        if self.badge_count:
+            self.badge.configure(text=str(self.badge_count) if self.badge_count < 100 else "99+")
+            if not self.badge.winfo_manager():
+                self.badge.pack(side="right", padx=(0, self.theme.px(10)), pady=self.theme.px(8))
+        else:
+            self.badge.pack_forget()
+
     def set_compact(self, compact: bool) -> None:
         if compact:
             self.label.pack_forget()
         elif not self.label.winfo_manager():
-            self.label.pack(side="left", fill="x", expand=True, padx=(self.theme.px(6), self.theme.px(8)))
+            self.label.pack(side="left", fill="x", expand=True, padx=(self.theme.px(6), self.theme.px(8)),
+                            before=self.badge if self.badge.winfo_manager() else None)
 
     def _paint(self) -> None:
         c = self.theme.colors
