@@ -129,4 +129,9 @@ that bounded.
 | `%LOCALAPPDATA%\BIO-CE\data\control.sqlite3` | Connection grants (token hashes), AI write audit log, review queue |
 | `%LOCALAPPDATA%\BIO-CE\connections\backups` | Copies of host settings taken before every change |
 
-Backups made in **Settings** cover `memories.sqlite3` only; the audit log and review queue are not part of them.
+Backups made in **Settings** are two files: `X.sqlite3` (the memories, in the same format as before, so
+earlier BIO CE versions can still restore it) and `X.control.sqlite3` (a copy of `control.sqlite3` with a
+check value that ties it to the memory file). Keep the two files together and private, and don't share them:
+the second one contains connection records and the activity log. A restore never brings back connections,
+permissions, or the activity log; those stay as they are now. Project spaces and folder links come back from
+the second file. If it is missing or doesn't match, only the memories are restored.

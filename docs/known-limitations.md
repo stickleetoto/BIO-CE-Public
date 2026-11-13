@@ -31,7 +31,8 @@
 - Codex runs new or changed hooks only after the user approves them with `/hooks`. Claude Code defers MCP tools behind `ToolSearch`, so the model must load BIO CE's tools before calling them.
 - The connection token is stored in the host's user configuration in plain text. Grants limit what an AI host does through BIO CE; they do not protect against other programs running as the same Windows user.
 - FTS5 recall is lexical. Korean words with attached particles (e.g. "배포를" vs "배포") may not match each other, so per-prompt recall can miss related memories.
-- Settings backups cover `memories.sqlite3` only; the AI audit log and review queue in `control.sqlite3` are not backed up or restored.
+- Settings backups are two files (`X.sqlite3` and `X.control.sqlite3`). A restore keeps the current connections, permissions, activity log, and review queue; it only brings back project spaces, folder links, and inbox bookkeeping from the second file. Backups made by v0.4.1 or earlier have no second file and restore memories only.
+- Discarded inbox items are removed from BIO CE's files as far as the app can (freed space in the database and its log is overwritten). BIO CE cannot guarantee erasure from the drive itself (for example SSD wear leveling, the Windows page file, or file system journals), and backups made earlier still contain the items.
 - Automatic retraction is disabled by design; every retraction request waits for the user.
 
 ## v0.4.1-rc1 (pre-release)

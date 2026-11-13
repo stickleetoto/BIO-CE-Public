@@ -19,8 +19,9 @@ from tkinter import messagebox
 from typing import Mapping
 import uuid
 
+from bio_ce import __version__
 from bio_ce.auto_memory import ReviewService
-from bio_ce.control_store import ControlStore
+from bio_ce.control_store import ControlStore, control_database_for
 from bio_ce.core.models import (
     MemoryRevision,
     MemoryScope,
@@ -28,7 +29,9 @@ from bio_ce.core.models import (
     SourceProvenance,
 )
 from bio_ce.storage.backup import (
+    PAIR_MATCHED,
     BackupConflictError,
+    check_pair,
     create_backup,
     remove_sqlite_sidecars,
     stage_restore,
@@ -189,12 +192,36 @@ class DesktopMemoryService:
         ReviewService(self._store, control, self.scope).reject(review_id)
 
     def create_backup(self, destination: str | Path) -> Path:
-        return create_backup(self.database, destination)
+        """Memory snapshot X.sqlite3 plus the connection records X.control.sqlite3 beside it."""
+        return create_backup(self.database, destination, control=control_database_for(self.database),
+                             app_version=__version__)
 
-    def restore_backup(self, backup: str | Path) -> None:
+    def restore_backup(self, backup: str | Path, *, control: ControlStore | None = None) -> dict:
+        """Replace the memories with a backup, then reconcile the control file.
+
+        Connections, permissions, and the audit log are never taken from the backup. Returns what happened to the
+        control side: whether the pair file matched, spaces added, and review items that lost their target.
+        """
         source = Path(backup).expanduser().resolve()
         if source == self.database:
             raise BackupConflictError("The active database cannot be restored from itself.")
+        pair_status, pair = check_pair(source)
+        self._replace_database(source)
+        owned = None
+        if control is None and control_database_for(self.database).is_file():
+            control = owned = ControlStore(control_database_for(self.database))
+        if control is None:
+            return {"pair": pair_status, "spaces_added": 0, "reviews_failed": 0, "discards_restored": 0,
+                    "restored_spaces": []}
+        try:
+            return control.apply_restore(memories=self._store.inventory(),
+                                         backup_control=pair if pair_status == PAIR_MATCHED else None,
+                                         pair_status=pair_status)
+        finally:
+            if owned is not None:
+                owned.close()
+
+    def _replace_database(self, source: Path) -> None:
         staged = stage_restore(source, self.database.parent)
         closed = False
         try:

@@ -26,7 +26,7 @@ from bio_ce.engine.contract import (
 from bio_ce.engine.external import ExternalEngineAdapter
 from bio_ce.engine.presentation import ActionState, EngineBanner, action_states, banner, engine_name
 from bio_ce.engine.switching import DEFAULT_SELECTION, EngineSelection, SwitchPhase
-from bio_ce.storage.backup import BackupError
+from bio_ce.storage.backup import PAIR_MATCHED, BackupError, pair_path
 from bio_ce.ui.dialogs import ConfirmDialog
 from bio_ce.ui.format import preview
 from bio_ce.ui.pages import Page
@@ -587,8 +587,12 @@ class BIOCEDesktop:
             return None
         finally:
             self.root.configure(cursor="")
-        self.notify("success", f"Saved to {created}. Keep this file private; it contains your memories.",
-                    title="Backup created", action=("Show in folder", lambda: self.reveal_file(created)))
+        pair = pair_path(created)
+        saved = (f"Saved {created.name} and {pair.name} in {created.parent}. Keep the two files together and "
+                 "private, and don't share them: they contain your memories and your connection records."
+                 if pair.exists() else f"Saved to {created}. Keep this file private; it contains your memories.")
+        self.notify("success", saved, title="Backup created",
+                    action=("Show in folder", lambda: self.reveal_file(created)))
         return created
 
     def restore_database(self) -> bool:
@@ -606,6 +610,8 @@ class BIOCEDesktop:
             quote=Path(source).name,
             points=(
                 "BIO CE checks the backup before changing anything. If the check fails, nothing is replaced.",
+                "Connections, permissions, and the activity log stay as they are now; a backup never brings back a "
+                "connection you removed.",
                 "Close connected AI hosts first; BIO CE can't restore while another program is reading the database.",
                 "If you want to keep your current memories, cancel and create a backup first.",
             ),
@@ -618,7 +624,7 @@ class BIOCEDesktop:
         self.root.configure(cursor="watch")
         self.root.update_idletasks()
         try:
-            self.service.restore_backup(source)
+            report = self.service.restore_backup(source, control=getattr(self.connection_manager, "control", None))
         except BackupError as exc:
             self.notify("error", f"{exc} Your current memories were not changed.", title="Restore failed")
             return False
@@ -631,7 +637,18 @@ class BIOCEDesktop:
         self.memories.query.set("")
         self.memories.selected = None
         self.data_changed()
-        self.notify("success", "The backup is now your active memory database.", title="Backup restored")
+        self.refresh_badges()
+        message = "The backup is now your active memory database."
+        if report.get("pair") != PAIR_MATCHED:
+            message += (" Only memories were restored: the connection records file next to the backup was missing "
+                        "or didn't belong to it.")
+        restored = [name for name in report.get("restored_spaces", ()) if name.startswith("project:")]
+        if restored:
+            message += f" Project spaces brought back: {len(restored)}."
+        if report.get("reviews_failed"):
+            message += (f" {report['reviews_failed']} review item(s) pointed at memories that aren't in the backup "
+                        "and were closed.")
+        self.notify("success", message, title="Backup restored")
         return True
 
     def close(self) -> None:

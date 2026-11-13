@@ -57,7 +57,7 @@ lasting fact under BIO CE's rules.
 | BIO CE settings | `%LOCALAPPDATA%\BIO-CE\settings.json` |
 | AI host configuration backups | `%LOCALAPPDATA%\BIO-CE\connections\backups` |
 | Connection grants, AI activity log, review queue | `%LOCALAPPDATA%\BIO-CE\data\control.sqlite3` |
-| Backups you create | Wherever you choose in **Settings → Create backup…** |
+| Backups you create | Wherever you choose in **Settings → Create backup…** (two files: `X.sqlite3` and `X.control.sqlite3`; keep them together) |
 
 The database is not encrypted. Retraction hides a memory from BIO CE and from AI hosts but keeps earlier
 revisions inside the SQLite file; it is not secure deletion.

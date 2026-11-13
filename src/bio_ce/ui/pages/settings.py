@@ -135,8 +135,9 @@ class SettingsPage(Page):
             fill="x", pady=(theme.px(SPACE_XS), 0))
 
         backup = self._card(body, "Backup and restore",
-                            "A backup is a complete copy of your memory database. Backups are not encrypted, so "
-                            "store them somewhere private.")
+                            "A backup is two files: a complete copy of your memories (name.sqlite3) and your "
+                            "connection records (name.control.sqlite3). Keep them together. Backups are not "
+                            "encrypted, so store them somewhere private and don't share them.")
         backup_row = tk.Frame(backup, background=c.surface)
         backup_row.pack(fill="x", pady=(theme.px(SPACE_M), 0))
         self.backup_button = Button(backup_row, theme, "Create backup…", icon="backup", command=app.backup_database)
@@ -146,8 +147,9 @@ class SettingsPage(Page):
         tk.Label(backup, text="Restore from a backup", font=theme.font("body_strong"), background=c.surface,
                  foreground=c.text, anchor="w").pack(fill="x")
         WrapLabel(backup, "Restoring replaces all current memories with the backup. BIO CE checks the file first. "
-                  "Close connected AI hosts before restoring, and create a backup of your current memories if you "
-                  "want to keep them.", font=theme.font("body"), foreground=c.text_secondary).pack(
+                  "Connections and permissions stay as they are now. Close connected AI hosts before restoring, "
+                  "and create a backup of your current memories if you want to keep them.",
+                  font=theme.font("body"), foreground=c.text_secondary).pack(
             fill="x", pady=(theme.px(SPACE_XS), 0))
         restore_row = tk.Frame(backup, background=c.surface)
         restore_row.pack(fill="x", pady=(theme.px(SPACE_M), 0))

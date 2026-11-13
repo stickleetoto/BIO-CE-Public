@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+import hashlib
 import os
 from pathlib import Path
 import sqlite3
@@ -14,6 +16,11 @@ from urllib.parse import quote
 
 _SCHEMA_VERSION = 1
 _REQUIRED_TABLES = {"memories", "revisions", "memory_fts"}
+_CONTROL_SCHEMA_VERSION = 2
+PAIR_SUFFIX = ".control.sqlite3"
+PAIR_MATCHED = "matched"
+PAIR_MISSING = "missing"
+PAIR_MISMATCH = "mismatch"
 
 
 class BackupError(RuntimeError):
@@ -58,41 +65,138 @@ def validate_database(path: str | Path, *, standalone: bool = False) -> None:
         raise BackupValidationError("The selected file is corrupt or has an unsupported BIO CE schema.")
 
 
-def create_backup(source: str | Path, destination: str | Path) -> Path:
-    """Create a consistent SQLite snapshot without overwriting any file."""
+def pair_path(backup: str | Path) -> Path:
+    """The connection-records file that belongs to a memory backup: X.sqlite3 -> X.control.sqlite3."""
+    path = Path(backup)
+    stem = path.name[: -len(".sqlite3")] if path.name.lower().endswith(".sqlite3") else path.name
+    return path.with_name(stem + PAIR_SUFFIX)
+
+
+def create_backup(source: str | Path, destination: str | Path, *, control: str | Path | None = None,
+                  app_version: str = "") -> Path:
+    """Create a consistent SQLite snapshot without overwriting any file.
+
+    With ``control``, a second file X.control.sqlite3 holds a snapshot of the control database and a
+    ``backup_info`` row with the memory file's SHA-256. The memory file keeps the old format, so earlier BIO CE
+    versions can still restore it. Neither file overwrites anything; if either cannot be made, neither is kept.
+    """
     source_path = Path(source).expanduser().resolve()
     destination_path = Path(destination).expanduser().resolve()
     if source_path == destination_path:
         raise BackupConflictError("The backup destination must differ from the active database.")
+    control_path = Path(control).expanduser().resolve() if control is not None else None
+    if control_path is not None and not control_path.is_file():
+        control_path = None
+    pair = pair_path(destination_path) if control_path is not None else None
+    if pair is not None and pair in (source_path, control_path):
+        raise BackupConflictError("The backup destination must differ from the active database.")
     validate_database(source_path)
-    if destination_path.exists():
+    if destination_path.exists() or (pair is not None and pair.exists()):
         raise BackupConflictError("The backup destination already exists; choose a new filename.")
     destination_path.parent.mkdir(parents=True, exist_ok=True)
     temporary = _temporary_database(destination_path.parent)
+    temporary_pair = _temporary_database(destination_path.parent) if pair is not None else None
+    placed: Path | None = None
     try:
         _copy_snapshot(source_path, temporary)
         validate_database(temporary)
-        try:
-            if os.name == "nt":
-                # Windows rename is atomic on the same volume and refuses an existing target.
-                os.rename(temporary, destination_path)
-            else:
-                # POSIX hard-link creation is atomic and refuses an existing target.
-                os.link(temporary, destination_path)
-        except FileExistsError as exc:
-            raise BackupConflictError(
-                "The backup destination already exists; choose a new filename."
-            ) from exc
-        except OSError as exc:
-            raise BackupError(
-                "BIO CE could not create a safe no-overwrite backup at this location."
-            ) from exc
-        if os.name != "nt":
-            temporary.unlink(missing_ok=True)
+        if temporary_pair is not None:
+            _copy_control_snapshot(control_path, temporary_pair, memory_sha256=file_sha256(temporary),
+                                   app_version=app_version)
+        _place(temporary, destination_path)
+        placed = destination_path
+        if temporary_pair is not None:
+            _place(temporary_pair, pair)
+        placed = None
         return destination_path
     finally:
-        temporary.unlink(missing_ok=True)
-        remove_sqlite_sidecars(temporary)
+        if placed is not None:
+            placed.unlink(missing_ok=True)  # the pair failed: do not leave half a backup behind
+        for path in (temporary, temporary_pair):
+            if path is not None:
+                path.unlink(missing_ok=True)
+                remove_sqlite_sidecars(path)
+
+
+def check_pair(backup: str | Path) -> tuple[str, Path | None]:
+    """Whether a memory backup has its control file and the two belong together.
+
+    Returns (PAIR_MATCHED, path), (PAIR_MISSING, None), or (PAIR_MISMATCH, None). A pair file that is damaged,
+    from another version, or made for a different memory file counts as a mismatch: only memories are restored.
+    """
+    backup_path = Path(backup).expanduser().resolve()
+    pair = pair_path(backup_path)
+    if not pair.is_file():
+        return PAIR_MISSING, None
+    try:
+        _require_no_pending_wal(pair)
+        connection = _open_read_only(pair, immutable=True)
+        try:
+            healthy = connection.execute("PRAGMA quick_check").fetchall() == [("ok",)]
+            version = int(connection.execute("PRAGMA user_version").fetchone()[0])
+            row = connection.execute("SELECT memory_sha256 FROM backup_info LIMIT 1").fetchone()
+        finally:
+            connection.close()
+    except (BackupError, sqlite3.Error, OSError):
+        return PAIR_MISMATCH, None
+    if not healthy or version != _CONTROL_SCHEMA_VERSION or row is None:
+        return PAIR_MISMATCH, None
+    if str(row[0]) != file_sha256(backup_path):
+        return PAIR_MISMATCH, None
+    return PAIR_MATCHED, pair
+
+
+def file_sha256(path: str | Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _place(temporary: Path, destination: Path) -> None:
+    try:
+        if os.name == "nt":
+            # Windows rename is atomic on the same volume and refuses an existing target.
+            os.rename(temporary, destination)
+        else:
+            # POSIX hard-link creation is atomic and refuses an existing target.
+            os.link(temporary, destination)
+            temporary.unlink(missing_ok=True)
+    except FileExistsError as exc:
+        raise BackupConflictError("The backup destination already exists; choose a new filename.") from exc
+    except OSError as exc:
+        raise BackupError("BIO CE could not create a safe no-overwrite backup at this location.") from exc
+
+
+def _copy_control_snapshot(source: Path, destination: Path, *, memory_sha256: str, app_version: str) -> None:
+    source_connection = _open_read_only(source)
+    destination_connection: sqlite3.Connection | None = None
+    try:
+        destination_connection = sqlite3.connect(str(destination), timeout=5.0)
+        source_connection.backup(destination_connection, pages=128, sleep=0.05)
+        destination_connection.commit()
+        mode = destination_connection.execute("PRAGMA journal_mode = DELETE").fetchone()
+        if mode is None or str(mode[0]).lower() != "delete":
+            raise BackupError("BIO CE could not finalize the connection records snapshot.")
+        destination_connection.execute(
+            "CREATE TABLE backup_info (format INTEGER NOT NULL, memory_sha256 TEXT NOT NULL, "
+            "created_at TEXT NOT NULL, app_version TEXT NOT NULL)"
+        )
+        destination_connection.execute(
+            "INSERT INTO backup_info VALUES (1, ?, ?, ?)",
+            (memory_sha256, datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+             app_version),
+        )
+        destination_connection.commit()
+        if destination_connection.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
+            raise BackupError("BIO CE could not verify the connection records snapshot.")
+    except sqlite3.Error as exc:
+        raise BackupError("BIO CE could not create the connection records snapshot.") from exc
+    finally:
+        source_connection.close()
+        if destination_connection is not None:
+            destination_connection.close()
 
 
 def stage_restore(source: str | Path, target_directory: str | Path) -> Path:
@@ -172,6 +276,13 @@ def _temporary_database(directory: Path, *, prefix: str = ".bio-ce-backup-") -> 
 
 
 __all__ = [
+    "PAIR_MATCHED",
+    "PAIR_MISMATCH",
+    "PAIR_MISSING",
+    "PAIR_SUFFIX",
+    "check_pair",
+    "file_sha256",
+    "pair_path",
     "BackupConflictError",
     "BackupError",
     "BackupValidationError",

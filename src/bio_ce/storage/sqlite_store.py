@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime
 import hashlib
 import json
@@ -37,6 +38,13 @@ from bio_ce.retrieval.fts5 import FTS5Retriever
 
 
 _SCHEMA_VERSION = 1
+INBOX_SUFFIX = ".inbox"
+
+
+@dataclass(frozen=True, slots=True)
+class PurgeResult:
+    deleted: int
+    checkpointed: bool
 
 
 class SQLiteMemoryStore:
@@ -75,6 +83,9 @@ class SQLiteMemoryStore:
         self._connection.execute("PRAGMA temp_store = MEMORY")
         if not read_only:
             self._connection.execute("PRAGMA synchronous = FULL")
+            # Freed space is overwritten with zeros. A connection setting only: nothing is stored in the file,
+            # so older BIO CE versions open the database exactly as before.
+            self._connection.execute("PRAGMA secure_delete = ON")
         if self.path != ":memory:" and not read_only:
             self._connection.execute("PRAGMA journal_mode = WAL")
         self._initialize_schema()
@@ -401,6 +412,52 @@ class SQLiteMemoryStore:
         if result is None or int(result[0]) != 0:
             raise RuntimeError("database is in use; close connected readers and retry")
 
+    def purge(self, scope: MemoryScope, memory_ids: list[str] | tuple[str, ...]) -> PurgeResult:
+        """Physically delete inbox items, as far as the app can; curated memories are only ever retracted.
+
+        1. One transaction deletes the items' revisions, search rows, and memory rows; secure_delete is on for
+           this connection, so the freed space is overwritten.
+        2. FTS5 'optimize' merges the search index, so no index segment keeps the deleted words.
+        3. A TRUNCATE checkpoint folds the write-ahead log into the file and empties it. Another process that
+           holds a snapshot (for example a connected MCP server) can block this; ``checkpointed`` is then False
+           and :meth:`checkpoint` must be retried later.
+        """
+        _validate_scope(scope)
+        if not scope.namespace.endswith(INBOX_SUFFIX):
+            raise PermissionError("only inbox items can be physically deleted; curated memories are retracted")
+        ids = sorted(set(memory_ids))
+        deleted = 0
+        with self._write_transaction():
+            for memory_id in ids:
+                row = self._connection.execute(
+                    "SELECT 1 FROM memories WHERE memory_id = ? AND project = ? AND namespace = ?",
+                    (memory_id, scope.project, scope.namespace),
+                ).fetchone()
+                if row is None:
+                    continue
+                self._connection.execute("DELETE FROM revisions WHERE memory_id = ?", (memory_id,))
+                self._connection.execute("DELETE FROM memory_fts WHERE memory_id = ?", (memory_id,))
+                self._connection.execute("DELETE FROM memories WHERE memory_id = ?", (memory_id,))
+                deleted += 1
+            if deleted:
+                self._connection.execute("INSERT INTO memory_fts(memory_fts) VALUES ('optimize')")
+        return PurgeResult(deleted, self.checkpoint())
+
+    def checkpoint(self) -> bool:
+        """TRUNCATE checkpoint; False while another connection still reads an older snapshot."""
+        self._ensure_open()
+        if self.read_only or self.path == ":memory:":
+            return True
+        with self._lock:
+            result = self._connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+        return result is not None and int(result[0]) == 0
+
+    def inventory(self) -> list[tuple[str, str, str]]:
+        """Every memory's (memory_id, project, namespace), for restore bookkeeping."""
+        with self._read_transaction():
+            rows = self._connection.execute("SELECT memory_id, project, namespace FROM memories").fetchall()
+        return [(str(row[0]), str(row[1]), str(row[2])) for row in rows]
+
     def read_many(
         self,
         scope: MemoryScope,
@@ -630,4 +687,4 @@ def _row_to_revision(row: sqlite3.Row, scope: MemoryScope) -> MemoryRevision:
     )
 
 
-__all__ = ["SQLiteMemoryStore"]
+__all__ = ["INBOX_SUFFIX", "PurgeResult", "SQLiteMemoryStore"]
