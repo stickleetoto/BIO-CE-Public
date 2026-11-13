@@ -49,13 +49,25 @@ from bio_ce.core.models import (
     ValidationError,
 )
 from bio_ce.memory_policy import CATEGORIES, CHANGE_TYPES, EVIDENCE, POLICY_TEXT
-from bio_ce.storage.sqlite_store import SQLiteMemoryStore
+from bio_ce.spaces import (
+    CURATED_NAMESPACE,
+    GENERAL_PROJECT,
+    RESOLVED_EXACT,
+    RESOLVED_FALLBACK,
+    Resolution,
+    Space,
+    resolve_space,
+)
+from bio_ce.storage.sqlite_store import INBOX_SUFFIX, SQLiteMemoryStore
 
 
 TOKEN_ENVIRONMENT_VARIABLE = "BIO_CE_CONNECTION_TOKEN"
 _SCOPE_HELP = "Optional. Omit it to use the scope this server is bound to; if given it must match exactly."
 OptionalProject = Annotated[str | None, Field(description="Project. " + _SCOPE_HELP)]
 OptionalNamespace = Annotated[str | None, Field(description="Namespace. " + _SCOPE_HELP)]
+OptionalSpace = Annotated[str | None, Field(description=(
+    "Optional BIO CE space: General or a project space, by name. Omit it for General. A name BIO CE can't match "
+    "to exactly one space also uses General, and the result says so."))]
 TOOL_NAMES = (
     "bio_memory_search",
     "bio_memory_read",
@@ -216,6 +228,62 @@ def create_mcp_server(
     access = _Access(connections, connection_id, scope)
     store = _StoreProxy(connections)
     connections.store()  # fail at startup, not on the first call, if the database cannot be opened
+    legacy_space = Space("bound", "general", scope.project, f"{scope.project}/{scope.namespace}")
+
+    def resolve(space: str | None, project: str | None, namespace: str | None, *, write: bool) -> Resolution:
+        """Pick the space for one call. Unknown or ambiguous names use General; a denial is never redirected."""
+        control_store = access.control
+        if control_store is None or (scope.project, scope.namespace) != (GENERAL_PROJECT, CURATED_NAMESPACE):
+            # A v0.2 entry, or a grant bound to another scope: exactly that scope, no spaces.
+            _require_exact_scope(scope, project, namespace)
+            if space is not None:
+                raise ToolError("This connection serves one fixed scope; omit space.")
+            return Resolution(legacy_space, "default")
+        if namespace is not None and namespace.endswith(INBOX_SUFFIX):
+            raise ToolError("The inbox can't be addressed through project and namespace.")
+        try:
+            spaces = control_store.spaces()
+        except (ControlStoreError, sqlite3.Error):
+            raise ToolError("BIO CE access for this connection is unavailable.") from None
+        if project is not None or namespace is not None:
+            wanted = project if project is not None else scope.project
+            match = next((item for item in spaces if item.project == wanted), None)
+            if match is None or namespace not in (None, CURATED_NAMESPACE):
+                _require_exact_scope(scope, project, namespace)  # raises with the bound-scope message
+                match = next(item for item in spaces if item.is_general)
+            resolution = Resolution(match, RESOLVED_EXACT)
+            if space is not None and resolve_space(spaces, space).space.space_id != match.space_id:
+                raise ToolError("space and project/namespace point to different BIO CE spaces; pass only one.")
+        else:
+            resolution = resolve_space(spaces, space)
+        can_read, can_write = control_store.space_access(connection_id, resolution.space)
+        grant_can_write = control_store.grant(connection_id).can_write
+        if (write and grant_can_write and not can_write) or (not write and not can_read and _readable(access)):
+            name = resolution.space.display_name
+            if resolution.how == RESOLVED_FALLBACK:
+                raise ToolError(f"BIO CE couldn't match the space {space!r} ({resolution.reason}), so it used "
+                                f"General, but this connection has no {'write' if write else 'read'} access to "
+                                "General.")
+            raise ToolError(f"This connection has no {'write' if write else 'read'} access to the BIO CE space "
+                            f"{name!r}. The user can change this in BIO CE → Connections.")
+        return resolution
+
+    def readable_spaces() -> list[str]:
+        control_store = access.control
+        if control_store is None or (scope.project, scope.namespace) != (GENERAL_PROJECT, CURATED_NAMESPACE):
+            return []
+        try:
+            return [item.display_name for item in control_store.spaces()
+                    if control_store.space_access(connection_id, item)[0]]
+        except (ControlStoreError, sqlite3.Error):
+            return []
+
+    names = readable_spaces()
+    spaces_note = (
+        " Spaces this connection can use: " + ", ".join(repr(name) for name in names) + ". Pass space to use a "
+        "project space; without it, or when the name doesn't match exactly one space, BIO CE uses General."
+        if len(names) > 1 else ""
+    )
     server = MCPServer(
         "BIO CE Memory",
         version=display_version(),
@@ -224,7 +292,8 @@ def create_mcp_server(
             f"{scope.project!r}, namespace {scope.namespace!r}. You can omit project and namespace on every "
             "call; if you pass them they must match exactly. Search before answering questions that may "
             "depend on the user's earlier preferences, decisions, or project context. "
-            f"{mode_note} Writes work only when the user turned on Auto memory for this host.\n\n{POLICY_TEXT}"
+            f"{mode_note} Writes work only when the user turned on Auto memory for this host.{spaces_note}"
+            f"\n\n{POLICY_TEXT}"
         ),
     )
 
@@ -246,14 +315,17 @@ def create_mcp_server(
             _logger.error("%s storage error", name)
             raise ToolError("Memory storage is unavailable.") from None
 
-    def guarded_write(name: str, action: Callable[[AutoMemoryWriter], dict[str, Any]]) -> dict[str, Any]:
+    def guarded_write(name: str, action: Callable[[AutoMemoryWriter], dict[str, Any]], *, space: str | None,
+                      project: str | None, namespace: str | None) -> dict[str, Any]:
         with request_activity():
-            return _guarded_write(name, action)
+            return _guarded_write(name, action, space, project, namespace)
 
-    def _guarded_write(name: str, action: Callable[[AutoMemoryWriter], dict[str, Any]]) -> dict[str, Any]:
-        writer = access.writer(database_path, scope)
+    def _guarded_write(name: str, action: Callable[[AutoMemoryWriter], dict[str, Any]], space: str | None,
+                       project: str | None, namespace: str | None) -> dict[str, Any]:
         try:
-            return action(writer)
+            resolution = resolve(space, project, namespace, write=True)
+            writer = access.writer(database_path, _curated(resolution, scope))
+            return {**action(writer), **_space_fields(resolution, access)}
         except AccessDenied as exc:
             raise ToolError(str(exc)) from None
         except MemoryNotFoundError:
@@ -268,15 +340,18 @@ def create_mcp_server(
     def bio_memory_search(
         query: str,
         limit: Annotated[int, Field(ge=1, le=50)] = 10,
+        space: OptionalSpace = None,
         project: OptionalProject = None,
         namespace: OptionalNamespace = None,
     ) -> dict[str, Any]:
         """Search the user's current memories by keywords. Use before creating a memory to avoid duplicates."""
-        _require_exact_scope(scope, project, namespace)
-        hits = guarded_read("bio_memory_search", lambda: store.search(scope, query, limit=limit))
+        resolution = guarded_read("bio_memory_search", lambda: resolve(space, project, namespace, write=False))
+        target = _curated(resolution, scope)
+        hits = guarded_read("bio_memory_search", lambda: store.search(target, query, limit=limit))
         return {
-            "project": scope.project,
-            "namespace": scope.namespace,
+            "project": target.project,
+            "namespace": target.namespace,
+            **_space_fields(resolution, access),
             "results": [_search_hit_dict(hit) for hit in hits],
         }
 
@@ -284,26 +359,31 @@ def create_mcp_server(
     def bio_memory_read(
         memory_id: str,
         revision_id: str | None = None,
+        space: OptionalSpace = None,
         project: OptionalProject = None,
         namespace: OptionalNamespace = None,
     ) -> dict[str, Any]:
         """Read one memory (its current revision unless revision_id is given)."""
-        _require_exact_scope(scope, project, namespace)
+        resolution = guarded_read("bio_memory_read", lambda: resolve(space, project, namespace, write=False))
+        target = _curated(resolution, scope)
         revision = guarded_read(
-            "bio_memory_read", lambda: store.read(scope, memory_id, revision_id=revision_id)
+            "bio_memory_read", lambda: store.read(target, memory_id, revision_id=revision_id)
         )
-        return _revision_dict(revision)
+        return {**_revision_dict(revision), **_space_fields(resolution, access)}
 
     @server.tool()
     def bio_memory_history(
         memory_id: str,
+        space: OptionalSpace = None,
         project: OptionalProject = None,
         namespace: OptionalNamespace = None,
     ) -> dict[str, Any]:
         """List every revision of a current memory, oldest first, with its source."""
-        _require_exact_scope(scope, project, namespace)
-        revisions = guarded_read("bio_memory_history", lambda: store.history(scope, memory_id))
-        return {"memory_id": memory_id, "revisions": [_revision_dict(revision) for revision in revisions]}
+        resolution = guarded_read("bio_memory_history", lambda: resolve(space, project, namespace, write=False))
+        target = _curated(resolution, scope)
+        revisions = guarded_read("bio_memory_history", lambda: store.history(target, memory_id))
+        return {"memory_id": memory_id, **_space_fields(resolution, access),
+                "revisions": [_revision_dict(revision) for revision in revisions]}
 
     @server.tool()
     def bio_memory_create(
@@ -313,6 +393,7 @@ def create_mcp_server(
         confidence: Annotated[str, Field(description="high, medium, or low")],
         evidence: Annotated[str, Field(description="One of: " + ", ".join(EVIDENCE))],
         reason: Annotated[str, Field(max_length=500, description="Why this is worth remembering")] = "",
+        space: OptionalSpace = None,
         project: OptionalProject = None,
         namespace: OptionalNamespace = None,
     ) -> dict[str, Any]:
@@ -321,11 +402,10 @@ def create_mcp_server(
         Search first. BIO CE refuses secrets and content from documents or tools, returns
         status "duplicate" for an equivalent memory, and queues uncertain items for the user.
         """
-        _require_exact_scope(scope, project, namespace)
         return guarded_write("bio_memory_create", lambda writer: writer.create(
             title=title, content=content, category=category, confidence=confidence, evidence=evidence,
             reason=reason,
-        ))
+        ), space=space, project=project, namespace=namespace)
 
     @server.tool()
     def bio_memory_update(
@@ -337,6 +417,7 @@ def create_mcp_server(
         confidence: Annotated[str, Field(description="high, medium, or low")],
         evidence: Annotated[str, Field(description="One of: " + ", ".join(EVIDENCE))],
         reason: Annotated[str, Field(max_length=500)] = "",
+        space: OptionalSpace = None,
         project: OptionalProject = None,
         namespace: OptionalNamespace = None,
     ) -> dict[str, Any]:
@@ -345,17 +426,17 @@ def create_mcp_server(
         Use change_type "correction" only when the user clearly corrected the stored fact. Use
         "conflict" when facts disagree and it is unclear which is right; BIO CE then asks the user.
         """
-        _require_exact_scope(scope, project, namespace)
         return guarded_write("bio_memory_update", lambda writer: writer.update(
             memory_id=memory_id, expected_revision_id=expected_revision_id, title=title, content=content,
             change_type=change_type, confidence=confidence, evidence=evidence, reason=reason,
-        ))
+        ), space=space, project=project, namespace=namespace)
 
     @server.tool()
     def bio_memory_retract(
         memory_id: str,
         expected_revision_id: str,
         reason: Annotated[str, Field(max_length=500)] = "",
+        space: OptionalSpace = None,
         project: OptionalProject = None,
         namespace: OptionalNamespace = None,
     ) -> dict[str, Any]:
@@ -363,10 +444,9 @@ def create_mcp_server(
 
         Retraction hides a memory from BIO CE and AI hosts; earlier revisions stay in the database file.
         """
-        _require_exact_scope(scope, project, namespace)
         return guarded_write("bio_memory_retract", lambda writer: writer.request_retract(
             memory_id=memory_id, expected_revision_id=expected_revision_id, reason=reason,
-        ))
+        ), space=space, project=project, namespace=namespace)
 
     def close() -> None:
         connections.close()
@@ -428,6 +508,27 @@ def _require_exact_scope(configured: MemoryScope, project: str | None, namespace
             f"{configured.project!r}, namespace {configured.namespace!r}. Omit project and namespace, or pass "
             "exactly these values."
         )
+
+
+def _readable(access: "_Access") -> bool:
+    """Whether the grant itself allows reading; a paused or revoked grant gets require_read's message instead."""
+    control = access.control
+    if control is None:
+        return True
+    try:
+        return control.grant(access.connection_id).can_read
+    except (ControlStoreError, sqlite3.Error):
+        return False
+
+
+def _curated(resolution: Resolution, bound: MemoryScope) -> MemoryScope:
+    return bound if resolution.space.space_id == "bound" else resolution.space.curated
+
+
+def _space_fields(resolution: Resolution, access: "_Access") -> dict[str, Any]:
+    if access.control is None or resolution.space.space_id == "bound":
+        return {}
+    return {**resolution.as_result(), "stage": "curated"}
 
 
 def _source_dict(source) -> dict[str, Any]:

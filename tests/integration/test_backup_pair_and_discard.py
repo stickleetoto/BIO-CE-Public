@@ -248,11 +248,11 @@ class BackupPairTests(unittest.TestCase):
         self.control.set_mode(revoked.connection_id, MODE_AUTO_MEMORY)
         narrowed, _token = self.control.create_grant("claude-code")
         self.control.set_mode(narrowed.connection_id, MODE_AUTO_MEMORY)
+        self.control.set_connection_settings(narrowed.connection_id, save_mode="collect")
         with self.raw_control() as raw:
-            raw.execute("INSERT INTO connection_spaces VALUES (?, 'general', 1, 1)", (narrowed.connection_id,))
-            raw.execute("INSERT INTO connection_settings (connection_id, save_mode, updated_at) "
-                        "VALUES (?, 'collect', 'then')", (narrowed.connection_id,))
-            raw.commit()
+            # New connections get General access by default.
+            self.assertEqual(raw.execute("SELECT can_read, can_write FROM connection_spaces WHERE connection_id = ?",
+                                         (narrowed.connection_id,)).fetchall(), [(1, 1)])
         backup = self.service.create_backup(self.root / "before.sqlite3")
         self.control.revoke(revoked.connection_id)
         self.control.set_mode(narrowed.connection_id, MODE_READ_ONLY)
@@ -266,8 +266,9 @@ class BackupPairTests(unittest.TestCase):
         self.assertFalse(self.control.grant(revoked.connection_id).active)
         self.assertEqual(self.control.grant(narrowed.connection_id).mode, MODE_READ_ONLY)
         with self.raw_control() as raw:
-            self.assertEqual(raw.execute("SELECT can_write FROM connection_spaces").fetchall(), [(0,)])
-            self.assertEqual(raw.execute("SELECT save_mode FROM connection_settings").fetchall(), [("curated",)])
+            self.assertEqual(raw.execute("SELECT DISTINCT can_write FROM connection_spaces").fetchall(), [(0,)])
+            self.assertEqual(raw.execute("SELECT DISTINCT save_mode FROM connection_settings").fetchall(),
+                             [("curated",)])
         activity = self.control.recent_activity(limit=1000)
         self.assertEqual(len(activity), audit_before + 1)
         self.assertEqual((activity[0].action, activity[0].outcome), ("restore", "restored"))

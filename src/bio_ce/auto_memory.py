@@ -283,12 +283,21 @@ class AutoMemoryWriter:
                         "message": "The user will review this in BIO CE before anything changes."}
         review_id = self.control.enqueue_review(
             host=host, connection_id=self.connection_id, kind=kind, title=title, content=content,
-            review_reason=why, memory_id=memory_id, expected_revision_id=expected_revision_id, metadata=detail,
+            review_reason=why, memory_id=memory_id, expected_revision_id=expected_revision_id,
+            metadata={**detail, "project": self.scope.project, "namespace": self.scope.namespace},
         )
         self.control.record(host=host, connection_id=self.connection_id, action=kind, outcome="queued",
                             memory_id=memory_id, title=title, detail={**detail, "review_id": review_id})
         return {"status": "queued_for_review", "review_id": review_id, "reasons": [why],
                 "message": "The user will review this in BIO CE before anything changes."}
+
+
+def review_scope(item: ReviewItem, default: MemoryScope) -> MemoryScope:
+    """The scope a queued item was made for (v0.4.2 records it); older items belong to General."""
+    project, namespace = item.metadata.get("project"), item.metadata.get("namespace")
+    if isinstance(project, str) and isinstance(namespace, str) and project and namespace:
+        return MemoryScope(project, namespace)
+    return default
 
 
 class ReviewService:
@@ -307,6 +316,7 @@ class ReviewService:
         already approved, rejected, or failed must never change memories again.
         """
         item = self._pending(review_id)
+        scope = review_scope(item, self.scope)
         final_title = title if title is not None else item.title
         final_content = content if content is not None else (item.content or "")
         if item.kind != "retract" and detect_secrets(final_title, final_content):
@@ -319,12 +329,12 @@ class ReviewService:
         )
         try:
             if item.kind == "create":
-                revision = self.store.add(self.scope, title=final_title, content=final_content, source=source)
+                revision = self.store.add(scope, title=final_title, content=final_content, source=source)
             elif item.kind == "update":
-                revision = self.store.revise(self.scope, item.memory_id, expected_revision_id=item.expected_revision_id,
+                revision = self.store.revise(scope, item.memory_id, expected_revision_id=item.expected_revision_id,
                                              title=final_title, content=final_content, source=source)
             else:
-                revision = self.store.retract(self.scope, item.memory_id,
+                revision = self.store.retract(scope, item.memory_id,
                                               expected_revision_id=item.expected_revision_id, source=source)
         except (RevisionConflictError, MemoryNotFoundError) as exc:
             self.control.resolve_review(review_id, REVIEW_FAILED, "the memory changed after the request")
@@ -352,4 +362,5 @@ class ReviewService:
         return item
 
 
-__all__ = ["APPROVED_SOURCE_TYPE", "AUTO_SOURCE_TYPE", "AutoMemoryWriter", "MAX_WRITES_PER_HOUR", "ReviewService"]
+__all__ = ["APPROVED_SOURCE_TYPE", "AUTO_SOURCE_TYPE", "AutoMemoryWriter", "MAX_WRITES_PER_HOUR", "ReviewService",
+           "review_scope"]

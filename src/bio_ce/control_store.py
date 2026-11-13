@@ -35,6 +35,8 @@ import threading
 from typing import Any, Iterator, Mapping
 from urllib.parse import quote
 
+from bio_ce.spaces import GENERAL_SPACE_ID, PROJECT_PREFIX, Space, folder_key, normalize_folder, slugify
+
 
 MODE_READ_ONLY = "read_only"
 MODE_AUTO_MEMORY = "auto_memory"
@@ -151,7 +153,9 @@ CREATE TABLE IF NOT EXISTS curation_items (
 );
 CREATE INDEX IF NOT EXISTS curation_items_status ON curation_items (status, due_at);
 """
-GENERAL_SPACE_ID = "general"
+SAVE_CURATED = "curated"
+SAVE_COLLECT = "collect"
+SAVE_MODES = (SAVE_CURATED, SAVE_COLLECT)
 PRE_UPGRADE_SNAPSHOT = "control.before-0.4.2.sqlite3"
 CURATION_PENDING = "pending"
 CURATION_KEPT = "kept"
@@ -268,6 +272,7 @@ class ControlStore:
                 "VALUES (?, 'general', ?, 'General', ?)",
                 (GENERAL_SPACE_ID, DEFAULT_PROJECT, _now()),
             )
+            self._ensure_connection_defaults()
             # v1 grants predate scope binding; the desktop app only ever granted the personal scope.
             existing = {row["name"] for row in self._connection.execute("PRAGMA table_info(connections)")}
             for column, definition in _SCOPE_COLUMNS:
@@ -300,6 +305,20 @@ class ControlStore:
             pass  # the snapshot is a safety copy; the upgrade itself only adds tables
         finally:
             temporary.unlink(missing_ok=True)
+
+    def _ensure_connection_defaults(self) -> None:
+        """Every connection gets General access and curated saving unless it already has settings. Idempotent.
+
+        The connection's mode stays the outer switch: Read only never writes and Paused never reads, whatever these
+        rows say. A row only narrows what the mode allows.
+        """
+        stamp = _now()
+        self._connection.execute(
+            "INSERT OR IGNORE INTO connection_spaces (connection_id, space_id, can_read, can_write) "
+            "SELECT connection_id, ?, 1, 1 FROM connections", (GENERAL_SPACE_ID,))
+        self._connection.execute(
+            "INSERT OR IGNORE INTO connection_settings (connection_id, save_mode, default_space_id, all_projects, "
+            "updated_at) SELECT connection_id, 'curated', ?, 1, ? FROM connections", (GENERAL_SPACE_ID, stamp))
 
     def checkpoint(self) -> bool:
         """Fold the write-ahead log into the file and empty it; False while another process holds a snapshot."""
@@ -350,6 +369,7 @@ class ControlStore:
                 "revoked_at, project, namespace) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)",
                 (connection_id, host, hash_token(token), mode, stamp, stamp, project, namespace),
             )
+            self._ensure_connection_defaults()
         return self.grant(connection_id), token
 
     def grant(self, connection_id: str) -> Grant:
@@ -536,6 +556,131 @@ class ControlStore:
         if not changed:
             raise ControlStoreError("That review item was already handled.")
 
+    # Spaces -----------------------------------------------------------------
+
+    def spaces(self, *, include_archived: bool = False) -> tuple[Space, ...]:
+        query = "SELECT * FROM spaces" + ("" if include_archived else " WHERE archived_at IS NULL")
+        with self._lock:
+            rows = self._connection.execute(query + " ORDER BY kind = 'project', display_name COLLATE NOCASE")
+            return tuple(_space(row) for row in rows.fetchall())
+
+    def space(self, space_id: str) -> Space:
+        with self._lock:
+            row = self._connection.execute("SELECT * FROM spaces WHERE space_id = ?", (space_id,)).fetchone()
+        if row is None:
+            raise ControlStoreError("That space no longer exists.")
+        return _space(row)
+
+    def space_for_project(self, project: str) -> Space | None:
+        with self._lock:
+            row = self._connection.execute("SELECT * FROM spaces WHERE project = ?", (project,)).fetchone()
+        return _space(row) if row is not None else None
+
+    def create_space(self, display_name: str) -> Space:
+        name = _space_name(display_name)
+        with self._write():
+            rows = self._connection.execute("SELECT project, display_name, archived_at FROM spaces").fetchall()
+            if any(row["display_name"].casefold() == name.casefold() and row["archived_at"] is None for row in rows):
+                raise ControlStoreError("A space with this name already exists. Choose another name.")
+            taken = {row["project"][len(PROJECT_PREFIX):] for row in rows if row["project"].startswith(PROJECT_PREFIX)}
+            space_id = f"space_{secrets.token_hex(6)}"
+            project = PROJECT_PREFIX + slugify(name, taken)
+            self._connection.execute(
+                "INSERT INTO spaces (space_id, kind, project, display_name, created_at) VALUES (?, 'project', ?, ?, ?)",
+                (space_id, project, name, _now()))
+        return self.space(space_id)
+
+    def rename_space(self, space_id: str, display_name: str) -> Space:
+        """Only the name changes; the slug in project:<slug> stays, so stored memories keep their space."""
+        name = _space_name(display_name)
+        if space_id == GENERAL_SPACE_ID:
+            raise ControlStoreError("General can't be renamed.")
+        with self._write():
+            clash = self._connection.execute(
+                "SELECT 1 FROM spaces WHERE space_id != ? AND archived_at IS NULL AND display_name = ? COLLATE NOCASE",
+                (space_id, name)).fetchone()
+            if clash:
+                raise ControlStoreError("A space with this name already exists. Choose another name.")
+            self._connection.execute("UPDATE spaces SET display_name = ? WHERE space_id = ?", (name, space_id))
+        return self.space(space_id)
+
+    def archive_space(self, space_id: str) -> None:
+        """Hide a project space from hosts and the app. Its memories stay in the database file."""
+        if space_id == GENERAL_SPACE_ID:
+            raise ControlStoreError("General can't be archived.")
+        with self._write():
+            self._connection.execute("UPDATE spaces SET archived_at = ? WHERE space_id = ? AND archived_at IS NULL",
+                                     (_now(), space_id))
+
+    def folder_links(self) -> tuple[tuple[str, str, str], ...]:
+        """(space_id, folder_key, label) for every linked folder. Only a hash of the path is stored."""
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT space_id, folder_key, label FROM space_folders ORDER BY label COLLATE NOCASE").fetchall()
+        return tuple((row[0], row[1], row[2]) for row in rows)
+
+    def link_folder(self, space_id: str, folder: str | Path) -> str:
+        space = self.space(space_id)
+        if space.archived_at is not None:
+            raise ControlStoreError("Archived spaces can't get new folders.")
+        key = folder_key(folder)
+        label = Path(normalize_folder(folder)).name or str(folder)
+        with self._write():
+            self._connection.execute(
+                "INSERT OR IGNORE INTO space_folders (space_id, folder_key, label, created_at) VALUES (?, ?, ?, ?)",
+                (space_id, key, label[:120], _now()))
+        return key
+
+    def unlink_folder(self, space_id: str, key: str) -> None:
+        with self._write():
+            self._connection.execute("DELETE FROM space_folders WHERE space_id = ? AND folder_key = ?", (space_id, key))
+
+    def connection_settings(self, connection_id: str) -> dict[str, Any]:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT save_mode, default_space_id, all_projects FROM connection_settings WHERE connection_id = ?",
+                (connection_id,)).fetchone()
+        if row is None:
+            return {"save_mode": SAVE_CURATED, "default_space_id": GENERAL_SPACE_ID, "all_projects": True}
+        return {"save_mode": row[0], "default_space_id": row[1], "all_projects": bool(row[2])}
+
+    def set_connection_settings(self, connection_id: str, *, save_mode: str | None = None,
+                                all_projects: bool | None = None) -> dict[str, Any]:
+        if save_mode is not None and save_mode not in SAVE_MODES:
+            raise ValueError(f"save_mode must be one of {', '.join(SAVE_MODES)}")
+        current = self.connection_settings(connection_id)
+        new_mode = save_mode if save_mode is not None else current["save_mode"]
+        new_all = all_projects if all_projects is not None else current["all_projects"]
+        with self._write():
+            self._connection.execute(
+                "INSERT INTO connection_settings (connection_id, save_mode, default_space_id, all_projects, updated_at) "
+                "VALUES (?, ?, ?, ?, ?) ON CONFLICT(connection_id) DO UPDATE SET save_mode = excluded.save_mode, "
+                "all_projects = excluded.all_projects, updated_at = excluded.updated_at",
+                (connection_id, new_mode, GENERAL_SPACE_ID, int(bool(new_all)), _now()))
+        return self.connection_settings(connection_id)
+
+    def space_access(self, connection_id: str, space: Space) -> tuple[bool, bool]:
+        """(can_read, can_write) for one connection in one space, under the connection's current mode."""
+        try:
+            grant = self.grant(connection_id)
+        except ControlStoreError:
+            return False, False
+        if not grant.active or space.archived_at is not None:
+            return False, False
+        if (grant.project, grant.namespace) != (DEFAULT_PROJECT, DEFAULT_NAMESPACE):
+            return False, False  # a grant bound to another scope serves only that scope, never spaces
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT can_read, can_write FROM connection_spaces WHERE connection_id = ? AND space_id = ?",
+                (connection_id, space.space_id)).fetchone()
+        if row is not None:
+            allowed = (bool(row[0]), bool(row[1]))
+        elif space.is_general:
+            allowed = (True, True)
+        else:
+            allowed = (True, True) if self.connection_settings(connection_id)["all_projects"] else (False, False)
+        return grant.can_read and allowed[0], grant.can_write and allowed[1]
+
     # Inbox clean-up ---------------------------------------------------------
 
     def open_discard(self, memory_ids: list[str] | tuple[str, ...], *, status: str = CURATION_CLEANUP_PENDING,
@@ -672,6 +817,19 @@ class ControlStore:
         return {**summary, "restored_spaces": spaces_added}
 
 
+def _space(row: sqlite3.Row) -> Space:
+    return Space(row["space_id"], row["kind"], row["project"], row["display_name"], row["archived_at"])
+
+
+def _space_name(display_name: str) -> str:
+    name = " ".join(str(display_name or "").split())
+    if not name:
+        raise ControlStoreError("Give the space a name.")
+    if len(name) > 80:
+        raise ControlStoreError("Space names can be at most 80 characters.")
+    return name
+
+
 def _read_backup_tables(path: Path) -> dict[str, list[sqlite3.Row]]:
     uri = f"file:{quote(Path(path).resolve().as_posix(), safe='/:')}?mode=ro&immutable=1"
     connection = sqlite3.connect(uri, uri=True)
@@ -709,6 +867,9 @@ def _review(row: sqlite3.Row) -> ReviewItem:
 
 __all__ = [
     "AccessDenied",
+    "SAVE_MODES",
+    "SAVE_CURATED",
+    "SAVE_COLLECT",
     "PRE_UPGRADE_SNAPSHOT",
     "GENERAL_SPACE_ID",
     "CURATION_PENDING",

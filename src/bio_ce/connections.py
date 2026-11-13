@@ -297,6 +297,22 @@ class MCPConnectionManager:
         self._sync_tool_approval(host, False)
         return grant
 
+    def connection_settings(self, host: str) -> dict | None:
+        """Save mode and project-space access for a connected host, or None when it is not connected."""
+        status = self.status(host)
+        if not status.connected or status.connection_id is None:
+            return None
+        return self.control.connection_settings(status.connection_id)
+
+    def set_connection_settings(self, host: str, *, save_mode: str | None = None,
+                                all_projects: bool | None = None) -> dict:
+        """Running servers apply the change on their next call, like a mode change."""
+        status = self.status(host)
+        if not status.connected or status.connection_id is None:
+            raise MCPConnectionError("Connect this host in BIO CE first.")
+        return self.control.set_connection_settings(status.connection_id, save_mode=save_mode,
+                                                    all_projects=all_projects)
+
     def _sync_tool_approval(self, host: str, enabled: bool) -> None:
         path = host_hooks.tool_approval_path(host, self.env)
         if not enabled and not path.is_file():

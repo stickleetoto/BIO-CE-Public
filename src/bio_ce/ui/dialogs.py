@@ -300,6 +300,39 @@ class ReviewEditDialog(Dialog):
         return self.result  # type: ignore[return-value]
 
 
+class NameDialog(Dialog):
+    """Ask for one short name (for example a space name)."""
+
+    def __init__(self, parent: tk.Misc, theme: Theme, *, title: str, label: str, value: str = "",
+                 confirm_text: str = "Save", note: str = "") -> None:
+        super().__init__(parent, theme, title)
+        c = theme.colors
+        tk.Label(self.content, text=title, font=theme.font("title"), background=c.surface,
+                 foreground=c.text, anchor="w").pack(fill="x")
+        if note:
+            WrapLabel(self.content, note, font=theme.font("caption"), foreground=c.text_secondary).pack(
+                fill="x", pady=(theme.px(SPACE_XS), 0))
+        tk.Label(self.content, text=label, font=theme.font("body_strong"), background=c.surface,
+                 foreground=c.text, anchor="w").pack(fill="x", pady=(theme.px(SPACE_M), 0))
+        self.value = tk.StringVar(master=self, value=value)
+        self.field = Field(self.content, theme, textvariable=self.value)
+        self.field.pack(fill="x", pady=(theme.px(SPACE_XS), 0))
+        self.bind("<Return>", lambda _event: self._save() if self.armed else None)
+        self.add_button(confirm_text, self._save, variant="primary")
+        self.add_button("Cancel", self.cancel)
+
+    def _save(self) -> None:
+        name = " ".join(self.value.get().split())
+        if not name or len(name) > 80:
+            self.field.set_error(True)
+            return
+        self.finish(name)
+
+    def ask(self) -> str | None:
+        self.present(focus=self.field, size=(self.theme.px(480), self.theme.px(260)))
+        return self.result  # type: ignore[return-value]
+
+
 def ask_privacy_consent(root: tk.Tk, theme: Theme) -> bool:
     """Show the first-run data notice inside the main window; True to continue."""
     c = theme.colors
@@ -353,6 +386,7 @@ __all__ = [
     "ConfirmDialog",
     "Dialog",
     "HistoryDialog",
+    "NameDialog",
     "ReviewEditDialog",
     "TextViewerDialog",
     "WELCOME_POINTS",

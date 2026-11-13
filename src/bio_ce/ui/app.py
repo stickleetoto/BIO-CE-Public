@@ -27,7 +27,7 @@ from bio_ce.engine.external import ExternalEngineAdapter
 from bio_ce.engine.presentation import ActionState, EngineBanner, action_states, banner, engine_name
 from bio_ce.engine.switching import DEFAULT_SELECTION, EngineSelection, SwitchPhase
 from bio_ce.storage.backup import PAIR_MATCHED, BackupError, pair_path
-from bio_ce.ui.dialogs import ConfirmDialog
+from bio_ce.ui.dialogs import ConfirmDialog, NameDialog
 from bio_ce.ui.format import preview
 from bio_ce.ui.pages import Page
 from bio_ce.ui.pages.connections import ConnectionsPage
@@ -392,6 +392,12 @@ class BIOCEDesktop:
 
     def ask_open_path(self, **options: Any) -> str:
         return filedialog.askopenfilename(parent=self.root, **options)
+
+    def ask_folder(self, **options: Any) -> str:
+        return filedialog.askdirectory(parent=self.root, mustexist=True, **options)
+
+    def ask_name(self, **options: Any) -> str | None:
+        return NameDialog(self.root, self.theme, **options).ask()
 
     def open_path(self, path: Path) -> bool:
         try:

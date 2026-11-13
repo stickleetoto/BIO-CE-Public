@@ -169,6 +169,16 @@ class HostCard(Card):
                             command=lambda m=mode: page.set_mode(host, m))
             button.pack(side="left", padx=(0, theme.px(SPACE_XS)))
             self.mode_buttons[mode] = button
+        spaces = tk.Frame(self.access, background=c.surface)
+        spaces.pack(fill="x", pady=(theme.px(SPACE_S), 0))
+        tk.Label(spaces, text="Spaces", font=theme.font("body_strong"), background=c.surface,
+                 foreground=c.text, width=12, anchor="w").pack(side="left")
+        self.spaces_label = tk.Label(spaces, text="", font=theme.font("body"), background=c.surface,
+                                     foreground=c.text_secondary, anchor="w")
+        self.spaces_label.pack(side="left")
+        self.spaces_button = Button(spaces, theme, "Use General only", variant="link",
+                                    command=lambda: page.toggle_projects(host))
+        self.spaces_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
         hooks = tk.Frame(self.access, background=c.surface)
         hooks.pack(fill="x", pady=(theme.px(SPACE_S), 0))
         tk.Label(hooks, text="Session hooks", font=theme.font("body_strong"), background=c.surface,
@@ -228,6 +238,10 @@ class HostCard(Card):
             self.access.pack(fill="x", pady=(self.page.theme.px(SPACE_M), 0), after=self.message)
             for mode, button in self.mode_buttons.items():
                 button.set_variant("primary" if status.mode == mode else "secondary")
+            settings = self.page.connection_settings(self.host) or {}
+            all_projects = bool(settings.get("all_projects", True))
+            self.spaces_label.configure(text="General and all project spaces" if all_projects else "General only")
+            self.spaces_button.set_text("Use General only" if all_projects else "Use all project spaces")
             self.hooks_label.configure(text="On: recalls memories at session start and per prompt"
                                        if status.hooks_installed else "Off")
             self.hooks_button.set_text("Remove" if status.hooks_installed else "Install")
@@ -607,6 +621,29 @@ class ConnectionsPage(Page):
         self.app.hosts_changed()
         self.app.notify("success", host_message(host, self.app.host_statuses(refresh=False).get(host)),
                         title=f"{name}: {MODE_LABELS[mode]}")
+
+    def connection_settings(self, host: str) -> dict | None:
+        manager = self.app.connection_manager
+        if not hasattr(manager, "connection_settings"):
+            return None
+        try:
+            return manager.connection_settings(host)
+        except Exception:  # noqa: BLE001 - a settings read must never break the page
+            return None
+
+    def toggle_projects(self, host: str) -> None:
+        """All project spaces on or off for one host. General access always follows the Access mode."""
+        current = self.connection_settings(host) or {"all_projects": True}
+        wanted = not current.get("all_projects", True)
+        name = host_name(host)
+        try:
+            self.app.connection_manager.set_connection_settings(host, all_projects=wanted)
+        except Exception as exc:  # noqa: BLE001 - shown to the user
+            self.app.notify("error", str(exc) or "BIO CE couldn't change this setting.", title=f"{name}: spaces")
+            return
+        self.app.notify("success", f"{name} can now use General and all project spaces." if wanted else
+                        f"{name} now uses General only. Project spaces stay as they are.", title=f"{name}: spaces")
+        self.app.hosts_changed()
 
     def toggle_hooks(self, host: str) -> None:
         name = host_name(host)

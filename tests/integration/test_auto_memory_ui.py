@@ -45,6 +45,13 @@ class FakeManagedConnections:
         self.calls.append(("set_mode", mode))
         return self.control.set_mode(self.grant.connection_id, mode)
 
+    def connection_settings(self, host: str):
+        return self.control.connection_settings(self.grant.connection_id)
+
+    def set_connection_settings(self, host: str, **values):
+        self.calls.append(("set_connection_settings", values))
+        return self.control.set_connection_settings(self.grant.connection_id, **values)
+
     def install_hooks(self, host: str, *, approved: bool = False):
         assert approved is True
         self.calls.append(("install_hooks", host))

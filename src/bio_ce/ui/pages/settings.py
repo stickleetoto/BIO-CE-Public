@@ -134,6 +134,8 @@ class SettingsPage(Page):
                   "memories.", font=theme.font("caption"), foreground=c.text_muted).pack(
             fill="x", pady=(theme.px(SPACE_XS), 0))
 
+        self._build_spaces_card(body)
+
         backup = self._card(body, "Backup and restore",
                             "A backup is two files: a complete copy of your memories (name.sqlite3) and your "
                             "connection records (name.control.sqlite3). Keep them together. Backups are not "
@@ -200,6 +202,129 @@ class SettingsPage(Page):
         self.license_button.set_enabled(self.license_path.is_file())
         self.notices_button.set_enabled(self.notices_path.is_file())
         tk.Frame(body, height=theme.px(SPACE_S), background=c.bg).pack()
+
+    # Spaces --------------------------------------------------------------------------------------
+
+    def _build_spaces_card(self, body: tk.Misc) -> None:
+        theme, c = self.theme, self.colors
+        card = self._card(body, "Spaces",
+                          "General holds your memories as before. A project space keeps one project's memories "
+                          "apart. Link a project folder and the session hooks use that space when you work there. "
+                          "BIO CE stores only a fingerprint of the folder path and the folder's name.")
+        self.spaces_list = tk.Frame(card, background=c.surface)
+        self.spaces_list.pack(fill="x", pady=(theme.px(SPACE_M), 0))
+        row = tk.Frame(card, background=c.surface)
+        row.pack(fill="x", pady=(theme.px(SPACE_S), 0))
+        self.new_space_button = Button(row, theme, "New project space…", icon="add", command=self.new_space)
+        self.new_space_button.pack(side="left")
+        self.space_rows: dict[str, tk.Frame] = {}
+        self.render_spaces()
+
+    def spaces_control(self):
+        return getattr(self.app.connection_manager, "control", None)
+
+    def render_spaces(self) -> None:
+        theme, c = self.theme, self.colors
+        for child in self.spaces_list.winfo_children():
+            child.destroy()
+        self.space_rows = {}
+        control = self.spaces_control()
+        try:
+            spaces = control.spaces() if control is not None else ()
+            links = control.folder_links() if control is not None else ()
+        except Exception:  # noqa: BLE001 - never break Settings because of the control file
+            spaces, links = (), ()
+        if not spaces:
+            WrapLabel(self.spaces_list, "Spaces are unavailable right now.", font=theme.font("caption"),
+                      foreground=c.text_muted).pack(fill="x")
+            self.new_space_button.set_enabled(False)
+            return
+        self.new_space_button.set_enabled(True)
+        for space in spaces:
+            frame = tk.Frame(self.spaces_list, background=c.surface_alt, highlightthickness=1,
+                             highlightbackground=c.border)
+            frame.pack(fill="x", pady=(0, theme.px(SPACE_S)))
+            inner = tk.Frame(frame, background=c.surface_alt)
+            inner.pack(fill="x", padx=theme.px(SPACE_M), pady=theme.px(SPACE_S))
+            top = tk.Frame(inner, background=c.surface_alt)
+            top.pack(fill="x")
+            tk.Label(top, text=space.display_name, font=theme.font("body_strong"), background=c.surface_alt,
+                     foreground=c.text, anchor="w").pack(side="left")
+            folders = [(key, label) for space_id, key, label in links if space_id == space.space_id]
+            if space.is_general:
+                detail = "Always available. Used when no project space fits."
+            else:
+                detail = (f"{plural(len(folders), 'linked folder')}" if folders else "No folder linked yet")
+                Button(top, theme, "Archive", variant="link",
+                       command=lambda item=space: self.archive_space(item)).pack(side="right")
+                Button(top, theme, "Rename", variant="link",
+                       command=lambda item=space: self.rename_space(item)).pack(side="right")
+                Button(top, theme, "Link folder…", variant="link",
+                       command=lambda item=space: self.link_folder(item)).pack(side="right")
+            tk.Label(inner, text=detail, font=theme.font("caption"), background=c.surface_alt,
+                     foreground=c.text_muted, anchor="w").pack(fill="x")
+            for key, label in folders:
+                line = tk.Frame(inner, background=c.surface_alt)
+                line.pack(fill="x", pady=(theme.px(2), 0))
+                tk.Label(line, text=f"  {label}", font=theme.font("body"), background=c.surface_alt,
+                         foreground=c.text_secondary, anchor="w").pack(side="left")
+                Button(line, theme, "Unlink", variant="link",
+                       command=lambda item=space, k=key: self.unlink_folder(item, k)).pack(side="right")
+            self.space_rows[space.space_id] = frame
+
+    def _space_action(self, title: str, action) -> bool:
+        try:
+            action()
+        except Exception as exc:  # noqa: BLE001 - shown to the user
+            self.app.notify("error", str(exc) or "BIO CE couldn't change the space.", title=title)
+            return False
+        self.render_spaces()
+        return True
+
+    def new_space(self) -> None:
+        control = self.spaces_control()
+        name = self.app.ask_name(title="New project space", label="Name", confirm_text="Create space",
+                                 note="For example the project's name. You can rename it later.")
+        if control is None or not name:
+            return
+        if self._space_action("Space not created", lambda: control.create_space(name)):
+            self.app.notify("success", f"Created the space {name!r}. Link its folder so hooks pick it up.",
+                            title="Space created")
+
+    def rename_space(self, space) -> None:
+        control = self.spaces_control()
+        name = self.app.ask_name(title="Rename space", label="Name", value=space.display_name,
+                                 confirm_text="Rename",
+                                 note="Memories stay in the space; only its name changes.")
+        if control is None or not name or name == space.display_name:
+            return
+        self._space_action("Space not renamed", lambda: control.rename_space(space.space_id, name))
+
+    def archive_space(self, space) -> None:
+        control = self.spaces_control()
+        if control is None or not self.app.confirm(
+            title=f"Archive {space.display_name}?",
+            message="AI hosts can no longer read or write this space, and its folder links stop working.",
+            quote=space.display_name,
+            points=("Its memories stay in your database and in backups.",
+                    "Hosts use General for folders that were linked to it."),
+            confirm_text="Archive space",
+        ):
+            return
+        self._space_action("Space not archived", lambda: control.archive_space(space.space_id))
+
+    def link_folder(self, space) -> None:
+        control = self.spaces_control()
+        folder = self.app.ask_folder(title=f"Choose a folder for {space.display_name}")
+        if control is None or not folder:
+            return
+        self._space_action("Folder not linked", lambda: control.link_folder(space.space_id, folder))
+
+    def unlink_folder(self, space, key: str) -> None:
+        control = self.spaces_control()
+        if control is None:
+            return
+        self._space_action("Folder not unlinked", lambda: control.unlink_folder(space.space_id, key))
 
     # Memory engine -------------------------------------------------------------------------------
 
@@ -302,6 +427,7 @@ class SettingsPage(Page):
         except Exception:
             count = None
         self.render_engines()
+        self.render_spaces()
         size = database_size(self.app.paths.user_database)
         parts = [plural(count, "active memory", "active memories") if count is not None else "Memory count unavailable",
                  f"{file_size(size)} on disk"]
