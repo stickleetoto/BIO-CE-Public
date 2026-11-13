@@ -12,6 +12,7 @@ import sys
 import tkinter as tk
 
 import bio_ce
+from bio_ce.inbox import DISCARD_NOTICE
 from bio_ce.ui.dialogs import TextViewerDialog
 from bio_ce.ui.format import file_size, plural
 from bio_ce.engine.presentation import SEPARATE_DATABASES_NOTE, engine_rows
@@ -135,6 +136,7 @@ class SettingsPage(Page):
             fill="x", pady=(theme.px(SPACE_XS), 0))
 
         self._build_spaces_card(body)
+        self._build_inbox_card(body)
 
         backup = self._card(body, "Backup and restore",
                             "A backup is two files: a complete copy of your memories (name.sqlite3) and your "
@@ -326,6 +328,60 @@ class SettingsPage(Page):
             return
         self._space_action("Folder not unlinked", lambda: control.unlink_folder(space.space_id, key))
 
+    # Inbox ---------------------------------------------------------------------------------------
+
+    INBOX_FIELDS = (
+        ("inbox_expire_days", "Propose discarding after", "days unused (7–365)"),
+        ("inbox_wait_days", "Then discard after", "more days unless kept (1–30)"),
+        ("file_content_limit", "File text limit", "characters (200–2000)"),
+    )
+
+    def _build_inbox_card(self, body: tk.Misc) -> None:
+        theme, c = self.theme, self.colors
+        card = self._card(body, "Inbox",
+                          "Hosts in collect mode save to the inbox. Unused items are proposed for discarding and "
+                          "then discarded unless you keep them. Text a host takes from a file has a size limit.")
+        grid = tk.Frame(card, background=c.surface)
+        grid.pack(fill="x", pady=(theme.px(SPACE_M), 0))
+        self.inbox_values: dict[str, tk.StringVar] = {}
+        for row, (key, label, unit) in enumerate(self.INBOX_FIELDS):
+            tk.Label(grid, text=label, font=theme.font("body"), background=c.surface, foreground=c.text,
+                     anchor="w").grid(row=row, column=0, sticky="w", pady=theme.px(3))
+            value = tk.StringVar(master=self)
+            Field(grid, theme, textvariable=value, width=8).grid(row=row, column=1, sticky="w",
+                                                                  padx=(theme.px(SPACE_M), theme.px(SPACE_S)))
+            tk.Label(grid, text=unit, font=theme.font("caption"), background=c.surface, foreground=c.text_muted,
+                     anchor="w").grid(row=row, column=2, sticky="w")
+            self.inbox_values[key] = value
+        Button(card, theme, "Save inbox settings", command=self.save_inbox_settings).pack(
+            anchor="w", pady=(theme.px(SPACE_M), 0))
+        WrapLabel(card, DISCARD_NOTICE, font=theme.font("caption"), foreground=c.text_muted).pack(
+            fill="x", pady=(theme.px(SPACE_M), 0))
+        self.render_inbox_settings()
+
+    def render_inbox_settings(self) -> None:
+        control = self.spaces_control()
+        try:
+            values = control.inbox_settings() if control is not None else {}
+        except Exception:  # noqa: BLE001
+            values = {}
+        for key, variable in self.inbox_values.items():
+            variable.set(str(values.get(key, "")))
+
+    def save_inbox_settings(self) -> None:
+        control = self.spaces_control()
+        if control is None:
+            return
+        try:
+            for key, variable in self.inbox_values.items():
+                control.set_inbox_setting(key, int(variable.get().strip()))
+        except (ValueError, TypeError) as exc:
+            self.app.notify("error", f"{exc}. Nothing after it was saved.", title="Inbox settings")
+            self.render_inbox_settings()
+            return
+        self.app.notify("success", "Inbox settings saved.", title="Inbox settings")
+        self.render_inbox_settings()
+
     # Memory engine -------------------------------------------------------------------------------
 
     def _build_engine_card(self, body: tk.Misc) -> None:
@@ -428,6 +484,7 @@ class SettingsPage(Page):
             count = None
         self.render_engines()
         self.render_spaces()
+        self.render_inbox_settings()
         size = database_size(self.app.paths.user_database)
         parts = [plural(count, "active memory", "active memories") if count is not None else "Memory count unavailable",
                  f"{file_size(size)} on disk"]

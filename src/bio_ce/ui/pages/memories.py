@@ -13,6 +13,7 @@ from bio_ce.engine.contract import EngineUnavailable, MemoryView, UnsupportedCap
 from bio_ce.ui.dialogs import HistoryDialog
 from bio_ce.ui.format import format_timestamp, middle_ellipsis, plural, preview, relative_time
 from bio_ce.ui.pages import Page
+from bio_ce.ui.pages.inbox import SpaceBar
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS
 from bio_ce.ui.widgets import (
     AutoScrollbar,
@@ -57,6 +58,8 @@ class MemoriesPage(Page):
         Button(self.actions, theme, "Refresh", icon="refresh", variant="subtle",
                command=self.refresh, tooltip="Reload the list (F5)").pack(side="right", padx=(0, theme.px(SPACE_S)))
 
+        self.space_bar = SpaceBar(self, app, active="memories")
+        self.space_bar.pack(fill="x", pady=(0, theme.px(SPACE_M)))
         toolbar = tk.Frame(self, background=c.bg)
         toolbar.pack(fill="x", pady=(0, theme.px(SPACE_M)))
         self.query = tk.StringVar(master=self)
@@ -214,6 +217,7 @@ class MemoriesPage(Page):
 
     def refresh(self, select: str | None = None) -> None:
         super().refresh()
+        self.space_bar.refresh()
         if self._search_after is not None:
             self.after_cancel(self._search_after)
             self._search_after = None

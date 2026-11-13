@@ -268,13 +268,23 @@ class DashboardPage(Page):
                 connected += 1
         self.hosts_value.configure(text=str(connected))
         self.hosts_detail.configure(text=f"of {plural(len(self.host_rows), 'host')} connected")
-        self.show_review_count(self.app.pending_review_count())
+        self.show_review_count(self.app.pending_review_count(), self.app.pending_cleanup_count())
 
-    def show_review_count(self, reviews: int | None) -> None:
+    def show_review_count(self, reviews: int | None, cleanup: int | None = None) -> None:
+        """Review items (N) and inbox items proposed for discarding (M)."""
         c = self.colors
-        self.review_value.configure(text="—" if reviews is None else str(reviews),
-                                    foreground=c.warning if reviews else c.text)
-        self.review_detail.set_text("Open review queue" if reviews else "Nothing waiting")
+        total = None if reviews is None else reviews + (cleanup or 0)
+        self.review_value.configure(text="—" if total is None else str(total),
+                                    foreground=c.warning if total else c.text)
+        if reviews:
+            text = f"Review queue: {reviews}" + (f" · to clean up: {cleanup}" if cleanup else "")
+            target = "connections"
+        elif cleanup:
+            text, target = f"Inbox items to clean up: {cleanup}", "inbox"
+        else:
+            text, target = "Nothing waiting", "connections"
+        self.review_detail.set_text(text)
+        self.review_detail.set_command(lambda: self.app.show_page(target))
 
 
 __all__ = ["DashboardPage", "host_pill"]

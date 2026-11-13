@@ -179,6 +179,16 @@ class HostCard(Card):
         self.spaces_button = Button(spaces, theme, "Use General only", variant="link",
                                     command=lambda: page.toggle_projects(host))
         self.spaces_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
+        saving = tk.Frame(self.access, background=c.surface)
+        saving.pack(fill="x", pady=(theme.px(SPACE_S), 0))
+        tk.Label(saving, text="Saving", font=theme.font("body_strong"), background=c.surface,
+                 foreground=c.text, width=12, anchor="w").pack(side="left")
+        self.saving_label = tk.Label(saving, text="", font=theme.font("body"), background=c.surface,
+                                     foreground=c.text_secondary, anchor="w")
+        self.saving_label.pack(side="left")
+        self.saving_button = Button(saving, theme, "Switch to Collect", variant="link",
+                                    command=lambda: page.toggle_save_mode(host))
+        self.saving_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
         hooks = tk.Frame(self.access, background=c.surface)
         hooks.pack(fill="x", pady=(theme.px(SPACE_S), 0))
         tk.Label(hooks, text="Session hooks", font=theme.font("body_strong"), background=c.surface,
@@ -242,6 +252,10 @@ class HostCard(Card):
             all_projects = bool(settings.get("all_projects", True))
             self.spaces_label.configure(text="General and all project spaces" if all_projects else "General only")
             self.spaces_button.set_text("Use General only" if all_projects else "Use all project spaces")
+            collect = settings.get("save_mode") == "collect"
+            self.saving_label.configure(text="Collect: lasting information goes to your inbox" if collect
+                                        else "Curated: only what you stated or confirmed")
+            self.saving_button.set_text("Switch to Curated" if collect else "Switch to Collect")
             self.hooks_label.configure(text="On: recalls memories at session start and per prompt"
                                        if status.hooks_installed else "Off")
             self.hooks_button.set_text("Remove" if status.hooks_installed else "Install")
@@ -643,6 +657,37 @@ class ConnectionsPage(Page):
             return
         self.app.notify("success", f"{name} can now use General and all project spaces." if wanted else
                         f"{name} now uses General only. Project spaces stay as they are.", title=f"{name}: spaces")
+        self.app.hosts_changed()
+
+    def toggle_save_mode(self, host: str) -> None:
+        """Curated (default) or Collect for one host, after the user confirms what changes."""
+        current = (self.connection_settings(host) or {}).get("save_mode", "curated")
+        wanted = "curated" if current == "collect" else "collect"
+        name = host_name(host)
+        if wanted == "collect":
+            points = (
+                f"{name} saves lasting information to your inbox without asking: things you said, its own guesses "
+                "(marked as guesses), and summaries of files when you ask it to remember them.",
+                "Inbox items aren't used by hosts unless they ask for the inbox, and never by session hooks. You "
+                "move the ones worth keeping to your memories on Memories → Inbox.",
+                "Items unused for 30 days are proposed for discarding, and discarded 7 days later unless you keep "
+                "them. You can change both periods in Settings.",
+                "Changes to your curated memories still wait for your review. Secrets are always refused.",
+            )
+            message, confirm = "Let this host collect into your inbox?", "Switch to Collect"
+        else:
+            points = ("Only what you stated or confirmed is saved, as before. Everything else waits for your "
+                      "review.", "Items already in the inbox stay there until you move or discard them.")
+            message, confirm = "Switch back to curated saving?", "Switch to Curated"
+        if not self.app.confirm(title=f"{name}: {confirm.split(' ', 2)[-1]} saving", message=message,
+                                points=points, confirm_text=confirm):
+            return
+        try:
+            self.app.connection_manager.set_connection_settings(host, save_mode=wanted)
+        except Exception as exc:  # noqa: BLE001 - shown to the user
+            self.app.notify("error", str(exc) or "BIO CE couldn't change this setting.", title=f"{name}: saving")
+            return
+        self.app.notify("success", f"{name} now uses {wanted} saving.", title=f"{name}: saving")
         self.app.hosts_changed()
 
     def toggle_hooks(self, host: str) -> None:

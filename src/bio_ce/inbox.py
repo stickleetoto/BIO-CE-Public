@@ -18,6 +18,7 @@ the items.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 from bio_ce.control_store import (
     CURATION_CLEANUP_PENDING,
@@ -54,9 +55,13 @@ def inbox_scope(curated: MemoryScope) -> MemoryScope:
 
 def discard_inbox_items(store: SQLiteMemoryStore, control: ControlStore, scope: MemoryScope,
                         memory_ids: list[str] | tuple[str, ...], *, host: str = DESKTOP_HOST,
-                        connection_id: str | None = None) -> DiscardResult:
+                        connection_id: str | None = None, item_id: int | None = None) -> DiscardResult:
+    """Discard now. ``item_id`` carries out an existing proposal instead of recording a new one."""
     ids = sorted(set(memory_ids))
-    item_id = control.open_discard(ids, status=CURATION_CLEANUP_PENDING)
+    if item_id is None:
+        item_id = control.open_discard(ids, status=CURATION_CLEANUP_PENDING)
+    else:
+        control.set_curation_status(item_id, CURATION_CLEANUP_PENDING)
     purged = store.purge(scope, ids)
     control.forget_memories(ids)
     completed = purged.checkpointed and control.checkpoint()
@@ -95,4 +100,68 @@ def finish_pending_cleanups(store: SQLiteMemoryStore, control: ControlStore) -> 
     return len(waiting)
 
 
-__all__ = ["DISCARD_NOTICE", "DiscardResult", "discard_inbox_items", "finish_pending_cleanups", "inbox_scope"]
+def _parse(stamp: str | None) -> datetime | None:
+    if not stamp:
+        return None
+    try:
+        value = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def _stamp(moment: datetime) -> str:
+    return moment.astimezone(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
+@dataclass(frozen=True, slots=True)
+class ExpiryResult:
+    proposed: int
+    discarded: int
+    waiting_cleanup: bool
+
+
+def run_expiry(store: SQLiteMemoryStore, control: ControlStore, *, now: datetime | None = None) -> ExpiryResult:
+    """The daily inbox pass (D7).
+
+    1. Items unused for ``inbox_expire_days`` (last use, or when they were saved) are proposed for discarding,
+       due after ``inbox_wait_days``. Items already waiting are left alone.
+    2. Proposals the user did not answer by their due time are discarded.
+    3. Discards whose final clean-up was blocked earlier are retried.
+    """
+    now = now or datetime.now(timezone.utc)
+    settings = control.inbox_settings()
+    usage = control.inbox_usage()
+    items = store.inbox_items()
+    cutoff = now - timedelta(days=settings["inbox_expire_days"])
+    stale = []
+    for memory_id, _project, _namespace, created_at in items:
+        row = usage.get(memory_id, {})
+        last = _parse(row.get("last_used_at")) or _parse(row.get("first_seen")) or _parse(created_at)
+        if last is not None and last <= cutoff:
+            stale.append(memory_id)
+    proposed = 0
+    if stale and control.propose_discard(stale, due_at=_stamp(now + timedelta(days=settings["inbox_wait_days"]))):
+        proposed = len(stale)
+    where = {memory_id: MemoryScope(project, namespace) for memory_id, project, namespace, _ in items}
+    discarded = 0
+    for item in control.curation_items():
+        due = _parse(item.get("due_at"))
+        if due is None or due > now:
+            continue
+        ids = [memory_id for memory_id in item["memory_ids"] if memory_id in where]
+        by_scope: dict[MemoryScope, list[str]] = {}
+        for memory_id in ids:
+            by_scope.setdefault(where[memory_id], []).append(memory_id)
+        if not by_scope:
+            control.set_curation_status(int(item["item_id"]), CURATION_DISCARDED)
+            continue
+        for scope, scoped in by_scope.items():
+            result = discard_inbox_items(store, control, scope, scoped, item_id=int(item["item_id"]))
+            discarded += result.deleted
+    finish_pending_cleanups(store, control)
+    waiting = bool(control.curation_items(statuses=(CURATION_CLEANUP_PENDING,)))
+    return ExpiryResult(proposed, discarded, waiting)
+
+
+__all__ = ["DISCARD_NOTICE", "ExpiryResult", "run_expiry", "DiscardResult", "discard_inbox_items", "finish_pending_cleanups", "inbox_scope"]

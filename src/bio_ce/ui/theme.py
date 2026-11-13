@@ -263,6 +263,26 @@ class Theme:
             darkcolor=c.accent_text,
             thickness=self.px(3),
         )
+        style.configure(
+            "BIO.TCombobox",
+            fieldbackground=c.surface_alt,
+            background=c.surface_alt,
+            foreground=c.text,
+            arrowcolor=c.text_secondary,
+            bordercolor=c.border_strong,
+            lightcolor=c.surface_alt,
+            darkcolor=c.surface_alt,
+            padding=(self.px(8), self.px(4)),
+        )
+        style.map(
+            "BIO.TCombobox",
+            fieldbackground=[("disabled", c.surface), ("readonly", c.surface_alt)],
+            background=[("disabled", c.surface), ("active", c.surface_active), ("readonly", c.surface_alt)],
+            foreground=[("disabled", c.text_disabled), ("readonly", c.text)],
+            selectbackground=[("readonly", c.surface_alt)],
+            selectforeground=[("readonly", c.text)],
+            arrowcolor=[("disabled", c.text_disabled)],
+        )
         style.configure("BIO.TPanedwindow", background=c.bg)
         style.configure("Sash", sashthickness=self.px(SPACE_M), gripcount=0, background=c.bg, bordercolor=c.bg,
                         lightcolor=c.bg, darkcolor=c.bg)

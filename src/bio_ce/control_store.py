@@ -152,6 +152,11 @@ CREATE TABLE IF NOT EXISTS curation_items (
     due_at TEXT
 );
 CREATE INDEX IF NOT EXISTS curation_items_status ON curation_items (status, due_at);
+CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 SAVE_CURATED = "curated"
 SAVE_COLLECT = "collect"
@@ -163,6 +168,12 @@ CURATION_CLEANUP_PENDING = "cleanup_pending"
 CURATION_DISCARDED = "discarded"
 CURATION_FAILED = "failed"
 RESTORE_KEEP_DAYS = 7
+# Inbox settings (D7, R2-1): defaults and the ranges the user may choose from.
+INBOX_SETTINGS = {
+    "inbox_expire_days": (30, 7, 365),   # unused this long -> proposed for discarding
+    "inbox_wait_days": (7, 1, 30),       # then discarded unless the user keeps it
+    "file_content_limit": (2000, 200, 2000),  # title + content of file-derived text; may only be lowered
+}
 
 
 class ControlStoreError(RuntimeError):
@@ -681,6 +692,81 @@ class ControlStore:
             allowed = (True, True) if self.connection_settings(connection_id)["all_projects"] else (False, False)
         return grant.can_read and allowed[0], grant.can_write and allowed[1]
 
+    # App settings -----------------------------------------------------------
+
+    def inbox_settings(self) -> dict[str, int]:
+        with self._lock:
+            rows = dict(self._connection.execute("SELECT key, value FROM app_settings").fetchall())
+        result = {}
+        for key, (default, low, high) in INBOX_SETTINGS.items():
+            try:
+                value = int(rows.get(key, default))
+            except (TypeError, ValueError):
+                value = default
+            result[key] = min(max(value, low), high)
+        return result
+
+    def set_inbox_setting(self, key: str, value: int) -> int:
+        if key not in INBOX_SETTINGS:
+            raise ValueError("unknown setting")
+        _default, low, high = INBOX_SETTINGS[key]
+        if not low <= int(value) <= high:
+            raise ValueError(f"{key} must be between {low} and {high}")
+        with self._write():
+            self._connection.execute(
+                "INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+                (key, str(int(value)), _now()))
+        return int(value)
+
+    # Inbox usage --------------------------------------------------------------
+
+    def inbox_seen(self, memory_id: str) -> None:
+        with self._write():
+            self._connection.execute(
+                "INSERT OR IGNORE INTO inbox_usage (memory_id, first_seen, hit_count) VALUES (?, ?, 0)",
+                (memory_id, _now()))
+
+    def touch_inbox(self, memory_ids: list[str] | tuple[str, ...]) -> None:
+        """An inbox item was returned to a host or kept by the user: it counts as used now."""
+        ids = sorted(set(memory_ids))
+        if not ids:
+            return
+        stamp = _now()
+        with self._write():
+            for memory_id in ids:
+                self._connection.execute(
+                    "INSERT INTO inbox_usage (memory_id, first_seen, last_used_at, hit_count) VALUES (?, ?, ?, 1) "
+                    "ON CONFLICT(memory_id) DO UPDATE SET last_used_at = excluded.last_used_at, "
+                    "hit_count = inbox_usage.hit_count + 1", (memory_id, stamp, stamp))
+
+    def inbox_usage(self) -> dict[str, dict[str, Any]]:
+        with self._lock:
+            rows = self._connection.execute("SELECT * FROM inbox_usage").fetchall()
+        return {row["memory_id"]: dict(row) for row in rows}
+
+    def propose_discard(self, memory_ids: list[str] | tuple[str, ...], *, due_at: str) -> int | None:
+        """Add a pending discard for items not already waiting; None when every item already waits."""
+        waiting = {memory_id for item in self.curation_items(statuses=(CURATION_PENDING, CURATION_CLEANUP_PENDING))
+                   for memory_id in item["memory_ids"]}
+        fresh = sorted(set(memory_ids) - waiting)
+        if not fresh:
+            return None
+        return self.open_discard(fresh, status=CURATION_PENDING, due_at=due_at)
+
+    def keep_items(self, item_id: int) -> list[str]:
+        """The user keeps a proposed discard: nothing is deleted and the items count as used today."""
+        items = [item for item in self.curation_items() if int(item["item_id"]) == int(item_id)]
+        if not items:
+            raise ControlStoreError("That clean-up item was already handled.")
+        self.set_curation_status(item_id, CURATION_KEPT)
+        self.touch_inbox(items[0]["memory_ids"])
+        return list(items[0]["memory_ids"])
+
+    def pending_cleanup_count(self) -> int:
+        """Inbox items proposed for discarding and waiting for the user."""
+        return sum(len(item["memory_ids"]) for item in self.curation_items())
+
     # Inbox clean-up ---------------------------------------------------------
 
     def open_discard(self, memory_ids: list[str] | tuple[str, ...], *, status: str = CURATION_CLEANUP_PENDING,
@@ -697,6 +783,9 @@ class ControlStore:
             return int(cursor.lastrowid)
 
     def set_curation_status(self, item_id: int, status: str) -> None:
+        if status not in (CURATION_PENDING, CURATION_KEPT, CURATION_CLEANUP_PENDING, CURATION_DISCARDED,
+                          CURATION_FAILED):
+            raise ValueError("invalid clean-up status")
         with self._write():
             self._connection.execute(
                 "UPDATE curation_items SET status = ?, decided_at = ? WHERE item_id = ?", (status, _now(), item_id)
@@ -867,6 +956,7 @@ def _review(row: sqlite3.Row) -> ReviewItem:
 
 __all__ = [
     "AccessDenied",
+    "INBOX_SETTINGS",
     "SAVE_MODES",
     "SAVE_CURATED",
     "SAVE_COLLECT",

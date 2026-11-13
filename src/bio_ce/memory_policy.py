@@ -41,6 +41,11 @@ CHANGE_TYPES = {
     "conflict": "Information disagrees with the stored fact and it is unclear which is right",
 }
 TRUSTED_EVIDENCE = ("user_stated", "user_confirmed")
+# Collect mode also takes the assistant's inferences (marked as such) and, when the user asked for it, content from
+# a file or page. Tool output is never collected.
+COLLECT_EVIDENCE = ("user_stated", "user_confirmed", "inferred", "external_content")
+FILE_CONTENT_LIMIT = 2000  # title + content of file-derived text; a setting may lower it, never raise it
+MIN_FILE_CONTENT_LIMIT = 200
 DUPLICATE_THRESHOLD = 0.82
 MIN_CONTENT_CHARS = 12
 
@@ -158,13 +163,15 @@ class PreparedText:
     absolute_paths: bool = False
 
 
-def prepare_text(title: str, content: str, *, profile: str | None) -> PreparedText:
-    """The fixed order for every write: secrets, then instructions, then paths.
+def prepare_text(title: str, content: str, *, profile: str | None, size_limit: int | None = None) -> PreparedText:
+    """The fixed order for every write: secrets, then instructions, then size, then paths.
 
     1. Secrets on the original text: refused in every mode and space.
     2. Instructions aimed at an AI assistant: refused.
-    3. The user's profile folder becomes %USERPROFILE%, and other users' profile folders lose the user name.
-    4. Any absolute path left is a personal path: the write goes to the user's review queue, not to storage.
+    3. Size (only for file-derived text, ``size_limit``): too long is refused with "summarize and save again";
+       BIO CE never cuts text itself.
+    4. The user's profile folder becomes %USERPROFILE%, and other users' profile folders lose the user name.
+    5. Any absolute path left is a personal path: the write goes to the user's review queue, not to storage.
     """
     secrets_found = detect_secrets(title, content)
     if secrets_found:
@@ -173,6 +180,10 @@ def prepare_text(title: str, content: str, *, profile: str | None) -> PreparedTe
             secret_kinds=secrets_found))
     if detect_injection(title, content):
         return PreparedText(title, content, Decision(REJECT, ("the text contains instructions aimed at an AI assistant",)))
+    if size_limit is not None and len(title or "") + len(content or "") > size_limit:
+        return PreparedText(title, content, Decision(REJECT, (
+            f"text taken from a file or page can be at most {size_limit} characters (title and content together); "
+            "summarize the part the user asked for and save again",)))
     new_title, changed_title = redact_profile_paths(title, profile)
     new_content, changed_content = redact_profile_paths(content, profile)
     # Profile folders already reduced to X:\Users\<user>\... carry no user name, so they are not "left over".
@@ -251,6 +262,53 @@ def decide_create(
     return Decision(STORE, ("user-stated durable information",))
 
 
+def decide_collect(
+    *,
+    title: str,
+    content: str,
+    category: str,
+    confidence: str,
+    evidence: str,
+    reason: str,
+    existing: tuple[tuple[str, str], ...] = (),
+) -> Decision:
+    """Collect mode: what may go into the inbox. STORE here means "store in the inbox", never curated.
+
+    Secrets and injected instructions are refused as in curated mode. Guesses (evidence "inferred") are allowed and
+    marked; text from a file or page only when ``reason`` says the user asked for it. Tool output is refused.
+    """
+    secrets_found = detect_secrets(title, content)
+    if secrets_found:
+        return Decision(REJECT, ("secrets and sensitive identifiers are never stored (" + ", ".join(secrets_found)
+                                 + ")",), secret_kinds=secrets_found)
+    if evidence not in EVIDENCE:
+        return Decision(REJECT, (f"evidence must be one of: {', '.join(EVIDENCE)}",))
+    if confidence not in CONFIDENCE:
+        return Decision(REJECT, (f"confidence must be one of: {', '.join(CONFIDENCE)}",))
+    if evidence not in COLLECT_EVIDENCE:
+        return Decision(REJECT, ("tool output is not stored; the user must state or confirm it",))
+    if evidence == "external_content" and len((reason or "").strip()) < 8:
+        return Decision(REJECT, ("text from a file or page is collected only when the user asked for it; say so in "
+                                 "reason",))
+    if detect_injection(title, content):
+        return Decision(REJECT, ("the text contains instructions aimed at an AI assistant",))
+    if category not in CATEGORIES:
+        return Decision(REJECT, (f"category must be one of: {', '.join(CATEGORIES)}",))
+    if confidence == "low":
+        return Decision(REJECT, ("low-confidence guesses are not stored",))
+    if _TRIVIAL.match(content or "") or len((content or "").strip()) < MIN_CONTENT_CHARS:
+        return Decision(REJECT, ("too short or trivial to be a lasting memory",))
+    if (content or "").rstrip().endswith(("?", "？")):
+        return Decision(REJECT, ("a question is not a lasting fact; store the answer the user confirmed instead",))
+    candidate = f"{title}\n{content}"
+    for memory_id, text in existing:
+        if similarity(candidate, text) >= DUPLICATE_THRESHOLD or normalize(content) in normalize(text):
+            return Decision(DUPLICATE, ("an equivalent memory already exists",), duplicate_of=memory_id)
+    if _CREDENTIAL_WORDS.search(f"{title} {content}"):
+        return Decision(REVIEW, ("mentions credentials or sensitive identifiers",))
+    return Decision(STORE, ("collected in the inbox" + (" (marked as a guess)" if evidence == "inferred" else ""),))
+
+
 def decide_update(
     *,
     title: str,
@@ -326,7 +384,11 @@ POLICY_TEXT = """BIO CE memory policy (enforced by the BIO CE server):
 __all__ = [
     "CATEGORIES",
     "CHANGE_TYPES",
+    "COLLECT_EVIDENCE",
     "CONFIDENCE",
+    "FILE_CONTENT_LIMIT",
+    "MIN_FILE_CONTENT_LIMIT",
+    "decide_collect",
     "DUPLICATE",
     "Decision",
     "EVIDENCE",

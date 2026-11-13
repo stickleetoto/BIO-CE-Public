@@ -5,8 +5,9 @@
 
 The only direct desktop-service calls allowed in ``bio_ce.ui`` are the
 Community-only operations that the contract never routes to another engine
-(backup, restore, review decisions) and closing the service. Each of them is
-gated by a capability in the UI.
+(backup, restore, review decisions, and since v0.4.2 the inbox and the space
+picker) and closing the service. Each of them is gated by a capability in the
+UI: the inbox by the review action, the space picker by browse.
 """
 
 from __future__ import annotations
@@ -17,7 +18,11 @@ from pathlib import Path
 
 
 UI = Path(__file__).resolve().parents[2] / "src" / "bio_ce" / "ui"
-ALLOWED_SERVICE_CALLS = {"create_backup", "restore_backup", "approve_review", "reject_review", "close"}
+ALLOWED_SERVICE_CALLS = {
+    "create_backup", "restore_backup", "approve_review", "reject_review", "close",
+    # v0.4.2 inbox and spaces (Community-only, like the review queue)
+    "inbox", "similar_curated", "move_inbox", "discard_inbox", "discard_proposal", "run_inbox_expiry", "use_space",
+}
 
 
 class EngineBoundaryTests(unittest.TestCase):

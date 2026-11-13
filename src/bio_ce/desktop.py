@@ -36,6 +36,8 @@ from bio_ce.storage.backup import (
     remove_sqlite_sidecars,
     stage_restore,
 )
+from bio_ce.inbox import discard_inbox_items, finish_pending_cleanups, inbox_scope, run_expiry
+from bio_ce.memory_policy import DUPLICATE_THRESHOLD, detect_secrets, normalize, similarity
 from bio_ce.storage.sqlite_store import SQLiteMemoryStore
 from bio_ce.ui.app import BIOCEDesktop
 from bio_ce.ui.dialogs import ask_privacy_consent
@@ -190,6 +192,68 @@ class DesktopMemoryService:
 
     def reject_review(self, control: ControlStore, review_id: int) -> None:
         ReviewService(self._store, control, self.scope).reject(review_id)
+
+    # Spaces and the inbox -------------------------------------------------
+
+    def use_space(self, curated: MemoryScope) -> None:
+        """Show and edit memories of another space (General or a project space)."""
+        self.scope = curated
+
+    def inbox(self, *, limit: int = 500) -> tuple[MemoryRevision, ...]:
+        return self._store.list_current(inbox_scope(self.scope), limit=limit)
+
+    def read_inbox(self, memory_id: str) -> MemoryRevision:
+        return self._store.read(inbox_scope(self.scope), memory_id)
+
+    def similar_curated(self, title: str, content: str) -> MemoryRevision | None:
+        """A curated memory in this space that says nearly the same, to update instead of adding a copy."""
+        candidate = f"{title}\n{content}"
+        for hit in self._store.search(self.scope, candidate[:4000], limit=5):
+            revision = self._store.read(self.scope, hit.memory_id)
+            text = f"{revision.title}\n{revision.content or ''}"
+            if similarity(candidate, text) >= DUPLICATE_THRESHOLD or normalize(content) in normalize(text):
+                return revision
+        return None
+
+    def move_inbox(self, control: ControlStore, memory_id: str, *, title: str, content: str,
+                   update: MemoryRevision | None = None) -> MemoryRevision:
+        """Make an inbox item a curated memory (or update ``update`` with it), then discard the inbox copy."""
+        if detect_secrets(title, content):
+            raise ValueError("This text contains a password, token, or key, so BIO CE won't store it.")
+        source = SourceProvenance("user-entered", "bio-ce-inbox", {"from_inbox": memory_id})
+        if update is not None:
+            revision = self._store.revise(self.scope, update.memory_id, expected_revision_id=update.revision_id,
+                                          title=title, content=content, source=source)
+        else:
+            revision = self._store.add(self.scope, title=title, content=content, source=source)
+        discard_inbox_items(self._store, control, inbox_scope(self.scope), [memory_id])
+        control.record(host="bio-ce-desktop", connection_id=None, action="inbox-move", outcome="moved",
+                       memory_id=revision.memory_id, revision_id=revision.revision_id, title=title,
+                       detail={"project": self.scope.project})
+        return revision
+
+    def discard_inbox(self, control: ControlStore, memory_ids: list[str], *, item_id: int | None = None):
+        return discard_inbox_items(self._store, control, inbox_scope(self.scope), memory_ids, item_id=item_id)
+
+    def discard_proposal(self, control: ControlStore, item: dict) -> int:
+        """Carry out one clean-up proposal now, across whatever spaces its items are in."""
+        where = {memory_id: MemoryScope(project, namespace)
+                 for memory_id, project, namespace, _created in self._store.inbox_items()}
+        by_scope: dict[MemoryScope, list[str]] = {}
+        for memory_id in item["memory_ids"]:
+            if memory_id in where:
+                by_scope.setdefault(where[memory_id], []).append(memory_id)
+        if not by_scope:
+            control.set_curation_status(int(item["item_id"]), "discarded")
+            return 0
+        return sum(discard_inbox_items(self._store, control, scope, ids, item_id=int(item["item_id"])).deleted
+                   for scope, ids in by_scope.items())
+
+    def run_inbox_expiry(self, control: ControlStore):
+        return run_expiry(self._store, control)
+
+    def finish_cleanups(self, control: ControlStore) -> int:
+        return finish_pending_cleanups(self._store, control)
 
     def create_backup(self, destination: str | Path) -> Path:
         """Memory snapshot X.sqlite3 plus the connection records X.control.sqlite3 beside it."""

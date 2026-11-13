@@ -27,12 +27,13 @@ from bio_ce.engine.external import ExternalEngineAdapter
 from bio_ce.engine.presentation import ActionState, EngineBanner, action_states, banner, engine_name
 from bio_ce.engine.switching import DEFAULT_SELECTION, EngineSelection, SwitchPhase
 from bio_ce.storage.backup import PAIR_MATCHED, BackupError, pair_path
-from bio_ce.ui.dialogs import ConfirmDialog, NameDialog
+from bio_ce.ui.dialogs import ConfirmDialog, NameDialog, ReviewEditDialog
 from bio_ce.ui.format import preview
 from bio_ce.ui.pages import Page
 from bio_ce.ui.pages.connections import ConnectionsPage
 from bio_ce.ui.pages.dashboard import DashboardPage
 from bio_ce.ui.pages.editor import EditorPage
+from bio_ce.ui.pages.inbox import InboxPage
 from bio_ce.ui.pages.memories import MemoriesPage
 from bio_ce.ui.pages.settings import SettingsPage
 from bio_ce.ui.tasks import TaskRunner
@@ -143,7 +144,10 @@ class BIOCEDesktop:
                                pack_options={"fill": "x", "padx": gutter, "pady": (0, self.theme.px(SPACE_L))})
 
         self.dashboard = DashboardPage(self, self.page_host)
+        self._space_id = "general"
+        self._maintenance_after: str | None = None
         self.memories = MemoriesPage(self, self.page_host)
+        self.inbox = InboxPage(self, self.page_host)
         self.editor = EditorPage(self, self.page_host)
         self.connections = ConnectionsPage(self, self.page_host)
         self.settings = SettingsPage(self, self.page_host)
@@ -153,7 +157,7 @@ class BIOCEDesktop:
             "connections": self.connections,
             "settings": self.settings,
         }
-        self._routes: dict[str, Page] = dict(self.pages, editor=self.editor)
+        self._routes: dict[str, Page] = dict(self.pages, editor=self.editor, inbox=self.inbox)
 
         self._bind_shortcuts()
         root.bind("<Configure>", self._on_resize, add="+")
@@ -161,6 +165,7 @@ class BIOCEDesktop:
         self.show_page("dashboard")
         self._apply_compact(root.winfo_width() < self.theme.px(SIDEBAR_COMPACT_BELOW))
         apply_window_chrome(root, c)
+        self._maintenance_after = root.after(5000, self.inbox_maintenance)
 
     # Layout ---------------------------------------------------------------
 
@@ -429,9 +434,10 @@ class BIOCEDesktop:
 
     def data_changed(self, select: str | None = None) -> None:
         """Mark pages stale after a write and refresh the visible one."""
-        for page in (self.dashboard, self.memories, self.settings):
+        for page in (self.dashboard, self.memories, self.settings, self.inbox):
             page.stale = True
-        if self.current in (self.dashboard, self.memories, self.settings):
+        self.refresh_badges()
+        if self.current in (self.dashboard, self.memories, self.settings, self.inbox):
             if self.current is self.memories:
                 self.memories.refresh(select=select)
             else:
@@ -447,13 +453,102 @@ class BIOCEDesktop:
         except Exception:  # noqa: BLE001 - a count must never break the window
             return None
 
+    def pending_cleanup_count(self) -> int | None:
+        """Inbox items proposed for discarding, or None when the control database cannot be read."""
+        control = getattr(self.connection_manager, "control", None)
+        if control is None:
+            return None
+        try:
+            return int(control.pending_cleanup_count())
+        except Exception:  # noqa: BLE001 - a count must never break the window
+            return None
+
     def refresh_badges(self) -> None:
         reviews = self.pending_review_count()
+        cleanup = self.pending_cleanup_count()
         if "connections" in self.nav:
             self.nav["connections"].set_badge(reviews or 0)
+        if "memories" in self.nav:
+            self.nav["memories"].set_badge(cleanup or 0)
         dashboard = getattr(self, "dashboard", None)
         if dashboard is not None:
-            dashboard.show_review_count(reviews)
+            dashboard.show_review_count(reviews, cleanup)
+
+    # Spaces and the inbox -------------------------------------------------
+
+    def spaces(self) -> tuple:
+        control = getattr(self.connection_manager, "control", None)
+        if control is None:
+            return ()
+        try:
+            return control.spaces()
+        except Exception:  # noqa: BLE001
+            return ()
+
+    def current_space(self):
+        return next((space for space in self.spaces() if space.space_id == self._space_id), None)
+
+    def set_space(self, space_id: str) -> None:
+        """Show another space on the Memories and Inbox pages; new memories go there too."""
+        space = next((item for item in self.spaces() if item.space_id == space_id), None)
+        if space is None or space_id == self._space_id or not self.require_action("browse"):
+            return
+        if self.current is self.editor and not self.editor.confirm_leave():
+            return
+        self._space_id = space_id
+        self.service.use_space(space.curated)
+        self.memories.selected = None
+        self.data_changed()
+
+    def inbox_count(self) -> int:
+        try:
+            return len(self.service.inbox())
+        except Exception:  # noqa: BLE001
+            return 0
+
+    def cleanup_proposals(self) -> tuple:
+        control = getattr(self.connection_manager, "control", None)
+        if control is None:
+            return ()
+        try:
+            return control.curation_items()
+        except Exception:  # noqa: BLE001
+            return ()
+
+    def edit_before_saving(self, *, title: str, content: str, reason: str) -> tuple[str, str] | None:
+        return ReviewEditDialog(self.root, self.theme, title=title, content=content, reason=reason).ask()
+
+    def inbox_maintenance(self) -> None:
+        """Daily inbox pass (expiry proposals, due discards); every two minutes while a clean-up waits."""
+        self._maintenance_after = None
+        control = getattr(self.connection_manager, "control", None) if self.allowed("review").enabled else None
+        delay = 24 * 60 * 60 * 1000
+        if control is not None:
+            try:
+                result = self.service.run_inbox_expiry(control)
+            except Exception:  # noqa: BLE001 - retried on the next pass
+                result = None
+            if result is not None:
+                if result.proposed:
+                    self.notify("info", f"{result.proposed} inbox item(s) went unused for a while and are proposed "
+                                "for discarding. Keep the ones you want on the Inbox tab.", title="Inbox clean-up",
+                                action=("Open inbox", lambda: self.show_page("inbox")))
+                if result.proposed or result.discarded:
+                    self.data_changed()
+                if result.waiting_cleanup:
+                    delay = 2 * 60 * 1000
+        try:
+            self._maintenance_after = self.root.after(delay, self.inbox_maintenance)
+        except tk.TclError:
+            pass
+
+    def schedule_cleanup_retry(self) -> None:
+        if self._maintenance_after is not None:
+            try:
+                self.root.after_cancel(self._maintenance_after)
+            except tk.TclError:
+                pass
+        self._maintenance_after = self.root.after(2 * 60 * 1000, self.inbox_maintenance)
 
     def hosts_changed(self) -> None:
         self.refresh_badges()
@@ -668,6 +763,11 @@ class BIOCEDesktop:
             try:
                 backend.close()  # the Community adapter leaves the service to the line below
             except Exception:
+                pass
+        if self._maintenance_after is not None:
+            try:
+                self.root.after_cancel(self._maintenance_after)
+            except tk.TclError:
                 pass
         self.service.close()
         closer = getattr(self.connection_manager, "close", None)

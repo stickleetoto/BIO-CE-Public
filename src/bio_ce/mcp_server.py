@@ -325,7 +325,8 @@ def create_mcp_server(
         try:
             resolution = resolve(space, project, namespace, write=True)
             writer = access.writer(database_path, _curated(resolution, scope))
-            return {**action(writer), **_space_fields(resolution, access)}
+            result = action(writer)
+            return {**_space_fields(resolution, access), **result}
         except AccessDenied as exc:
             raise ToolError(str(exc)) from None
         except MemoryNotFoundError:
@@ -336,11 +337,33 @@ def create_mcp_server(
             _logger.error("%s storage error", name)
             raise ToolError("Memory storage is unavailable; nothing was changed.") from None
 
+    def touch(memory_ids: list[str]) -> None:
+        """Record that inbox items were used; a failure here never blocks the answer."""
+        control_store = access.control
+        if control_store is None or not memory_ids:
+            return
+        try:
+            control_store.touch_inbox(memory_ids)
+        except Exception:  # noqa: BLE001
+            _logger.warning("inbox usage not recorded")
+
+    def find(target: MemoryScope, resolution: Resolution, action: Callable[[MemoryScope], _T]) -> tuple[_T, str]:
+        """Run a read in the curated scope, then in the space's inbox; returns the result and its stage."""
+        try:
+            return action(target), "curated"
+        except MemoryNotFoundError:
+            if resolution.space.space_id == "bound":
+                raise
+            return action(resolution.space.inbox), "inbox"
+
     @server.tool()
     def bio_memory_search(
         query: str,
         limit: Annotated[int, Field(ge=1, le=50)] = 10,
         space: OptionalSpace = None,
+        include_inbox: Annotated[bool, Field(description=(
+            "Also search the inbox (collected, not yet sorted by the user). Inbox results come after curated "
+            "ones and are marked stage 'inbox'."))] = False,
         project: OptionalProject = None,
         namespace: OptionalNamespace = None,
     ) -> dict[str, Any]:
@@ -348,11 +371,17 @@ def create_mcp_server(
         resolution = guarded_read("bio_memory_search", lambda: resolve(space, project, namespace, write=False))
         target = _curated(resolution, scope)
         hits = guarded_read("bio_memory_search", lambda: store.search(target, query, limit=limit))
+        results = [{**_search_hit_dict(hit), "stage": "curated"} for hit in hits]
+        if include_inbox and resolution.space.space_id != "bound" and len(results) < limit:
+            inbox_hits = guarded_read("bio_memory_search", lambda: store.search(
+                resolution.space.inbox, query, limit=limit - len(results)))
+            results += [{**_search_hit_dict(hit), "stage": "inbox"} for hit in inbox_hits]
+            touch([hit.memory_id for hit in inbox_hits])
         return {
             "project": target.project,
             "namespace": target.namespace,
             **_space_fields(resolution, access),
-            "results": [_search_hit_dict(hit) for hit in hits],
+            "results": results,
         }
 
     @server.tool()
@@ -366,10 +395,11 @@ def create_mcp_server(
         """Read one memory (its current revision unless revision_id is given)."""
         resolution = guarded_read("bio_memory_read", lambda: resolve(space, project, namespace, write=False))
         target = _curated(resolution, scope)
-        revision = guarded_read(
-            "bio_memory_read", lambda: store.read(target, memory_id, revision_id=revision_id)
-        )
-        return {**_revision_dict(revision), **_space_fields(resolution, access)}
+        revision, stage = guarded_read("bio_memory_read", lambda: find(
+            target, resolution, lambda where: store.read(where, memory_id, revision_id=revision_id)))
+        if stage == "inbox":
+            touch([memory_id])
+        return {**_revision_dict(revision), **_space_fields(resolution, access), **_stage(stage, access)}
 
     @server.tool()
     def bio_memory_history(
@@ -381,8 +411,9 @@ def create_mcp_server(
         """List every revision of a current memory, oldest first, with its source."""
         resolution = guarded_read("bio_memory_history", lambda: resolve(space, project, namespace, write=False))
         target = _curated(resolution, scope)
-        revisions = guarded_read("bio_memory_history", lambda: store.history(target, memory_id))
-        return {"memory_id": memory_id, **_space_fields(resolution, access),
+        revisions, stage = guarded_read("bio_memory_history", lambda: find(
+            target, resolution, lambda where: store.history(where, memory_id)))
+        return {"memory_id": memory_id, **_space_fields(resolution, access), **_stage(stage, access),
                 "revisions": [_revision_dict(revision) for revision in revisions]}
 
     @server.tool()
@@ -519,6 +550,10 @@ def _readable(access: "_Access") -> bool:
         return control.grant(access.connection_id).can_read
     except (ControlStoreError, sqlite3.Error):
         return False
+
+
+def _stage(stage: str, access: "_Access") -> dict[str, Any]:
+    return {} if access.control is None else {"stage": stage}
 
 
 def _curated(resolution: Resolution, bound: MemoryScope) -> MemoryScope:

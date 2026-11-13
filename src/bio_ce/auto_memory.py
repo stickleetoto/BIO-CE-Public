@@ -13,7 +13,7 @@ the review queue, and every outcome is written to the audit log.
 from __future__ import annotations
 
 import os
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +25,7 @@ from bio_ce.control_store import (
     REVIEW_FAILED,
     REVIEW_PENDING,
     REVIEW_REJECTED,
+    SAVE_COLLECT,
     ReviewItem,
 )
 from bio_ce.core.models import (
@@ -41,13 +42,15 @@ from bio_ce.memory_policy import (
     REVIEW,
     STORE,
     Decision,
+    CHANGE_TYPES,
+    decide_collect,
     decide_create,
     decide_update,
     detect_secrets,
     normalize,
     prepare_text,
 )
-from bio_ce.storage.sqlite_store import SQLiteMemoryStore
+from bio_ce.storage.sqlite_store import INBOX_SUFFIX, SQLiteMemoryStore
 
 
 AUTO_SOURCE_TYPE = "ai-auto-memory"
@@ -86,12 +89,18 @@ class AutoMemoryWriter:
         reason: str = "",
     ) -> dict[str, Any]:
         host = self._authorize_write()
-        prepared = prepare_text(title, content, profile=os.environ.get("USERPROFILE"))
+        collect = self._collecting()
+        limit = self.control.inbox_settings()["file_content_limit"] if collect and evidence == "external_content" \
+            else None
+        prepared = prepare_text(title, content, profile=os.environ.get("USERPROFILE"), size_limit=limit)
         if prepared.rejection is not None:
             detail = self._detail(category=category, confidence=confidence, evidence=evidence, reason=reason,
                                   decision=prepared.rejection.summary)
             return self._rejected(host, "create", prepared.rejection, title, detail)
         title, content = prepared.title, prepared.content
+        if collect:
+            return self._collect_create(host, prepared, category=category, confidence=confidence,
+                                        evidence=evidence, reason=reason)
         store = SQLiteMemoryStore(self.database)
         try:
             existing = self._similar(store, f"{title}\n{content}")
@@ -145,6 +154,11 @@ class AutoMemoryWriter:
                                   decision=prepared.rejection.summary, previous_revision_id=expected_revision_id)
             return self._rejected(host, "update", prepared.rejection, title, detail, memory_id=memory_id)
         title, content = prepared.title, prepared.content
+        collect = self._collecting()
+        if collect and self._in_inbox(memory_id):
+            return self._collect_update(host, prepared, memory_id=memory_id,
+                                        expected_revision_id=expected_revision_id, change_type=change_type,
+                                        confidence=confidence, evidence=evidence, reason=reason)
         store = SQLiteMemoryStore(self.database)
         try:
             current = store.read(self.scope, memory_id)
@@ -160,6 +174,9 @@ class AutoMemoryWriter:
             )
             if decision.action == STORE and prepared.absolute_paths:
                 decision = Decision(REVIEW, (PERSONAL_PATH_REASON,))
+            if decision.action == STORE and collect:
+                decision = Decision(REVIEW, ("in collect mode, changes to curated memories wait for the user's "
+                                             "review",))
             detail = self._detail(change_type=change_type, confidence=confidence, evidence=evidence, reason=reason,
                                   decision=decision.summary, previous_revision_id=expected_revision_id,
                                   paths_redacted=prepared.paths_redacted)
@@ -193,8 +210,15 @@ class AutoMemoryWriter:
                                "revision_number": revision.revision_number}, prepared)
 
     def request_retract(self, *, memory_id: str, expected_revision_id: str, reason: str = "") -> dict[str, Any]:
-        """Automatic retraction is disabled; the request waits for the user."""
+        """Automatic retraction is disabled; the request waits for the user.
+
+        In collect mode an inbox item is added to the discard proposals instead: the user keeps or discards it in
+        BIO CE, and without an answer it is discarded when the waiting period ends.
+        """
         host = self._authorize_write()
+        if self._collecting() and self._in_inbox(memory_id):
+            return self._collect_retract(host, memory_id=memory_id, expected_revision_id=expected_revision_id,
+                                         reason=reason)
         store = SQLiteMemoryStore(self.database, read_only=True)
         try:
             current = store.read(self.scope, memory_id)
@@ -207,6 +231,134 @@ class AutoMemoryWriter:
         detail = self._detail(reason=reason)
         return self._queue(host, "retract", current.title, None, "retraction always needs the user's approval",
                            detail, memory_id=memory_id, expected_revision_id=expected_revision_id)
+
+    # Collect mode -----------------------------------------------------------
+
+    @property
+    def inbox(self) -> MemoryScope:
+        return MemoryScope(self.scope.project, self.scope.namespace + INBOX_SUFFIX)
+
+    def _collecting(self) -> bool:
+        return self.control.connection_settings(self.connection_id)["save_mode"] == SAVE_COLLECT
+
+    def _in_inbox(self, memory_id: str) -> bool:
+        store = SQLiteMemoryStore(self.database, read_only=True)
+        try:
+            store.read(self.inbox, memory_id)
+            return True
+        except (MemoryNotFoundError, ValueError):
+            return False
+        finally:
+            store.close()
+
+    def _collect_create(self, host: str, prepared, *, category: str, confidence: str, evidence: str,
+                        reason: str) -> dict[str, Any]:
+        title, content = prepared.title, prepared.content
+        store = SQLiteMemoryStore(self.database)
+        try:
+            existing = self._similar(store, f"{title}\n{content}") + self._similar(store, f"{title}\n{content}",
+                                                                                   scope=self.inbox)
+            decision = decide_collect(title=title, content=content, category=category, confidence=confidence,
+                                      evidence=evidence, reason=reason, existing=existing)
+            if decision.action == STORE and prepared.absolute_paths:
+                decision = Decision(REVIEW, (PERSONAL_PATH_REASON,))
+            detail = self._detail(category=category, confidence=confidence, evidence=evidence, reason=reason,
+                                  decision=decision.summary, paths_redacted=prepared.paths_redacted, stage="inbox")
+            if decision.action == REJECT:
+                return self._rejected(host, "create", decision, title, detail)
+            if decision.action == DUPLICATE:
+                self.control.record(host=host, connection_id=self.connection_id, action="create",
+                                    outcome="duplicate", memory_id=decision.duplicate_of, title=title, detail=detail)
+                stage = "inbox" if self._in_inbox(decision.duplicate_of) else "curated"
+                current = store.read(self.inbox if stage == "inbox" else self.scope, decision.duplicate_of)
+                return {"status": "duplicate", "memory_id": current.memory_id, "revision_id": current.revision_id,
+                        "stage": stage, "reasons": list(decision.reasons)}
+            self._check_rate(host)
+            if decision.action == REVIEW:
+                return self._redacted(self._queue(host, "create", title, content, decision.summary, detail,
+                                                  scope=self.inbox), prepared)
+            source = self._source(category, confidence, evidence, reason, stage="inbox",
+                                  guess=evidence == "inferred")
+            revision = store.add(self.inbox, title=title, content=content, source=source)
+        finally:
+            store.close()
+        self.control.inbox_seen(revision.memory_id)
+        self.control.record(host=host, connection_id=self.connection_id, action="create", outcome="created",
+                            memory_id=revision.memory_id, revision_id=revision.revision_id, title=title,
+                            detail=detail)
+        return self._redacted({"status": "created", "stage": "inbox", "memory_id": revision.memory_id,
+                               "revision_id": revision.revision_id, "revision_number": revision.revision_number,
+                               "message": "Saved in the inbox. The user sorts the inbox in BIO CE."}, prepared)
+
+    def _collect_update(self, host: str, prepared, *, memory_id: str, expected_revision_id: str, change_type: str,
+                        confidence: str, evidence: str, reason: str) -> dict[str, Any]:
+        title, content = prepared.title, prepared.content
+        store = SQLiteMemoryStore(self.database)
+        try:
+            current = store.read(self.inbox, memory_id)
+            if current.revision_id != expected_revision_id:
+                return {"status": "conflict", "memory_id": memory_id, "current_revision_id": current.revision_id,
+                        "stage": "inbox", "reasons": ["the memory changed since it was read; read it again and retry"]}
+            if change_type not in CHANGE_TYPES:
+                decision = Decision(REJECT, (f"change_type must be one of: {', '.join(CHANGE_TYPES)}",))
+            else:
+                decision = decide_collect(title=title, content=content, category="work_context",
+                                          confidence=confidence, evidence=evidence, reason=reason)
+            if decision.action == STORE and normalize(f"{title}\n{content}") == normalize(
+                    f"{current.title}\n{current.content or ''}"):
+                decision = Decision(DUPLICATE, ("the memory already says this",))
+            if decision.action == STORE and prepared.absolute_paths:
+                decision = Decision(REVIEW, (PERSONAL_PATH_REASON,))
+            detail = self._detail(change_type=change_type, confidence=confidence, evidence=evidence, reason=reason,
+                                  decision=decision.summary, previous_revision_id=expected_revision_id,
+                                  paths_redacted=prepared.paths_redacted, stage="inbox")
+            if decision.action == REJECT:
+                return self._rejected(host, "update", decision, title, detail, memory_id=memory_id)
+            if decision.action == DUPLICATE:
+                return {"status": "unchanged", "memory_id": memory_id, "revision_id": current.revision_id,
+                        "stage": "inbox", "reasons": list(decision.reasons)}
+            self._check_rate(host)
+            if decision.action == REVIEW:
+                return self._redacted(self._queue(host, "update", title, content, decision.summary, detail,
+                                                  memory_id=memory_id, expected_revision_id=expected_revision_id,
+                                                  scope=self.inbox), prepared)
+            try:
+                revision = store.revise(self.inbox, memory_id, expected_revision_id=expected_revision_id, title=title,
+                                        content=content, source=self._source(change_type, confidence, evidence,
+                                                                             reason, stage="inbox",
+                                                                             guess=evidence == "inferred"))
+            except RevisionConflictError:
+                return {"status": "conflict", "memory_id": memory_id, "stage": "inbox",
+                        "reasons": ["the memory changed while saving; read it again and retry"]}
+        finally:
+            store.close()
+        self.control.touch_inbox([memory_id])
+        self.control.record(host=host, connection_id=self.connection_id, action="update", outcome="updated",
+                            memory_id=memory_id, revision_id=revision.revision_id, title=title, detail=detail)
+        return self._redacted({"status": "updated", "stage": "inbox", "memory_id": memory_id,
+                               "revision_id": revision.revision_id, "revision_number": revision.revision_number},
+                              prepared)
+
+    def _collect_retract(self, host: str, *, memory_id: str, expected_revision_id: str, reason: str) -> dict[str, Any]:
+        store = SQLiteMemoryStore(self.database, read_only=True)
+        try:
+            current = store.read(self.inbox, memory_id)
+        finally:
+            store.close()
+        if current.revision_id != expected_revision_id:
+            return {"status": "conflict", "memory_id": memory_id, "current_revision_id": current.revision_id,
+                    "stage": "inbox", "reasons": ["the memory changed since it was read; read it again and retry"]}
+        self._check_rate(host)
+        wait = self.control.inbox_settings()["inbox_wait_days"]
+        due = (datetime.now(timezone.utc) + timedelta(days=wait)).isoformat(timespec="microseconds").replace(
+            "+00:00", "Z")
+        item_id = self.control.propose_discard([memory_id], due_at=due)
+        self.control.record(host=host, connection_id=self.connection_id, action="retract", outcome="queued",
+                            memory_id=memory_id, title=current.title,
+                            detail=self._detail(reason=reason, stage="inbox", discard_item=item_id))
+        return {"status": "discard_proposed", "stage": "inbox", "memory_id": memory_id,
+                "message": f"The user sees this in BIO CE's inbox clean-up. Unless they keep it, it is discarded in "
+                           f"{wait} days."}
 
     # Helpers ----------------------------------------------------------------
 
@@ -228,25 +380,29 @@ class AutoMemoryWriter:
             self.control.record(host=host, connection_id=self.connection_id, action="write", outcome="rate-limited")
             raise AccessDenied("Too many automatic memory changes in the last hour; BIO CE paused writes for now.")
 
-    def _similar(self, store: SQLiteMemoryStore, text: str) -> tuple[tuple[str, str], ...]:
-        hits = store.search(self.scope, text[:4000], limit=5)
+    def _similar(self, store: SQLiteMemoryStore, text: str,
+                 scope: MemoryScope | None = None) -> tuple[tuple[str, str], ...]:
+        scope = scope or self.scope
+        hits = store.search(scope, text[:4000], limit=5)
         result = []
         for hit in hits:
             try:
-                revision = store.read(self.scope, hit.memory_id)
+                revision = store.read(scope, hit.memory_id)
             except MemoryNotFoundError:
                 continue
             result.append((revision.memory_id, f"{revision.title}\n{revision.content or ''}"))
         return tuple(result)
 
-    def _source(self, kind: str, confidence: str, evidence: str, reason: str) -> SourceProvenance:
+    def _source(self, kind: str, confidence: str, evidence: str, reason: str, *, stage: str | None = None,
+                guess: bool = False) -> SourceProvenance:
         grant = self.control.grant(self.connection_id)
-        return SourceProvenance(
-            AUTO_SOURCE_TYPE,
-            f"{grant.host}:{self.connection_id}",
-            {"host": grant.host, "connection_id": self.connection_id, "kind": kind, "confidence": confidence,
-             "evidence": evidence, "reason": (reason or "")[:500]},
-        )
+        metadata = {"host": grant.host, "connection_id": self.connection_id, "kind": kind, "confidence": confidence,
+                    "evidence": evidence, "reason": (reason or "")[:500]}
+        if stage:
+            metadata["stage"] = stage
+        if guess:
+            metadata["guess"] = True  # the assistant inferred it; the user did not state it
+        return SourceProvenance(AUTO_SOURCE_TYPE, f"{grant.host}:{self.connection_id}", metadata)
 
     @staticmethod
     def _redacted(result: dict[str, Any], prepared) -> dict[str, Any]:
@@ -269,7 +425,9 @@ class AutoMemoryWriter:
         return {"status": "rejected", "reasons": list(decision.reasons)}
 
     def _queue(self, host: str, kind: str, title: str, content: str | None, why: str, detail: dict[str, Any],
-               *, memory_id: str | None = None, expected_revision_id: str | None = None) -> dict[str, Any]:
+               *, memory_id: str | None = None, expected_revision_id: str | None = None,
+               scope: MemoryScope | None = None) -> dict[str, Any]:
+        scope = scope or self.scope
         # A host that repeats the same proposal gets the item already waiting for the user, not a copy.
         wanted = normalize(f"{title}\n{content or ''}")
         for pending in self.control.pending_reviews_like(kind=kind, memory_id=memory_id,
@@ -284,7 +442,7 @@ class AutoMemoryWriter:
         review_id = self.control.enqueue_review(
             host=host, connection_id=self.connection_id, kind=kind, title=title, content=content,
             review_reason=why, memory_id=memory_id, expected_revision_id=expected_revision_id,
-            metadata={**detail, "project": self.scope.project, "namespace": self.scope.namespace},
+            metadata={**detail, "project": scope.project, "namespace": scope.namespace},
         )
         self.control.record(host=host, connection_id=self.connection_id, action=kind, outcome="queued",
                             memory_id=memory_id, title=title, detail={**detail, "review_id": review_id})

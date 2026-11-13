@@ -452,6 +452,14 @@ class SQLiteMemoryStore:
             result = self._connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
         return result is not None and int(result[0]) == 0
 
+    def inbox_items(self) -> list[tuple[str, str, str, str]]:
+        """(memory_id, project, namespace, created_at) of every current inbox item, in any space."""
+        with self._read_transaction():
+            rows = self._connection.execute(
+                "SELECT memory_id, project, namespace, created_at FROM memories WHERE namespace LIKE ? "
+                "AND current_revision_id IS NOT NULL", ("%" + INBOX_SUFFIX,)).fetchall()
+        return [(str(r[0]), str(r[1]), str(r[2]), str(r[3])) for r in rows]
+
     def inventory(self) -> list[tuple[str, str, str]]:
         """Every memory's (memory_id, project, namespace), for restore bookkeeping."""
         with self._read_transaction():
