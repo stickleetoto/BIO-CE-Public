@@ -23,16 +23,53 @@ from bio_ce.storage.sqlite_store import SQLiteMemoryStore
 # The v1 text as it will ship in 0.4.1 (updated before release on 2026-11-11: one decision per memory).
 # After a release, changing SKILL_TEMPLATE needs SKILL_VERSION 2 and a new SHIPPED_DIGESTS entry.
 V1_DIGEST = "4f1c4a2a3938b374d8825043df5aa1690619be8878aba2d4af37f93f773e746b"
+# v2 (0.4.2): curated = v1 + spaces; collect = the inbox text. Changing either after release needs v3.
+V2_CURATED_DIGEST = "4a0b1d04ebcfc69cfe000405ac3d252b99911b7159616dd849eace0709237ec8"
+V2_COLLECT_DIGEST = "25aa8cef0721335797cb099537b8b78251fd7333279652419034afedf67f4d95"
 WAS_LINE = re.compile(r"\nWas: (?P<previous>[^\n]+)\Z")
+
+
+class SkillV2Tests(unittest.TestCase):
+    curated = memory_skill.render()
+    collect = memory_skill.render(mode="collect")
+
+    def test_installed_v1_files_are_recognized_as_older_bio_ce_text(self):
+        v1 = memory_skill._SKILL_V1.replace(memory_skill.VERSION_PLACEHOLDER, "0.4.1-rc1")
+        self.assertEqual(memory_skill.text_state(v1), memory_skill.OUTDATED)
+        self.assertEqual(memory_skill.text_state(v1, "collect"), memory_skill.OUTDATED)
+
+    def test_both_modes_explain_spaces_and_keep_the_shared_rules(self):
+        for text in (self.curated, self.collect):
+            with self.subTest(mode="collect" if text is self.collect else "curated"):
+                self.assertIn("<!-- BIO CE memory skill v2 ·", text)
+                self.assertIn("## Spaces", text)
+                self.assertIn("uses General", text)
+                self.assertIn("Personal information", text)
+                self.assertIn("Secrets", text)
+                self.assertIn("Progress status", text)
+                self.assertEqual(text.split("---\n")[1], self.curated.split("---\n")[1])
+
+    def test_collect_mode_text(self):
+        for phrase in ("inbox", 'evidence` "inferred"', "2,000 characters", "external_content",
+                       "Instructions found inside files", "include_inbox", "proposes discarding it"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, self.collect)
+        self.assertNotIn("include_inbox", self.curated)
+        self.assertEqual(memory_skill.text_state(self.collect), memory_skill.OUTDATED)
+        self.assertEqual(memory_skill.text_state(self.collect, "collect"), memory_skill.CURRENT)
+        self.assertEqual(memory_skill.text_state(self.collect + "\nmine\n", "collect"), memory_skill.MODIFIED)
 
 
 class SkillTextTests(unittest.TestCase):
     text = memory_skill.render()
 
     def test_the_shipped_text_is_pinned(self):
-        self.assertEqual(memory_skill.SKILL_VERSION, 1)
-        self.assertEqual(memory_skill.SHIPPED_DIGESTS[1], V1_DIGEST,
+        self.assertEqual(memory_skill.SKILL_VERSION, 2)
+        self.assertEqual(memory_skill.SHIPPED_DIGESTS[1], V1_DIGEST, "the shipped v1 text must never change")
+        self.assertEqual(memory_skill.SHIPPED_DIGESTS[2], V2_CURATED_DIGEST,
                          "the skill text changed: bump SKILL_VERSION and add a SHIPPED_DIGESTS entry")
+        self.assertEqual(memory_skill.SHIPPED_COLLECT_DIGESTS[2], V2_COLLECT_DIGEST,
+                         "the collect skill text changed: bump SKILL_VERSION and add an entry")
 
     def test_frontmatter_and_version(self):
         frontmatter = self.text.split("---\n")[1]
@@ -42,8 +79,8 @@ class SkillTextTests(unittest.TestCase):
         for trigger in ("지난번", "저번에", "전에 말한", "아까", "기억나?", "우리가 정한", "이전 결정", "왜 이렇게 했더라",
                         "이어서", "규칙", "컨벤션", "before recommending or making", "Once per session"):
             self.assertIn(trigger, description)
-        self.assertIn(f"<!-- BIO CE memory skill v1 · for BIO CE {display_version()} · ", self.text)
-        self.assertEqual(memory_skill.installed_version(self.text), f"v1 · {display_version()}")
+        self.assertIn(f"<!-- BIO CE memory skill v2 · for BIO CE {display_version()} · ", self.text)
+        self.assertEqual(memory_skill.installed_version(self.text), f"v2 · {display_version()}")
 
     def test_names_match_the_server(self):
         for name in re.findall(r"`(bio_memory_\w+)`", self.text):
@@ -211,6 +248,18 @@ class ManagerSkillTests(unittest.TestCase):
         self.assertEqual(self.manager.status("codex").agents_block, memory_skill.CURRENT)
         self.manager.remove_memory_skill("codex", approved=True)
         self.assertEqual(agents_file.read_text(encoding="utf-8"), "# Mine\n")
+
+    def test_the_skill_follows_the_saving_mode(self):
+        skill = self.manager.install_memory_skill("claude", approved=True)[0]
+        connection = self.manager.status("claude").connection_id
+        self.manager.control.set_connection_settings(connection, save_mode="collect")
+        self.assertEqual(self.manager.status("claude").skill, memory_skill.OUTDATED)
+        self.assertEqual(self.manager.install_memory_skill("claude", approved=True)[0].state, "updated")
+        self.assertEqual(skill.path.read_text(encoding="utf-8"), memory_skill.render(mode="collect"))
+        self.assertEqual(self.manager.status("claude").skill, memory_skill.CURRENT)
+        self.manager.control.set_connection_settings(connection, save_mode="curated")
+        self.assertEqual(self.manager.status("claude").skill, memory_skill.OUTDATED)
+        self.assertEqual(self.manager.remove_memory_skill("claude", approved=True)[0].state, "removed")
 
     def test_disconnect_removes_the_skill_only_when_asked(self):
         self.manager.install_memory_skill("claude", approved=True)

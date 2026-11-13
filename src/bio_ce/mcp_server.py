@@ -279,6 +279,16 @@ def create_mcp_server(
             return []
 
     names = readable_spaces()
+    saving_note = ""
+    if access.control is not None and (scope.project, scope.namespace) == (GENERAL_PROJECT, CURATED_NAMESPACE):
+        try:
+            collecting = access.control.connection_settings(connection_id)["save_mode"] == "collect"
+        except (ControlStoreError, sqlite3.Error):
+            collecting = False
+        saving_note = (" Saving mode: collect. bio_memory_create saves to the user's inbox, which the user sorts in "
+                       "BIO CE; search leaves the inbox out unless you pass include_inbox." if collecting else
+                       " Saving mode: curated. Only what the user stated or confirmed is stored; the rest waits for "
+                       "the user's review.")
     spaces_note = (
         " Spaces this connection can use: " + ", ".join(repr(name) for name in names) + ". Pass space to use a "
         "project space; without it, or when the name doesn't match exactly one space, BIO CE uses General."
@@ -292,7 +302,7 @@ def create_mcp_server(
             f"{scope.project!r}, namespace {scope.namespace!r}. You can omit project and namespace on every "
             "call; if you pass them they must match exactly. Search before answering questions that may "
             "depend on the user's earlier preferences, decisions, or project context. "
-            f"{mode_note} Writes work only when the user turned on Auto memory for this host.{spaces_note}"
+            f"{mode_note} Writes work only when the user turned on Auto memory for this host.{saving_note}{spaces_note}"
             f"\n\n{POLICY_TEXT}"
         ),
     )

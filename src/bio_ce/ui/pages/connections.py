@@ -673,11 +673,13 @@ class ConnectionsPage(Page):
                 "Items unused for 30 days are proposed for discarding, and discarded 7 days later unless you keep "
                 "them. You can change both periods in Settings.",
                 "Changes to your curated memories still wait for your review. Secrets are always refused.",
+                "If BIO CE installed the memory skill for this host, it rewrites the skill for collect mode.",
             )
             message, confirm = "Let this host collect into your inbox?", "Switch to Collect"
         else:
             points = ("Only what you stated or confirmed is saved, as before. Everything else waits for your "
-                      "review.", "Items already in the inbox stay there until you move or discard them.")
+                      "review.", "Items already in the inbox stay there until you move or discard them.",
+                      "If BIO CE installed the memory skill for this host, it rewrites the skill for curated mode.")
             message, confirm = "Switch back to curated saving?", "Switch to Curated"
         if not self.app.confirm(title=f"{name}: {confirm.split(' ', 2)[-1]} saving", message=message,
                                 points=points, confirm_text=confirm):
@@ -688,7 +690,32 @@ class ConnectionsPage(Page):
             self.app.notify("error", str(exc) or "BIO CE couldn't change this setting.", title=f"{name}: saving")
             return
         self.app.notify("success", f"{name} now uses {wanted} saving.", title=f"{name}: saving")
+        self._rewrite_skill_for_mode(host)
         self.app.hosts_changed()
+
+    def _rewrite_skill_for_mode(self, host: str) -> None:
+        """The managed skill follows the saving mode. An edited skill is replaced only if the user says so."""
+        status = self.cards[host].status
+        state = (status.skill if status is not None else None) or memory_skill.ABSENT
+        if state == memory_skill.ABSENT:
+            return
+        name = host_name(host)
+        replacing = state == memory_skill.MODIFIED
+        if replacing and not self.app.confirm(
+            title=f"Replace your edited memory skill in {name}?",
+            message="You edited the memory skill, so BIO CE asks before rewriting it for the new saving mode.",
+            points=("Your edited file is backed up to your BIO CE folder first.",
+                    "If you keep it, update it yourself so it matches the new mode."),
+            confirm_text="Replace", cancel_text="Keep my file", danger=True,
+        ):
+            return
+        agents = status is not None and status.agents_block not in (None, memory_skill.ABSENT)
+        manager = self.app.connection_manager
+        self.cards[host].set_busy("Updating the memory skill…")
+        self.app.run_task(lambda: manager.install_memory_skill(host, approved=True, replace_modified=replacing,
+                                                               agents_md=agents),
+                          lambda results: self._skill_done(host, results),
+                          lambda error: self._failed(host, error, "skill"))
 
     def toggle_hooks(self, host: str) -> None:
         name = host_name(host)
@@ -750,7 +777,8 @@ class ConnectionsPage(Page):
 
     def _show_skill(self, host: str, parent: tk.Misc | None = None) -> None:
         path = self.app.connection_manager.memory_skill_path(host)
-        body = f"Location: {path}\n\n{memory_skill.render()}"
+        mode = (self.connection_settings(host) or {}).get("save_mode", memory_skill.CURATED)
+        body = f"Location: {path}\n\n{memory_skill.render(mode=mode)}"
         TextViewerDialog(parent or self, self.theme, "BIO CE memory skill", body).show(modal=parent is not None)
 
     def preview_skill(self, host: str) -> None:

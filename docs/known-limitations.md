@@ -52,3 +52,7 @@
 - Uninstalling does not disconnect AI hosts: the uninstaller does not edit Codex or Claude Code settings, so after an uninstall with a host still connected, the host's `bio-ce` MCP server entry and session hooks point to the removed program and may fail to start. Disconnect each host on the Connections page first, or remove those entries afterwards.
 - The installer and the programs it installs are **not code-signed**; Windows SmartScreen may warn about a downloaded copy. Check the SHA-256 in the release notes before running it.
 - The unattended clean install ran on a fresh GitHub-hosted Windows runner, which has Python and Git installed. Other installer runs used the developer's own Windows account, including one inside another app's MSIX package context where Windows redirected `%LOCALAPPDATA%` and one started through Explorer. A Windows PC without Python or Git is still **not verified**.
+- Going back from 0.4.2 to 0.4.1 keeps General memories and existing connections working. Inbox items and project
+  space memories are not shown by 0.4.1; they stay in the database and appear again after upgrading back.
+- Inbox and space management (moving, discarding, the space picker) is part of the built-in Community Engine only,
+  like the review queue.

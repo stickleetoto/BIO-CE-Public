@@ -121,6 +121,42 @@ BIO CE adds no paid API calls. Hook context and tool results become part of the 
 they add some input tokens to the user's existing Codex or Claude usage. The per-hook character caps above keep
 that bounded.
 
+## Spaces, saving modes, and the inbox (v0.4.2)
+
+**Spaces.** General holds every memory you had before. A project space keeps one project's memories apart; create
+one in **Settings → Spaces** and link the project's folder. BIO CE stores only a fingerprint (SHA-256) of the
+normalized folder path and the folder's name. Every MCP tool takes an optional `space` (a space name, its id, or its
+slug). Without it, or when a name matches no space or more than one, BIO CE uses General and says so in the result
+(`space_resolution: "fallback_general"` with the reason). A space the connection may not use is refused, never
+redirected to General. Each host card has **Use General only / Use all project spaces**. The session hooks use the
+space of the deepest linked folder above the working folder and say which one; two spaces on the same folder mean
+General.
+
+**Saving modes.** Each host card has **Saving: Curated** (the default, the v0.4.1 behaviour) or **Collect**, which
+you confirm when you switch. In Collect mode every new memory from that host goes to the space's inbox:
+
+- what you stated or confirmed, the host's guesses (`evidence: "inferred"`, shown as a guess), and, when you ask it
+  to remember a file or page, a summary of at most 2,000 characters (`evidence: "external_content"`; you can lower
+  the limit in **Settings → Inbox**, not raise it);
+- never tool output, secrets, or instructions aimed at an AI assistant;
+- updates to inbox items apply at once; changes to curated memories wait for your review; retracting an inbox item
+  proposes discarding it.
+
+Every write is checked in a fixed order: secrets, then instructions, then size (file text only), then paths. Your
+profile folder becomes `%USERPROFILE%`, other users' profile folders lose their user name, and any other absolute
+or network path sends the write to your review queue.
+
+**The inbox.** `bio_memory_search` leaves the inbox out unless `include_inbox` is true; inbox results come after
+curated ones with `stage: "inbox"`. Hooks never use the inbox. On **Memories → Inbox** you move an item to your
+memories (BIO CE offers to update a similar memory instead of adding a copy) or discard it. Items unused for 30 days
+are proposed for discarding and discarded 7 days later unless you keep them; change both periods in **Settings →
+Inbox**. A discard removes the item from BIO CE's files as far as the app can: freed space in the database and its
+log is overwritten. BIO CE cannot guarantee erasure from the drive itself (SSD wear leveling, the Windows page file,
+file system journals), and backups made earlier still contain the item.
+
+**Memory skill v2.** The skill BIO CE installs follows the host's saving mode. Switching modes rewrites the skill
+BIO CE installed; if you edited it, BIO CE asks first.
+
 ## Data
 
 | File | Contents |

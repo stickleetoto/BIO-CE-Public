@@ -216,8 +216,10 @@ class MCPConnectionManager:
             return HostStatus(host, True, True, mode=grant.mode, connection_id=grant.connection_id,
                               hooks_installed=hooks,
                               code_mode=self._code_mode_state() if host == "codex" else None,
-                              skill=memory_skill.file_state(self.memory_skill_path(host)),
-                              agents_block=(memory_skill.agents_state(memory_skill.agents_path(self.env))
+                              skill=memory_skill.file_state(self.memory_skill_path(host),
+                                                            self._skill_mode(grant.connection_id)),
+                              agents_block=(memory_skill.agents_state(memory_skill.agents_path(self.env),
+                                                                      self._skill_mode(grant.connection_id))
                                             if host == "codex" else None))
         if self._matches_legacy_server(entry):
             return HostStatus(host, True, True, legacy=True, mode=MODE_READ_ONLY)
@@ -409,6 +411,14 @@ class MCPConnectionManager:
 
     # Memory skill --------------------------------------------------------------------------------
 
+    def _skill_mode(self, connection_id: str) -> str:
+        """The skill text follows the connection's save mode (curated or collect)."""
+        try:
+            mode = self.control.connection_settings(connection_id)["save_mode"]
+        except Exception:  # noqa: BLE001 - fall back to the default text
+            return memory_skill.CURATED
+        return memory_skill.COLLECT if mode == "collect" else memory_skill.CURATED
+
     def memory_skill_path(self, host: str) -> Path:
         return memory_skill.skill_path(_validate_host(host), self.env)
 
@@ -422,7 +432,8 @@ class MCPConnectionManager:
         if not status.connected or status.connection_id is None:
             raise MCPConnectionError("Connect this host first; the skill uses its BIO CE connection.")
         path = self.memory_skill_path(host)
-        state = memory_skill.file_state(path)
+        mode = self._skill_mode(status.connection_id)
+        state = memory_skill.file_state(path, mode)
         if state == memory_skill.CURRENT:
             skill = SkillResult("unchanged", path)
         elif state == memory_skill.MODIFIED and not replace_modified:
@@ -430,11 +441,11 @@ class MCPConnectionManager:
         else:
             backup = self._backup_config(f"{host}-skill", path)
             path.parent.mkdir(parents=True, exist_ok=True)
-            self._replace_file(path, memory_skill.render().encode("utf-8"))
+            self._replace_file(path, memory_skill.render(mode=mode).encode("utf-8"))
             skill = SkillResult("installed" if state == memory_skill.ABSENT else "updated", path, backup)
         agents = None
         if agents_md and host == "codex":
-            agents = self._install_agents_block(replace_modified)
+            agents = self._install_agents_block(replace_modified, mode)
         return skill, agents
 
     def remove_memory_skill(self, host: str, *, approved: bool = False,
@@ -471,9 +482,9 @@ class MCPConnectionManager:
                 agents = SkillResult("removed", agents_file, backup)
         return skill, agents
 
-    def _install_agents_block(self, replace_modified: bool) -> SkillResult:
+    def _install_agents_block(self, replace_modified: bool, mode: str = memory_skill.CURATED) -> SkillResult:
         path = memory_skill.agents_path(self.env)
-        state = memory_skill.agents_state(path)
+        state = memory_skill.agents_state(path, mode)
         if state == memory_skill.CURRENT:
             return SkillResult("unchanged", path)
         if state == memory_skill.MODIFIED and not replace_modified:
@@ -484,7 +495,7 @@ class MCPConnectionManager:
         except FileNotFoundError:
             text = ""
         path.parent.mkdir(parents=True, exist_ok=True)
-        self._replace_file(path, memory_skill.with_agents_block(text).encode("utf-8"))
+        self._replace_file(path, memory_skill.with_agents_block(text, mode=mode).encode("utf-8"))
         return SkillResult("installed" if state == memory_skill.ABSENT else "updated", path, backup)
 
     # Codex code mode -----------------------------------------------------------------------------
