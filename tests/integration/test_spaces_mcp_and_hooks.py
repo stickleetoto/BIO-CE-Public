@@ -6,8 +6,9 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, closing
 from pathlib import Path
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -15,7 +16,7 @@ import unittest
 from mcp import Client, StdioServerParameters, stdio_client
 
 from bio_ce.auto_memory import ReviewService
-from bio_ce.control_store import MODE_AUTO_MEMORY, MODE_READ_ONLY, ControlStore, control_database_for
+from bio_ce.control_store import MODE_AUTO_MEMORY, MODE_PAUSED, MODE_READ_ONLY, ControlStore, control_database_for
 from bio_ce.core.models import MemoryScope, SourceProvenance
 from bio_ce.host_hooks import HookRequest, build_context
 from bio_ce.mcp_server import TOKEN_ENVIRONMENT_VARIABLE
@@ -180,6 +181,47 @@ class SpaceTests(_SpaceFixture):
         limited = self.hook("session-start", self.project_folder)
         self.assertIn("uses BIO CE's General space", limited)
         self.assertNotIn("Alpha build", limited)
+
+    def test_hooks_never_mix_in_memories_from_a_space_the_host_may_not_read(self):
+        """Both hook events, every way a project space can be closed to this connection, and the inbox."""
+        store = SQLiteMemoryStore(self.database)
+        store.add(self.alpha.inbox, title="Alpha inbox note", content="Alpha release script notes from the inbox.",
+                  source=USER)
+        store.add(MemoryScope(GENERAL.project, "default.inbox"), title="General inbox note",
+                  content="Release script notes collected in the General inbox.", source=USER)
+        store.close()
+        secret_words = ("Alpha build", "Alpha inbox note", "General inbox note")
+
+        def contexts() -> list[str]:
+            return [self.hook("session-start", self.project_folder / "src"),
+                    self.hook("user-prompt", self.project_folder, prompt="how does the alpha release script work")]
+
+        allowed = contexts()
+        self.assertIn("Alpha build", allowed[0])  # the space is readable: its curated memories are used
+        for text in allowed:
+            self.assertNotIn("inbox note", text)  # the inbox is never used by hooks
+        with closing(sqlite3.connect(self.control.path)) as raw:
+            raw.execute("INSERT INTO connection_spaces VALUES (?, ?, 0, 0)", (self.grant.connection_id,
+                                                                            self.alpha.space_id))
+            raw.commit()
+        cases = {"per-space deny row": contexts()}
+        with closing(sqlite3.connect(self.control.path)) as raw:
+            raw.execute("DELETE FROM connection_spaces WHERE space_id = ?", (self.alpha.space_id,))
+            raw.commit()
+        self.control.set_connection_settings(self.grant.connection_id, all_projects=False)
+        cases["project spaces off"] = contexts()
+        self.control.set_connection_settings(self.grant.connection_id, all_projects=True)
+        self.control.archive_space(self.alpha.space_id)
+        cases["archived space"] = contexts()
+        self.control.set_mode(self.grant.connection_id, MODE_PAUSED)
+        cases["paused connection"] = contexts()
+        for case, texts in cases.items():
+            for text in texts:
+                with self.subTest(case=case):
+                    for word in secret_words:
+                        self.assertNotIn(word, text)
+        self.assertEqual(cases["paused connection"], ["", ""])
+        self.assertIn("Units", cases["project spaces off"][0])  # General is still offered
 
 
 class SpaceReviewAndBindingTests(_SpaceFixture):

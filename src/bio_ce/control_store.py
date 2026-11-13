@@ -168,6 +168,9 @@ CURATION_CLEANUP_PENDING = "cleanup_pending"
 CURATION_DISCARDED = "discarded"
 CURATION_FAILED = "failed"
 RESTORE_KEEP_DAYS = 7
+# The only control tables a restore reads from the backup's pair file. Everything else (connections, their space
+# permissions and settings, the audit log, the review queue, app_settings) keeps its current rows.
+RESTORED_FROM_BACKUP = ("spaces", "space_folders", "inbox_usage", "curation_items")
 # Inbox settings (D7, R2-1): defaults and the ranges the user may choose from.
 INBOX_SETTINGS = {
     "inbox_expire_days": (30, 7, 365),   # unused this long -> proposed for discarding
@@ -821,8 +824,8 @@ class ControlStore:
         """Bring this control file in line with a memory database that was just restored.
 
         ``memories`` lists (memory_id, project, namespace) of the restored database. Connections, permissions,
-        and the audit log always stay as they are now: a backup must never bring back a revoked connection or a
-        wider permission. From a matching pair file, spaces and folder links are merged (current rows win) and
+        the audit log, and app settings (inbox periods, the file text limit) always stay as they are now: a backup
+        must never bring back a revoked connection, a wider permission, or a looser limit. From a matching pair file, spaces and folder links are merged (current rows win) and
         inbox usage and pending discards come back for the restored inbox items, with a fresh waiting period.
         """
         restored = {memory_id for memory_id, _project, _namespace in memories}
@@ -926,7 +929,7 @@ def _read_backup_tables(path: Path) -> dict[str, list[sqlite3.Row]]:
     try:
         tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
         return {name: connection.execute(f"SELECT * FROM {name}").fetchall()
-                for name in ("spaces", "space_folders", "inbox_usage", "curation_items") if name in tables}
+                for name in RESTORED_FROM_BACKUP if name in tables}
     finally:
         connection.close()
 

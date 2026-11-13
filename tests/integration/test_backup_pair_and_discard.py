@@ -274,6 +274,18 @@ class BackupPairTests(unittest.TestCase):
         self.assertEqual(len(activity), audit_before + 1)
         self.assertEqual((activity[0].action, activity[0].outcome), ("restore", "restored"))
 
+    def test_restore_keeps_the_current_app_settings(self):
+        # The backup holds looser settings than the user has now; restoring must not bring them back.
+        self.control.set_inbox_setting("inbox_expire_days", 90)
+        self.control.set_inbox_setting("file_content_limit", 2000)
+        backup = self.service.create_backup(self.root / "settings.sqlite3")
+        self.control.set_inbox_setting("inbox_expire_days", 14)
+        self.control.set_inbox_setting("file_content_limit", 500)
+        report = self.service.restore_backup(backup, control=self.control)
+        self.assertEqual(report["pair"], PAIR_MATCHED)
+        settings = self.control.inbox_settings()
+        self.assertEqual((settings["inbox_expire_days"], settings["file_content_limit"]), (14, 500))
+
     def test_spaces_and_folders_merge_and_current_rows_win(self):
         with self.raw_control() as raw:
             raw.execute("INSERT INTO spaces VALUES ('p1', 'project', 'project:alpha', 'Alpha', 'then', NULL)")

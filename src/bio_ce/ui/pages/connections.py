@@ -71,6 +71,14 @@ _OUTCOME_STYLE = {
 }
 
 
+def settings_summary(settings: dict | None) -> str:
+    """The space and saving settings a connection uses, for the Connect message ("Use all project spaces: on")."""
+    settings = settings or {"all_projects": True, "save_mode": "curated"}
+    projects = "on" if settings.get("all_projects", True) else "off (General only)"
+    saving = "Collect (to your inbox)" if settings.get("save_mode") == "collect" else "Curated"
+    return f"Use all project spaces: {projects}. Saving: {saving}. You can change both on this card."
+
+
 def host_message(host: str, status: HostStatus | None) -> str:
     name = host_name(host)
     command = HOST_COMMANDS[host]
@@ -911,6 +919,7 @@ class ConnectionsPage(Page):
             message = f"{name} can now search and read your memories."
             if result.backup_file is not None:
                 message += " A backup of its previous MCP settings was saved."
+        message += " " + settings_summary(self.connection_settings(host))
         if result.code_mode is not None:
             message += " " + result.code_mode.detail
         if isinstance(skill, BaseException):
@@ -974,4 +983,4 @@ def _skill_message(name: str, result: SkillResult) -> str:
     }.get(result.state, f"Memory skill: {result.state}.")
 
 
-__all__ = ["APP_CLOSED_NOTE", "ConnectionsPage", "HostCard", "host_message"]
+__all__ = ["APP_CLOSED_NOTE", "ConnectionsPage", "HostCard", "host_message", "settings_summary"]

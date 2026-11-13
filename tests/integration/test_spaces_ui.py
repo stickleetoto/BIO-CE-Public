@@ -10,6 +10,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from bio_ce.connections import ConnectionResult
 from bio_ce.control_store import MODE_AUTO_MEMORY
 from bio_ce.desktop import AppDataPaths, BIOCEDesktop, DesktopMemoryService
 from tests.integration.test_auto_memory_ui import FakeManagedConnections
@@ -59,6 +60,24 @@ class SpacesUiTests(unittest.TestCase):
         with patch.object(self.app, "confirm", return_value=True):
             self.settings.archive_space(control.space(alpha.space_id))
         self.assertEqual(list(self.settings.space_rows), ["general"])
+
+    def test_connect_message_names_the_settings_that_apply(self):
+        page = self.app.pages["connections"]
+        page.refresh()
+        self.root.update()
+        result = ConnectionResult("codex", True, False, None)
+        with patch.object(self.app, "notify") as told:
+            page._connected("codex", result)
+        message = told.call_args.args[1]
+        self.assertIn("Use all project spaces: on.", message)
+        self.assertIn("Saving: Curated.", message)
+        self.connections.control.set_connection_settings(self.connections.grant.connection_id, all_projects=False,
+                                                         save_mode="collect")
+        with patch.object(self.app, "notify") as told:
+            page._connected("codex", result)
+        message = told.call_args.args[1]
+        self.assertIn("Use all project spaces: off (General only).", message)
+        self.assertIn("Saving: Collect (to your inbox).", message)
 
     def test_host_card_switches_project_spaces_for_the_connection(self):
         self.app.show_page("connections")
