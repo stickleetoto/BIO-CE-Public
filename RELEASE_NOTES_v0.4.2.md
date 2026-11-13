@@ -10,8 +10,9 @@
 | `BIO-CE-Setup-v0.4.2-rc1.exe` | 41,035,622 bytes | `2e641efa677ed59adb1b5b9efa89a68ce05e63372157b176a314a162bb6406a2` |
 
 Built and tested on a GitHub-hosted Windows runner (GitHub Actions run 43370145994) from source commit
-`7bb7e7c43f1e3633270066c1411890683d3d8985`, with CPython 3.12.10, PyInstaller 6.22.3, and Inno Setup 6.7.3. The tag also contains a later commit
-that changes only this file and `docs/known-limitations.md`; neither goes into the installer.
+`7bb7e7c43f1e3633270066c1411890683d3d8985`, with CPython 3.12.10, PyInstaller 6.22.3, and Inno Setup 6.7.3. The
+tag also contains later commits that change only this file, `docs/known-limitations.md`, and
+`docs/auto-memory.md`; none of them goes into the installer.
 
 ```powershell
 Get-FileHash -Algorithm SHA256 .\BIO-CE-Setup-v0.4.2-rc1.exe
@@ -94,6 +95,12 @@ it and keeps its history, as before.
 - Automated tests on the developer's PC: after an inbox item is discarded, its text is not found in the bytes of
   the database, its log, the connection file, or a backup made afterwards (and, as a control, a plain delete
   without these steps does leave it in the file).
+- By hand with this installer, all PASS: the upgrade and the version shown; the Dashboard review tile and sidebar
+  counts; creating, renaming, linking, and archiving project spaces; the space a session hook reports for a linked
+  folder; the Connect message; switching a host to Collect and back (with the skill rewritten); the inbox (moving,
+  updating a similar memory, discarding with the notice above, keeping a proposed discard); inbox settings;
+  two-file backups and restores, including restoring a backup made by v0.4.1-rc1; and an absolute path waiting
+  for review.
 
 ## Not verified
 
