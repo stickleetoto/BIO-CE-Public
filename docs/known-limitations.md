@@ -31,9 +31,26 @@
 - Codex runs new or changed hooks only after the user approves them with `/hooks`. Claude Code defers MCP tools behind `ToolSearch`, so the model must load BIO CE's tools before calling them.
 - The connection token is stored in the host's user configuration in plain text. Grants limit what an AI host does through BIO CE; they do not protect against other programs running as the same Windows user.
 - FTS5 recall is lexical. Korean words with attached particles (e.g. "배포를" vs "배포") may not match each other, so per-prompt recall can miss related memories.
-- Settings backups are two files (`X.sqlite3` and `X.control.sqlite3`). A restore keeps the current connections, permissions, activity log, and review queue; it only brings back project spaces, folder links, and inbox bookkeeping from the second file. Backups made by v0.4.1 or earlier have no second file and restore memories only.
-- Discarded inbox items are removed from BIO CE's files as far as the app can (freed space in the database and its log is overwritten). BIO CE cannot guarantee erasure from the drive itself (for example SSD wear leveling, the Windows page file, or file system journals), and backups made earlier still contain the items.
+- Settings backups are two files (`X.sqlite3` and `X.control.sqlite3`). A restore keeps the current connections, permissions, activity log, review queue, and app settings (inbox periods, file text limit); it only brings back project spaces, folder links, and inbox bookkeeping from the second file. Backups made by v0.4.1 or earlier have no second file and restore memories only.
 - Automatic retraction is disabled by design; every retraction request waits for the user.
+
+## v0.4.2-rc1 (pre-release)
+
+- Discarding an inbox item removes it from BIO CE's files as far as the app can (freed space in the database and its
+  log is overwritten). BIO CE cannot guarantee erasure from the drive itself (SSD wear leveling, the Windows page
+  file, file system journals), and backups made earlier still contain the item.
+- Going back from 0.4.2 to 0.4.1 keeps General memories and existing connections working. Inbox items and
+  project-space memories are not shown by 0.4.1; they stay in the database and appear again after updating to
+  0.4.2 again.
+- Backups made by 0.4.1 or earlier are one file and restore memories only; project spaces found in them come back
+  named "Restored: <name>".
+- A space name that matches no space, or more than one, uses General (the result says so). Hosts that ignore the
+  `space` argument save to General.
+- Inbox and space management (moving, discarding, the space picker) is part of the built-in Community Engine only,
+  like the review queue.
+- Inbox expiry runs while the BIO CE app is open (at start and then daily); with the app closed, items are proposed
+  and discarded the next time it runs.
+- No real-model comparison of curated and collect mode was run for this candidate.
 
 ## v0.4.1-rc1 (pre-release)
 
@@ -52,7 +69,3 @@
 - Uninstalling does not disconnect AI hosts: the uninstaller does not edit Codex or Claude Code settings, so after an uninstall with a host still connected, the host's `bio-ce` MCP server entry and session hooks point to the removed program and may fail to start. Disconnect each host on the Connections page first, or remove those entries afterwards.
 - The installer and the programs it installs are **not code-signed**; Windows SmartScreen may warn about a downloaded copy. Check the SHA-256 in the release notes before running it.
 - The unattended clean install ran on a fresh GitHub-hosted Windows runner, which has Python and Git installed. Other installer runs used the developer's own Windows account, including one inside another app's MSIX package context where Windows redirected `%LOCALAPPDATA%` and one started through Explorer. A Windows PC without Python or Git is still **not verified**.
-- Going back from 0.4.2 to 0.4.1 keeps General memories and existing connections working. Inbox items and project
-  space memories are not shown by 0.4.1; they stay in the database and appear again after upgrading back.
-- Inbox and space management (moving, discarding, the space picker) is part of the built-in Community Engine only,
-  like the review queue.
