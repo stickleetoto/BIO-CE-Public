@@ -4,7 +4,7 @@
 
 """BIO Community Edition: local, auditable synthetic memory primitives."""
 
-__version__ = "0.4.1rc1"
+__version__ = "0.4.2rc1"
 
 
 def display_version(version: str | None = None) -> str:

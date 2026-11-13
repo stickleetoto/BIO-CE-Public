@@ -6,6 +6,8 @@
 Steps: install the previous release -> create data with it (memories, revisions, a retraction, review
 items, a grant, settings, a user backup) -> upgrade to the candidate -> prove every byte of user data
 survived -> launch checks -> installed MCP server and hook (Korean text, duplicate proposals) ->
+rollback: data only the candidate understands (a project space, an inbox item), reinstall the previous
+release over it, prove it still serves General and changes nothing, upgrade again and find the items ->
 Claude Code and Codex registration plus hook install/remove through the real CLIs in isolated profiles
 -> revoke -> backup/restore and recovery from the pre-upgrade backup -> uninstall keeping data ->
 reinstall into a folder with Korean letters, spaces, and '#' -> uninstall -> full cleanup.
@@ -65,6 +67,36 @@ def snapshot(backup: Path) -> dict:
 
 def installed(directory: Path = APP_DIR) -> tuple[Path, Path]:
     return directory / "BIO-CE.exe", directory / "MCP" / "BIO-CE-MCP.exe"
+
+
+V042_TABLES = ("spaces", "space_folders", "connection_spaces", "connection_settings", "inbox_usage",
+               "curation_items", "app_settings")
+
+
+def everything() -> dict:
+    """Every memory row and every control row, including the tables v0.4.1 does not know."""
+    connection = sqlite3.connect(f"file:{CONTROL.as_posix()}?mode=ro", uri=True)
+    try:
+        present = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    finally:
+        connection.close()
+    tables = ("connections", "review_queue") + tuple(name for name in V042_TABLES if name in present)
+    return {"memories": dump(DATABASE, ("memories", "revisions")), "control": dump(CONTROL, tables)}
+
+
+async def mcp_search(mcp_exe: Path, connection_id: str, token: str, arguments: dict) -> dict:
+    from mcp import Client, StdioServerParameters, stdio_client
+    from bio_ce.mcp_server import TOKEN_ENVIRONMENT_VARIABLE
+
+    parameters = StdioServerParameters(command=str(mcp_exe), args=["mcp-stdio", "--db", str(DATABASE),
+                                                                   "--connection", connection_id],
+                                       env={**os.environ, TOKEN_ENVIRONMENT_VARIABLE: token})
+    async with Client(stdio_client(parameters)) as client:
+        found = await client.call_tool("bio_memory_search", arguments)
+    if found.is_error:
+        return {"error": str(found.content)[:300], "titles": []}
+    return {"titles": [hit["title"] for hit in found.structured_content["results"]],
+            "stages": [hit.get("stage") for hit in found.structured_content["results"]]}
 
 
 def run_hook(mcp_exe: Path, connection_id: str, token: str, prompt: str = PROMPT) -> dict:
@@ -304,6 +336,51 @@ def main(argv: list[str]) -> int:
         old_review = control.review(pending["review_id"])
         control.close()
         run.step("review-item-from-previous-release-still-pending", old_review.status == "pending")
+
+        # 3b. rollback to the previous release and forward again -----------------------------------
+        from bio_ce.control_store import SAVE_COLLECT
+        from bio_ce.inbox import inbox_scope
+
+        control = ControlStore(control_database_for(DATABASE))
+        alpha = control.create_space("알파 프로젝트")
+        control.set_connection_settings(grant.connection_id, save_mode=SAVE_COLLECT)
+        collector = AutoMemoryWriter(DATABASE, control, scope=scope, connection_id=grant.connection_id)
+        collected = collector.create(title="Inbox only", content="The user seems to review designs on Thursdays.",
+                                     category="preference", confidence="medium", evidence="inferred")
+        project_writer = AutoMemoryWriter(DATABASE, control, scope=alpha.curated, connection_id=grant.connection_id)
+        control.set_connection_settings(grant.connection_id, save_mode="curated")
+        in_project = project_writer.create(title="Alpha release day", content="Alpha releases go out on Tuesdays.",
+                                           category="decision", confidence="high", evidence="user_stated")
+        control.close()
+        candidate_only = everything()
+        run.step("candidate-only-data-created", collected.get("stage") == "inbox"
+                 and in_project.get("status") == "created", inbox=collected.get("status"),
+                 project=in_project.get("status"))
+        ok = base.install(run, previous, "rollback")
+        entry = uninstall_entry() or {}
+        _gui, rolled_mcp = installed()
+        rolled_search = asyncio.run(asyncio.wait_for(
+            mcp_search(rolled_mcp, grant.connection_id, token, {"query": "배포 금요일"}), timeout=120))
+        rolled_hook = run_hook(rolled_mcp, grant.connection_id, token)
+        launched = base.launch_and_capture(run, gui_env, "gui-after-rollback")
+        run.step("rollback-to-previous-release", ok and entry.get("DisplayVersion") == previous_version
+                 and launched["window"] and launched["exit"] == 0, version=entry.get("DisplayVersion"), **launched)
+        run.step("rollback-previous-serves-general", rolled_search["titles"][:1] == ["배포 일정"]
+                 and "배포는 매주 금요일" in rolled_hook["context"] and "Inbox only" not in rolled_hook["context"]
+                 and "Alpha release day" not in str(rolled_search), search=rolled_search)
+        run.step("rollback-keeps-every-row", everything() == candidate_only, integrity=base.integrity())
+        ok = base.install(run, candidate, "re-upgrade")
+        total, mismatched = base.installed_matches_manifest(manifest)
+        _gui, again_mcp = installed()
+        inbox_found = asyncio.run(asyncio.wait_for(mcp_search(again_mcp, grant.connection_id, token, {
+            "query": "designs Thursdays", "include_inbox": True}), timeout=120))
+        project_found = asyncio.run(asyncio.wait_for(mcp_search(again_mcp, grant.connection_id, token, {
+            "query": "Alpha Tuesdays", "space": "알파 프로젝트"}), timeout=120))
+        run.step("re-upgrade-finds-inbox-and-project-items", ok and not mismatched
+                 and "Inbox only" in inbox_found["titles"] and "inbox" in inbox_found.get("stages", [])
+                 and project_found["titles"][:1] == ["Alpha release day"]
+                 and everything()["memories"] == candidate_only["memories"],
+                 files=total, mismatched=mismatched[:10], inbox=inbox_found, project=project_found)
 
         # 4. host registration and hooks through the real CLIs (isolated profiles) ---------------
         app_exe, _mcp = installed()
