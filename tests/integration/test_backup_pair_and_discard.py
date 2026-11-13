@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -341,9 +342,14 @@ class ControlUpgradeTests(unittest.TestCase):
         self.temp.cleanup()
 
     def released_module(self, name: str):
-        """control_store.py exactly as released in v0.4.1-rc1, loaded under another name."""
-        source = subprocess.run(["git", "show", f"v0.4.1-rc1:src/bio_ce/{name}.py"], cwd=REPO, check=True,
-                                capture_output=True).stdout
+        """control_store.py exactly as released in v0.4.1-rc1, loaded under another name.
+
+        The copy lives in tests/fixtures because CI checkouts have no tags. SHA-256 of
+        `git show v0.4.1-rc1:src/bio_ce/control_store.py`: ab538556...a63a66a.
+        """
+        source = (REPO / "tests" / "fixtures" / "released_v041" / f"{name}.py").read_bytes()
+        self.assertEqual(hashlib.sha256(source).hexdigest(),
+                         "ab538556962c7209eee47158a6bc2f63f89f7ee203861076186b36191a63a66a")
         target = Path(self.temp.name) / f"released_{name}.py"
         target.write_bytes(source)
         spec = importlib.util.spec_from_file_location(f"released_{name}", target)
