@@ -12,6 +12,7 @@ the review queue, and every outcome is written to the audit log.
 
 from __future__ import annotations
 
+import os
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -35,12 +36,16 @@ from bio_ce.core.models import (
 )
 from bio_ce.memory_policy import (
     DUPLICATE,
+    PERSONAL_PATH_REASON,
     REJECT,
     REVIEW,
+    STORE,
+    Decision,
     decide_create,
     decide_update,
     detect_secrets,
     normalize,
+    prepare_text,
 )
 from bio_ce.storage.sqlite_store import SQLiteMemoryStore
 
@@ -81,6 +86,12 @@ class AutoMemoryWriter:
         reason: str = "",
     ) -> dict[str, Any]:
         host = self._authorize_write()
+        prepared = prepare_text(title, content, profile=os.environ.get("USERPROFILE"))
+        if prepared.rejection is not None:
+            detail = self._detail(category=category, confidence=confidence, evidence=evidence, reason=reason,
+                                  decision=prepared.rejection.summary)
+            return self._rejected(host, "create", prepared.rejection, title, detail)
+        title, content = prepared.title, prepared.content
         store = SQLiteMemoryStore(self.database)
         try:
             existing = self._similar(store, f"{title}\n{content}")
@@ -88,8 +99,10 @@ class AutoMemoryWriter:
                 title=title, content=content, category=category, confidence=confidence,
                 evidence=evidence, existing=existing,
             )
+            if decision.action == STORE and prepared.absolute_paths:
+                decision = Decision(REVIEW, (PERSONAL_PATH_REASON,))
             detail = self._detail(category=category, confidence=confidence, evidence=evidence, reason=reason,
-                                  decision=decision.summary)
+                                  decision=decision.summary, paths_redacted=prepared.paths_redacted)
             if decision.action == REJECT:
                 return self._rejected(host, "create", decision, title, detail)
             if decision.action == DUPLICATE:
@@ -100,7 +113,8 @@ class AutoMemoryWriter:
                         "revision_id": current.revision_id, "reasons": list(decision.reasons)}
             self._check_rate(host)
             if decision.action == REVIEW:
-                return self._queue(host, "create", title, content, decision.summary, detail)
+                return self._redacted(self._queue(host, "create", title, content, decision.summary, detail),
+                                      prepared)
             revision = store.add(self.scope, title=title, content=content,
                                  source=self._source(category, confidence, evidence, reason))
         finally:
@@ -108,8 +122,9 @@ class AutoMemoryWriter:
         self.control.record(host=host, connection_id=self.connection_id, action="create", outcome="created",
                             memory_id=revision.memory_id, revision_id=revision.revision_id, title=title,
                             detail=detail)
-        return {"status": "created", "memory_id": revision.memory_id, "revision_id": revision.revision_id,
-                "revision_number": revision.revision_number}
+        return self._redacted({"status": "created", "memory_id": revision.memory_id,
+                               "revision_id": revision.revision_id, "revision_number": revision.revision_number},
+                              prepared)
 
     def update(
         self,
@@ -124,6 +139,12 @@ class AutoMemoryWriter:
         reason: str = "",
     ) -> dict[str, Any]:
         host = self._authorize_write()
+        prepared = prepare_text(title, content, profile=os.environ.get("USERPROFILE"))
+        if prepared.rejection is not None:
+            detail = self._detail(change_type=change_type, confidence=confidence, evidence=evidence, reason=reason,
+                                  decision=prepared.rejection.summary, previous_revision_id=expected_revision_id)
+            return self._rejected(host, "update", prepared.rejection, title, detail, memory_id=memory_id)
+        title, content = prepared.title, prepared.content
         store = SQLiteMemoryStore(self.database)
         try:
             current = store.read(self.scope, memory_id)
@@ -137,8 +158,11 @@ class AutoMemoryWriter:
                 title=title, content=content, change_type=change_type, confidence=confidence, evidence=evidence,
                 current_text=f"{current.title}\n{current.content or ''}",
             )
+            if decision.action == STORE and prepared.absolute_paths:
+                decision = Decision(REVIEW, (PERSONAL_PATH_REASON,))
             detail = self._detail(change_type=change_type, confidence=confidence, evidence=evidence, reason=reason,
-                                  decision=decision.summary, previous_revision_id=expected_revision_id)
+                                  decision=decision.summary, previous_revision_id=expected_revision_id,
+                                  paths_redacted=prepared.paths_redacted)
             if decision.action == REJECT:
                 return self._rejected(host, "update", decision, title, detail, memory_id=memory_id)
             if decision.action == DUPLICATE:
@@ -148,8 +172,9 @@ class AutoMemoryWriter:
                         "reasons": list(decision.reasons)}
             self._check_rate(host)
             if decision.action == REVIEW:
-                return self._queue(host, "update", title, content, decision.summary, detail, memory_id=memory_id,
-                                   expected_revision_id=expected_revision_id)
+                return self._redacted(self._queue(host, "update", title, content, decision.summary, detail,
+                                                  memory_id=memory_id, expected_revision_id=expected_revision_id),
+                                      prepared)
             try:
                 revision = store.revise(
                     self.scope, memory_id, expected_revision_id=expected_revision_id, title=title,
@@ -164,8 +189,8 @@ class AutoMemoryWriter:
             store.close()
         self.control.record(host=host, connection_id=self.connection_id, action="update", outcome="updated",
                             memory_id=memory_id, revision_id=revision.revision_id, title=title, detail=detail)
-        return {"status": "updated", "memory_id": memory_id, "revision_id": revision.revision_id,
-                "revision_number": revision.revision_number}
+        return self._redacted({"status": "updated", "memory_id": memory_id, "revision_id": revision.revision_id,
+                               "revision_number": revision.revision_number}, prepared)
 
     def request_retract(self, *, memory_id: str, expected_revision_id: str, reason: str = "") -> dict[str, Any]:
         """Automatic retraction is disabled; the request waits for the user."""
@@ -222,6 +247,13 @@ class AutoMemoryWriter:
             {"host": grant.host, "connection_id": self.connection_id, "kind": kind, "confidence": confidence,
              "evidence": evidence, "reason": (reason or "")[:500]},
         )
+
+    @staticmethod
+    def _redacted(result: dict[str, Any], prepared) -> dict[str, Any]:
+        """Tell the host when BIO CE replaced profile folders in the saved text."""
+        if prepared.paths_redacted:
+            result["paths_redacted"] = True
+        return result
 
     @staticmethod
     def _detail(**values: Any) -> dict[str, Any]:

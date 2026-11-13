@@ -114,9 +114,89 @@ def detect_secrets(*texts: str | None) -> tuple[str, ...]:
             if pattern.search(text) and name not in found:
                 found.append(name)
         for token in _LONG_TOKEN.findall(text):
+            if _path_like(token):
+                continue  # a relative path such as notes/2026-11-11/project is not a credential
             if _looks_random(token) and "high-entropy token" not in found:
                 found.append("high-entropy token")
     return tuple(found)
+
+
+def _path_like(token: str) -> bool:
+    """A slash-separated token whose every segment reads like ordinary words, not a key with slashes in it.
+
+    Keys that contain "/" usually also contain "+" or "=", or have long mixed-case segments; those are
+    still checked as one token.
+    """
+    if "/" not in token or "+" in token or "=" in token:
+        return False
+    segments = [segment for segment in token.split("/") if segment]
+    if len(segments) < 2:
+        return False
+    for segment in segments:
+        for part in re.split(r"[-_.]", segment):
+            if len(part) > 16 or (len(part) >= 8 and re.search(r"[a-z]", part) and re.search(r"[A-Z]", part)
+                                  and re.search(r"\d", part)):
+                return False
+    return True
+
+
+_PROFILE_ROOT = re.compile(r"(?i)\b([A-Z]):([\\/])Users\2([^\\/\s\"'`<>|]+)")
+_ABSOLUTE_PATH = re.compile(
+    r"(?i)(?:\b[A-Z]:[\\/][^\s\"'`<>|]+|\\\\[^\\\s]+\\[^\s\"'`<>|]+|(?<![\w.~%])/(?:home|Users|root|mnt|var|etc|opt|srv)/[^\s\"'`<>|]+)"
+)
+_ANONYMOUS_PROFILE = re.compile(r"(?i)\b[A-Z]:([\\/])Users\1<user>(?:[\\/][^\s\"'`|]*)?")
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedText:
+    """Text after the checks that run on the original words, ready for the storage decision."""
+
+    title: str
+    content: str
+    rejection: "Decision | None" = None
+    paths_redacted: bool = False
+    absolute_paths: bool = False
+
+
+def prepare_text(title: str, content: str, *, profile: str | None) -> PreparedText:
+    """The fixed order for every write: secrets, then instructions, then paths.
+
+    1. Secrets on the original text: refused in every mode and space.
+    2. Instructions aimed at an AI assistant: refused.
+    3. The user's profile folder becomes %USERPROFILE%, and other users' profile folders lose the user name.
+    4. Any absolute path left is a personal path: the write goes to the user's review queue, not to storage.
+    """
+    secrets_found = detect_secrets(title, content)
+    if secrets_found:
+        return PreparedText(title, content, Decision(
+            REJECT, ("secrets and sensitive identifiers are never stored (" + ", ".join(secrets_found) + ")",),
+            secret_kinds=secrets_found))
+    if detect_injection(title, content):
+        return PreparedText(title, content, Decision(REJECT, ("the text contains instructions aimed at an AI assistant",)))
+    new_title, changed_title = redact_profile_paths(title, profile)
+    new_content, changed_content = redact_profile_paths(content, profile)
+    # Profile folders already reduced to X:\Users\<user>\... carry no user name, so they are not "left over".
+    absolute = any(_ABSOLUTE_PATH.search(_ANONYMOUS_PROFILE.sub("", text)) for text in (new_title, new_content))
+    return PreparedText(new_title, new_content, None, changed_title or changed_content, absolute)
+
+
+def redact_profile_paths(text: str, profile: str | None) -> tuple[str, bool]:
+    """Replace the user's profile folder with %USERPROFILE% and other users' names with <user>."""
+    if not text:
+        return text, False
+    result = text
+    if profile and len(profile.strip()) > 3:
+        root = profile.strip().rstrip("\\/")
+        for variant in {root, root.replace("\\", "/"), root.replace("/", "\\")}:
+            result = re.sub(re.escape(variant) + r"(?=[\\/]|\b|$)", lambda _m: "%USERPROFILE%", result,
+                            flags=re.IGNORECASE)
+    result = _PROFILE_ROOT.sub(lambda m: f"{m.group(1)}:{m.group(2)}Users{m.group(2)}<user>"
+                               if m.group(3) != "<user>" else m.group(0), result)
+    return result, result != text
+
+
+PERSONAL_PATH_REASON = ("contains a local absolute path, which can identify you or your PC; it waits for your "
+                        "review instead of being stored")
 
 
 def detect_injection(*texts: str | None) -> bool:
@@ -254,8 +334,12 @@ __all__ = [
     "REJECT",
     "REVIEW",
     "STORE",
+    "PERSONAL_PATH_REASON",
+    "PreparedText",
     "decide_create",
     "decide_update",
+    "prepare_text",
+    "redact_profile_paths",
     "detect_injection",
     "detect_secrets",
     "normalize",
