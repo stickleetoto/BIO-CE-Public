@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from pathlib import Path
 import sqlite3
 import threading
@@ -556,6 +557,7 @@ def run_mcp_stdio(
     connection_id: str | None = None,
 ) -> int:
     """Run the local stdio server; stdout is reserved for MCP protocol frames."""
+    _utf8_stderr()
     token = os.environ.get(TOKEN_ENVIRONMENT_VARIABLE) if connection_id else None
     release: list[Callable[[], None]] = []
     lifetime = ServerLifetime(
@@ -585,6 +587,15 @@ def run_mcp_stdio(
     finally:
         close()
     return 0
+
+
+def _utf8_stderr() -> None:
+    """Hosts read a server's stderr as UTF-8; without this, Windows writes it in the console code page and Korean
+    messages ("BIO CE 앱을 먼저 실행하세요") reach the host's log as escapes or garbled text."""
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="backslashreplace")  # type: ignore[union-attr]
+    except (AttributeError, ValueError, OSError):
+        pass
 
 
 def _end_process(close: Callable[[], None]) -> None:

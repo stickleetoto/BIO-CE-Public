@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -172,9 +173,12 @@ class NoNewDataFolderTests(unittest.TestCase):
         self.temp.cleanup()
 
     def start(self, database: Path) -> subprocess.CompletedProcess:
+        # Like a host on Windows: no UTF-8 mode, the console code page decides stderr's encoding unless the server
+        # sets it. The host decodes stderr as UTF-8.
+        env = {key: value for key, value in os.environ.items() if key not in ("PYTHONUTF8", "PYTHONIOENCODING")}
         return subprocess.run([sys.executable, "-m", "bio_ce", "mcp-stdio", "--db", str(database), "--project",
                                "bio-ce-personal", "--namespace", "default"], input="", capture_output=True,
-                              text=True, timeout=60)
+                              text=True, encoding="utf-8", errors="replace", timeout=60, env=env)
 
     def test_a_missing_data_folder_fails_with_open_the_app_first_and_nothing_is_created(self):
         database = self.root / "BIO-CE" / "data" / "memories.sqlite3"
