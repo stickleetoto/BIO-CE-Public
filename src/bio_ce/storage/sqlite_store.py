@@ -443,6 +443,37 @@ class SQLiteMemoryStore:
                 self._connection.execute("INSERT INTO memory_fts(memory_fts) VALUES ('optimize')")
         return PurgeResult(deleted, self.checkpoint())
 
+    def move(self, source: MemoryScope, target: MemoryScope, memory_ids: list[str] | tuple[str, ...]) -> int:
+        """Move memories to another space in one transaction; ids, revisions, and history stay as they are.
+
+        Only the memory rows and their search rows change scope. Curated memories stay curated and inbox items stay
+        inbox items: a move never changes the stage.
+        """
+        _validate_scope(source)
+        _validate_scope(target)
+        if source.namespace.endswith(INBOX_SUFFIX) != target.namespace.endswith(INBOX_SUFFIX):
+            raise ValidationError("a move keeps the stage: curated to curated, inbox to inbox")
+        if source == target:
+            return 0
+        ids = sorted(set(memory_ids))
+        moved = 0
+        stamp = utc_now()
+        with self._write_transaction():
+            for memory_id in ids:
+                changed = self._connection.execute(
+                    "UPDATE memories SET project = ?, namespace = ?, updated_at = ? "
+                    "WHERE memory_id = ? AND project = ? AND namespace = ?",
+                    (target.project, target.namespace, stamp, memory_id, source.project, source.namespace),
+                ).rowcount
+                if not changed:
+                    continue
+                self._connection.execute(
+                    "UPDATE memory_fts SET project = ?, namespace = ? WHERE memory_id = ?",
+                    (target.project, target.namespace, memory_id),
+                )
+                moved += 1
+        return moved
+
     def checkpoint(self) -> bool:
         """TRUNCATE checkpoint; False while another connection still reads an older snapshot."""
         self._ensure_open()

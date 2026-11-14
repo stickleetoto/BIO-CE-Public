@@ -35,7 +35,17 @@ import threading
 from typing import Any, Iterator, Mapping
 from urllib.parse import quote
 
-from bio_ce.spaces import GENERAL_SPACE_ID, PROJECT_PREFIX, Space, folder_key, normalize_folder, slugify
+from bio_ce.spaces import (
+    GENERAL_SPACE_ID,
+    PERSONAL_SPACE,
+    PERSONAL_SPACE_ID,
+    PROJECT_PREFIX,
+    Space,
+    folder_key,
+    is_reserved_name,
+    normalize_folder,
+    slugify,
+)
 
 
 MODE_READ_ONLY = "read_only"
@@ -168,6 +178,7 @@ CURATION_CLEANUP_PENDING = "cleanup_pending"
 CURATION_DISCARDED = "discarded"
 CURATION_FAILED = "failed"
 RESTORE_KEEP_DAYS = 7
+PERSONAL_ENABLED_KEY = "personal_enabled"
 # The only control tables a restore reads from the backup's pair file. Everything else (connections, their space
 # permissions and settings, the audit log, the review queue, app_settings) keeps its current rows.
 RESTORED_FROM_BACKUP = ("spaces", "space_folders", "inbox_usage", "curation_items")
@@ -592,6 +603,8 @@ class ControlStore:
 
     def create_space(self, display_name: str) -> Space:
         name = _space_name(display_name)
+        if is_reserved_name(name):
+            raise ControlStoreError("Personal is a built-in space. Choose another name.")
         with self._write():
             rows = self._connection.execute("SELECT project, display_name, archived_at FROM spaces").fetchall()
             if any(row["display_name"].casefold() == name.casefold() and row["archived_at"] is None for row in rows):
@@ -609,6 +622,8 @@ class ControlStore:
         name = _space_name(display_name)
         if space_id == GENERAL_SPACE_ID:
             raise ControlStoreError("General can't be renamed.")
+        if is_reserved_name(name):
+            raise ControlStoreError("Personal is a built-in space. Choose another name.")
         with self._write():
             clash = self._connection.execute(
                 "SELECT 1 FROM spaces WHERE space_id != ? AND archived_at IS NULL AND display_name = ? COLLATE NOCASE",
@@ -683,6 +698,10 @@ class ControlStore:
             return False, False
         if (grant.project, grant.namespace) != (DEFAULT_PROJECT, DEFAULT_NAMESPACE):
             return False, False  # a grant bound to another scope serves only that scope, never spaces
+        if space.is_personal:
+            # Only an explicit row opens Personal, and only while Personal is on. "All project spaces" never does.
+            read, write = self.personal_access(connection_id)
+            return grant.can_read and read, grant.can_write and write
         with self._lock:
             row = self._connection.execute(
                 "SELECT can_read, can_write FROM connection_spaces WHERE connection_id = ? AND space_id = ?",
@@ -694,6 +713,57 @@ class ControlStore:
         else:
             allowed = (True, True) if self.connection_settings(connection_id)["all_projects"] else (False, False)
         return grant.can_read and allowed[0], grant.can_write and allowed[1]
+
+    # Personal -----------------------------------------------------------------
+
+    def personal_enabled(self) -> bool:
+        with self._lock:
+            row = self._connection.execute("SELECT value FROM app_settings WHERE key = ?",
+                                           (PERSONAL_ENABLED_KEY,)).fetchone()
+        return row is not None and row[0] == "1"
+
+    def set_personal_enabled(self, enabled: bool) -> None:
+        """Turn Personal on or off. Turning it off keeps its memories and removes every host's Personal access."""
+        with self._write():
+            self._connection.execute(
+                "INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+                (PERSONAL_ENABLED_KEY, "1" if enabled else "0", _now()))
+            if not enabled:
+                self._connection.execute("DELETE FROM connection_spaces WHERE space_id = ?", (PERSONAL_SPACE_ID,))
+
+    def personal_space(self) -> Space | None:
+        """The built-in Personal space while it is on, else None."""
+        return PERSONAL_SPACE if self.personal_enabled() else None
+
+    def personal_access(self, connection_id: str) -> tuple[bool, bool]:
+        """The stored Personal permission for one connection (before its mode): (can_read, can_write)."""
+        if not self.personal_enabled():
+            return False, False
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT can_read, can_write FROM connection_spaces WHERE connection_id = ? AND space_id = ?",
+                (connection_id, PERSONAL_SPACE_ID)).fetchone()
+        return (bool(row[0]), bool(row[1])) if row is not None else (False, False)
+
+    def set_personal_access(self, connection_id: str, *, can_read: bool, can_write: bool) -> tuple[bool, bool]:
+        """Allow or remove one connection's Personal access. The app asks for the transfer consent before this."""
+        if can_write and not can_read:
+            raise ValueError("Personal write access needs read access")
+        self.grant(connection_id)  # unknown connections raise
+        if (can_read or can_write) and not self.personal_enabled():
+            raise ControlStoreError("Turn on Personal in Settings → Spaces first.")
+        with self._write():
+            if can_read or can_write:
+                self._connection.execute(
+                    "INSERT INTO connection_spaces (connection_id, space_id, can_read, can_write) VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT(connection_id, space_id) DO UPDATE SET can_read = excluded.can_read, "
+                    "can_write = excluded.can_write",
+                    (connection_id, PERSONAL_SPACE_ID, int(can_read), int(can_write)))
+            else:
+                self._connection.execute("DELETE FROM connection_spaces WHERE connection_id = ? AND space_id = ?",
+                                         (connection_id, PERSONAL_SPACE_ID))
+        return self.personal_access(connection_id)
 
     # App settings -----------------------------------------------------------
 

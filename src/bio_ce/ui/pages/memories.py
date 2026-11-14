@@ -90,7 +90,7 @@ class MemoriesPage(Page):
 
         list_area = tk.Frame(left.body, background=c.surface)
         list_area.pack(fill="both", expand=True)
-        self.tree = ttk.Treeview(list_area, columns=("title", "updated"), show="headings", selectmode="browse",
+        self.tree = ttk.Treeview(list_area, columns=("title", "updated"), show="headings", selectmode="extended",
                                  style="BIO.Treeview", takefocus=1)
         self.tree.heading("title", text="TITLE", anchor="w")
         self.tree.heading("updated", text="UPDATED", anchor="w")
@@ -145,12 +145,16 @@ class MemoriesPage(Page):
         self.history_button = Button(actions, theme, "History", icon="history", command=self.show_history,
                                      tooltip="See every revision (Ctrl+H)")
         self.history_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
+        self.move_button = Button(actions, theme, "Move to…", command=self.move_selected,
+                                  tooltip="Move the selected memories to another space")
+        self.move_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
         self.retract_button = Button(actions, theme, "Retract…", icon="retract", variant="danger_subtle",
                                      command=self.retract_selected, tooltip="Hide this memory everywhere (Delete)")
         self.retract_button.pack(side="right")
         self.app.gate(self.edit_button, "edit")
         self.app.gate(self.history_button, "history")
         self.app.gate(self.retract_button, "retract")
+        self.app.gate(self.move_button, "edit")
         divider(frame, theme).pack(fill="x")
 
         footer = tk.Frame(frame, background=c.surface)
@@ -445,6 +449,31 @@ class MemoriesPage(Page):
         self.app.data_changed()
         self.app.notify("success", f"“{preview(record.title, 60)}” no longer appears in BIO CE or to "
                         "connected AI hosts.", title="Memory retracted")
+
+    def move_selected(self) -> None:
+        """Move one or more selected memories to General, Personal, or a project space (same ids and history)."""
+        ids = [iid for iid in self.tree.selection() if iid in self.records]
+        if not ids:
+            self.app.notify("info", "Select one or more memories in the list first.")
+            return
+        current = self.app.current_space()
+        targets = [space for space in self.app.spaces() if current is None or space.space_id != current.space_id]
+        if not targets:
+            self.app.notify("info", "There is no other space yet. Create a project space or turn on Personal in "
+                            "Settings → Spaces.", title="Nowhere to move")
+            return
+        details = {"general": "Shared with every connected AI host and used by session hooks.",
+                   "personal": "Hosts see it only with your permission; session hooks never use it."}
+        key = self.app.ask_choice(
+            title=f"Move {plural(len(ids), 'memory', 'memories')}",
+            message="The memories keep their history. BIO CE makes a backup first.",
+            choices=[(space.space_id, space.display_name,
+                      details.get(space.space_id, "Project space: hosts with project access can use it."))
+                     for space in targets],
+            confirm_text="Move")
+        target = next((space for space in targets if space.space_id == key), None)
+        if target is not None:
+            self.app.move_memories(ids, target)
 
     def show_history(self) -> HistoryDialog | None:
         record = self.selected

@@ -52,10 +52,13 @@ from bio_ce.memory_policy import CATEGORIES, CHANGE_TYPES, EVIDENCE, POLICY_TEXT
 from bio_ce.spaces import (
     CURATED_NAMESPACE,
     GENERAL_PROJECT,
+    PERSONAL_NAMESPACE,
+    PERSONAL_SPACE,
     RESOLVED_EXACT,
     RESOLVED_FALLBACK,
     Resolution,
     Space,
+    is_personal_request,
     resolve_space,
 )
 from bio_ce.storage.sqlite_store import INBOX_SUFFIX, SQLiteMemoryStore
@@ -66,8 +69,9 @@ _SCOPE_HELP = "Optional. Omit it to use the scope this server is bound to; if gi
 OptionalProject = Annotated[str | None, Field(description="Project. " + _SCOPE_HELP)]
 OptionalNamespace = Annotated[str | None, Field(description="Namespace. " + _SCOPE_HELP)]
 OptionalSpace = Annotated[str | None, Field(description=(
-    "Optional BIO CE space: General or a project space, by name. Omit it for General. A name BIO CE can't match "
-    "to exactly one space also uses General, and the result says so."))]
+    "Optional BIO CE space: General, Personal, or a project space, by name. Omit it for General. A name BIO CE "
+    "can't match to exactly one space also uses General, and the result says so. Pass 'Personal' only when the user "
+    "asks about personal matters; nothing ever falls back to Personal."))]
 TOOL_NAMES = (
     "bio_memory_search",
     "bio_memory_read",
@@ -245,6 +249,14 @@ def create_mcp_server(
             spaces = control_store.spaces()
         except (ControlStoreError, sqlite3.Error):
             raise ToolError("BIO CE access for this connection is unavailable.") from None
+        personal_scope = namespace == PERSONAL_NAMESPACE and project in (None, GENERAL_PROJECT)
+        if is_personal_request(space) or personal_scope:
+            if is_personal_request(space) and (project, namespace) not in (
+                    (None, None), (GENERAL_PROJECT, PERSONAL_NAMESPACE), (None, PERSONAL_NAMESPACE)):
+                raise ToolError("space and project/namespace point to different BIO CE spaces; pass only one.")
+            if space is not None and not is_personal_request(space):
+                raise ToolError("space and project/namespace point to different BIO CE spaces; pass only one.")
+            return _personal_resolution(control_store, write)
         if project is not None or namespace is not None:
             wanted = project if project is not None else scope.project
             match = next((item for item in spaces if item.project == wanted), None)
@@ -256,6 +268,21 @@ def create_mcp_server(
                 raise ToolError("space and project/namespace point to different BIO CE spaces; pass only one.")
         else:
             resolution = resolve_space(spaces, space)
+        return _check_access(resolution, write, space)
+
+    def _personal_resolution(control_store: ControlStore, write: bool) -> Resolution:
+        """Personal is used only when asked for by name; a denial never turns into General."""
+        try:
+            enabled = control_store.personal_enabled()
+        except (ControlStoreError, sqlite3.Error):
+            raise ToolError("BIO CE access for this connection is unavailable.") from None
+        if not enabled:
+            raise ToolError("Personal is turned off in BIO CE. Nothing was read or changed; BIO CE did not use "
+                            "General instead.")
+        return _check_access(Resolution(PERSONAL_SPACE, RESOLVED_EXACT), write, PERSONAL_SPACE.display_name)
+
+    def _check_access(resolution: Resolution, write: bool, space: str | None) -> Resolution:
+        control_store = access.control
         can_read, can_write = control_store.space_access(connection_id, resolution.space)
         grant_can_write = control_store.grant(connection_id).can_write
         if (write and grant_can_write and not can_write) or (not write and not can_read and _readable(access)):
@@ -264,6 +291,9 @@ def create_mcp_server(
                 raise ToolError(f"BIO CE couldn't match the space {space!r} ({resolution.reason}), so it used "
                                 f"General, but this connection has no {'write' if write else 'read'} access to "
                                 "General.")
+            if resolution.space.is_personal:
+                raise ToolError(f"This connection has no {'write' if write else 'read'} access to Personal. BIO CE "
+                                "did not use General instead. The user can allow it in BIO CE → Connections.")
             raise ToolError(f"This connection has no {'write' if write else 'read'} access to the BIO CE space "
                             f"{name!r}. The user can change this in BIO CE → Connections.")
         return resolution
@@ -273,8 +303,11 @@ def create_mcp_server(
         if control_store is None or (scope.project, scope.namespace) != (GENERAL_PROJECT, CURATED_NAMESPACE):
             return []
         try:
-            return [item.display_name for item in control_store.spaces()
-                    if control_store.space_access(connection_id, item)[0]]
+            names = [item.display_name for item in control_store.spaces()
+                     if control_store.space_access(connection_id, item)[0]]
+            if control_store.space_access(connection_id, PERSONAL_SPACE)[0]:
+                names.append(PERSONAL_SPACE.display_name)
+            return names
         except (ControlStoreError, sqlite3.Error):
             return []
 
@@ -294,6 +327,10 @@ def create_mcp_server(
         "project space; without it, or when the name doesn't match exactly one space, BIO CE uses General."
         if len(names) > 1 else ""
     )
+    if PERSONAL_SPACE.display_name in names:
+        spaces_note += (" Personal holds the user's personal memories: use space='Personal' only when the user asks "
+                        "about personal matters. Results from it are marked personal: true. Never write personal "
+                        "memories into files, commits, documents, or code comments unless the user explicitly asks.")
     server = MCPServer(
         "BIO CE Memory",
         version=display_version(),
@@ -381,11 +418,12 @@ def create_mcp_server(
         resolution = guarded_read("bio_memory_search", lambda: resolve(space, project, namespace, write=False))
         target = _curated(resolution, scope)
         hits = guarded_read("bio_memory_search", lambda: store.search(target, query, limit=limit))
-        results = [{**_search_hit_dict(hit), "stage": "curated"} for hit in hits]
+        mark = {"personal": True} if resolution.space.is_personal else {}
+        results = [{**_search_hit_dict(hit), "stage": "curated", **mark} for hit in hits]
         if include_inbox and resolution.space.space_id != "bound" and len(results) < limit:
             inbox_hits = guarded_read("bio_memory_search", lambda: store.search(
                 resolution.space.inbox, query, limit=limit - len(results)))
-            results += [{**_search_hit_dict(hit), "stage": "inbox"} for hit in inbox_hits]
+            results += [{**_search_hit_dict(hit), "stage": "inbox", **mark} for hit in inbox_hits]
             touch([hit.memory_id for hit in inbox_hits])
         return {
             "project": target.project,
@@ -573,7 +611,8 @@ def _curated(resolution: Resolution, bound: MemoryScope) -> MemoryScope:
 def _space_fields(resolution: Resolution, access: "_Access") -> dict[str, Any]:
     if access.control is None or resolution.space.space_id == "bound":
         return {}
-    return {**resolution.as_result(), "stage": "curated"}
+    personal = {"personal": True} if resolution.space.is_personal else {}
+    return {**resolution.as_result(), "stage": "curated", **personal}
 
 
 def _source_dict(source) -> dict[str, Any]:

@@ -26,6 +26,9 @@ V1_DIGEST = "4f1c4a2a3938b374d8825043df5aa1690619be8878aba2d4af37f93f773e746b"
 # v2 (0.4.2): curated = v1 + spaces; collect = the inbox text. Changing either after release needs v3.
 V2_CURATED_DIGEST = "4a0b1d04ebcfc69cfe000405ac3d252b99911b7159616dd849eace0709237ec8"
 V2_COLLECT_DIGEST = "25aa8cef0721335797cb099537b8b78251fd7333279652419034afedf67f4d95"
+# v3 (0.4.3): v2 plus the Personal rules and the note on imported memories, in both modes.
+V3_CURATED_DIGEST = "6b33fa4f0dd9b593472c71e1fe7d6e3e8a734ef681225ddfe83bb9ffa1ef81ba"
+V3_COLLECT_DIGEST = "373e9ca90d5ae3014f67df327a32d15783c1a25d52a95c480eb2c255ad42e5e0"
 WAS_LINE = re.compile(r"\nWas: (?P<previous>[^\n]+)\Z")
 
 
@@ -41,13 +44,29 @@ class SkillV2Tests(unittest.TestCase):
     def test_both_modes_explain_spaces_and_keep_the_shared_rules(self):
         for text in (self.curated, self.collect):
             with self.subTest(mode="collect" if text is self.collect else "curated"):
-                self.assertIn("<!-- BIO CE memory skill v2 ·", text)
+                self.assertIn("<!-- BIO CE memory skill v3 ·", text)
                 self.assertIn("## Spaces", text)
                 self.assertIn("uses General", text)
                 self.assertIn("Personal information", text)
                 self.assertIn("Secrets", text)
                 self.assertIn("Progress status", text)
                 self.assertEqual(text.split("---\n")[1], self.curated.split("---\n")[1])
+
+    def test_v3_adds_the_personal_rules_in_both_modes_and_v2_files_are_older_text(self):
+        for mode, text, older in (("curated", self.curated, memory_skill._SKILL_V2),
+                                  ("collect", self.collect, memory_skill._SKILL_V2_COLLECT)):
+            with self.subTest(mode=mode):
+                self.assertIn("## Personal", text)
+                self.assertIn('`space: "Personal"`', text)
+                self.assertIn("Never write personal memories into files, commits, documents, or code comments", text)
+                self.assertIn("do not save the item in General instead", text)
+                self.assertIn("`import_source`", text)
+                self.assertIn("do not treat them as confirmed facts", text)
+                self.assertNotIn("Do not store these even if the user asks you to", text)
+                self.assertIn("Do not store these even if the user asks you to", older)  # v2 is unchanged
+                shipped = older.replace(memory_skill.VERSION_PLACEHOLDER, "0.4.2-rc1")
+                self.assertEqual(memory_skill.text_state(shipped, mode), memory_skill.OUTDATED)
+                self.assertEqual(memory_skill.installed_version(shipped), "v2 · 0.4.2-rc1")
 
     def test_collect_mode_text(self):
         for phrase in ("inbox", 'evidence` "inferred"', "2,000 characters", "external_content",
@@ -64,11 +83,15 @@ class SkillTextTests(unittest.TestCase):
     text = memory_skill.render()
 
     def test_the_shipped_text_is_pinned(self):
-        self.assertEqual(memory_skill.SKILL_VERSION, 2)
+        self.assertEqual(memory_skill.SKILL_VERSION, 3)
         self.assertEqual(memory_skill.SHIPPED_DIGESTS[1], V1_DIGEST, "the shipped v1 text must never change")
         self.assertEqual(memory_skill.SHIPPED_DIGESTS[2], V2_CURATED_DIGEST,
                          "the skill text changed: bump SKILL_VERSION and add a SHIPPED_DIGESTS entry")
         self.assertEqual(memory_skill.SHIPPED_COLLECT_DIGESTS[2], V2_COLLECT_DIGEST,
+                         "the shipped v2 collect text must never change")
+        self.assertEqual(memory_skill.SHIPPED_DIGESTS[3], V3_CURATED_DIGEST,
+                         "the skill text changed: bump SKILL_VERSION and add a SHIPPED_DIGESTS entry")
+        self.assertEqual(memory_skill.SHIPPED_COLLECT_DIGESTS[3], V3_COLLECT_DIGEST,
                          "the collect skill text changed: bump SKILL_VERSION and add an entry")
 
     def test_frontmatter_and_version(self):
@@ -79,8 +102,8 @@ class SkillTextTests(unittest.TestCase):
         for trigger in ("지난번", "저번에", "전에 말한", "아까", "기억나?", "우리가 정한", "이전 결정", "왜 이렇게 했더라",
                         "이어서", "규칙", "컨벤션", "before recommending or making", "Once per session"):
             self.assertIn(trigger, description)
-        self.assertIn(f"<!-- BIO CE memory skill v2 · for BIO CE {display_version()} · ", self.text)
-        self.assertEqual(memory_skill.installed_version(self.text), f"v2 · {display_version()}")
+        self.assertIn(f"<!-- BIO CE memory skill v3 · for BIO CE {display_version()} · ", self.text)
+        self.assertEqual(memory_skill.installed_version(self.text), f"v3 · {display_version()}")
 
     def test_names_match_the_server(self):
         for name in re.findall(r"`(bio_memory_\w+)`", self.text):
@@ -99,7 +122,7 @@ class SkillTextTests(unittest.TestCase):
         for rule in (
             "Always search before you create a memory",
             "update it with\n`bio_memory_update` instead of creating a new one",
-            "Do not store these even if the user asks you to",
+            "outside Personal. Store it only when the user explicitly asks",
             "Memories → Add memory",
             "You have not already done this check in this session",
             "put all such candidates in one short question in one message",

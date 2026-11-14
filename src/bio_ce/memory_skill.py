@@ -20,7 +20,7 @@ import re
 from bio_ce import display_version
 
 SKILL_NAME = "bio-ce-memory"
-SKILL_VERSION = 2
+SKILL_VERSION = 3
 CURATED = "curated"
 COLLECT = "collect"
 VERSION_PLACEHOLDER = "{BIO_CE_VERSION}"
@@ -160,12 +160,12 @@ sure of a name, omit it. When a name does not match exactly one space, BIO CE us
 
 """
 
-# v2, curated mode: the v1 rules plus spaces.
-SKILL_TEMPLATE = _SKILL_V1.replace("<!-- BIO CE memory skill v1 ·", "<!-- BIO CE memory skill v2 ·", 1).replace(
+# v2, curated mode: the v1 rules plus spaces. Shipped in v0.4.2; never change it.
+_SKILL_V2 = _SKILL_V1.replace("<!-- BIO CE memory skill v1 ·", "<!-- BIO CE memory skill v2 ·", 1).replace(
     "## When to search\n", _SPACES_SECTION + "## When to search\n", 1)
 
-# v2, collect mode: the user lets the host save to the inbox first and sorts it in BIO CE.
-SKILL_COLLECT_TEMPLATE = _SKILL_V1.split("<!-- BIO CE memory skill v1 ·", 1)[0] + """<!-- BIO CE memory skill v2 · for BIO CE {BIO_CE_VERSION} · installed and managed by BIO CE. If you edit this file, BIO CE asks before replacing or removing it. -->
+# v2, collect mode: the user lets the host save to the inbox first and sorts it in BIO CE. Shipped in v0.4.2.
+_SKILL_V2_COLLECT = _SKILL_V1.split("<!-- BIO CE memory skill v1 ·", 1)[0] + """<!-- BIO CE memory skill v2 · for BIO CE {BIO_CE_VERSION} · installed and managed by BIO CE. If you edit this file, BIO CE asks before replacing or removing it. -->
 
 # BIO CE memory (collect mode)
 
@@ -245,6 +245,41 @@ line each what you would have saved.
 Whenever you save or update something, say so in one short line with its title and whether it went to the inbox.
 """
 
+_PERSONAL_SECTION = """## Personal
+
+The user may keep personal memories in BIO CE's Personal space. Use `space: "Personal"` only when the user asks
+about personal matters or asks you to remember something personal. Results from Personal are marked
+`personal: true`. Never write personal memories into files, commits, documents, or code comments unless the user
+explicitly asks for that. If BIO CE says Personal is off or this connection has no access, tell the user in one line;
+do not save the item in General instead.
+
+Some memories were imported from another AI (their source says `user-imported`, with `import_source` "chatgpt" or
+"claude"). Another AI wrote them and their dates may be guesses, so do not treat them as confirmed facts; check with
+the user before you rely on one for an important decision.
+
+"""
+_NEVER_PERSONAL_V2 = """- Personal information: contact details, ID or account numbers, health, finances, home addresses, or anything
+  about other people. Do not store these even if the user asks you to. Tell the user in one line that they can
+  add it themselves in the BIO CE app (Memories → Add memory) if they want it kept.
+"""
+_NEVER_PERSONAL_V3 = """- Personal information (contact details, ID or account numbers, health, finances, home addresses, anything about
+  other people) outside Personal. Store it only when the user explicitly asks, and only with `space: "Personal"`.
+  Otherwise tell the user in one line that they can add it in the BIO CE app (Memories → Add memory).
+"""
+
+
+def _v3(text: str) -> str:
+    """v3 = v2 plus the Personal rules and the note on imported memories (both modes)."""
+    assert text.count(_NEVER_PERSONAL_V2) == 1 and text.count("## When to search\n") == 1
+    return (text.replace("<!-- BIO CE memory skill v2 ·", "<!-- BIO CE memory skill v3 ·", 1)
+            .replace("## When to search\n", _PERSONAL_SECTION + "## When to search\n", 1)
+            .replace(_NEVER_PERSONAL_V2, _NEVER_PERSONAL_V3, 1))
+
+
+# v3 (v0.4.3): the texts BIO CE installs now.
+SKILL_TEMPLATE = _v3(_SKILL_V2)
+SKILL_COLLECT_TEMPLATE = _v3(_SKILL_V2_COLLECT)
+
 _HEADER_COMMENT = re.compile(r"<!-- BIO CE memory skill v(\d+) · for BIO CE ([^ ]+) · ")
 AGENTS_BEGIN = "<!-- BEGIN BIO CE memory skill -->"
 AGENTS_END = "<!-- END BIO CE memory skill -->"
@@ -277,11 +312,13 @@ def _normalized_digest(text: str) -> str:
 # recognizes its own older files. A change to SKILL_TEMPLATE needs a new SKILL_VERSION and entry.
 SHIPPED_DIGESTS: dict[int, str] = {
     1: _normalized_digest(_SKILL_V1),
-    2: _normalized_digest(SKILL_TEMPLATE),
+    2: _normalized_digest(_SKILL_V2),
+    3: _normalized_digest(SKILL_TEMPLATE),
 }
 # Collect-mode texts, by skill version (collect mode starts at v2).
 SHIPPED_COLLECT_DIGESTS: dict[int, str] = {
-    2: _normalized_digest(SKILL_COLLECT_TEMPLATE),
+    2: _normalized_digest(_SKILL_V2_COLLECT),
+    3: _normalized_digest(SKILL_COLLECT_TEMPLATE),
 }
 
 

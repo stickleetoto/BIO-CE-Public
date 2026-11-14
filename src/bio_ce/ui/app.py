@@ -27,7 +27,8 @@ from bio_ce.engine.external import ExternalEngineAdapter
 from bio_ce.engine.presentation import ActionState, EngineBanner, action_states, banner, engine_name
 from bio_ce.engine.switching import DEFAULT_SELECTION, EngineSelection, SwitchPhase
 from bio_ce.storage.backup import PAIR_MATCHED, BackupError, pair_path
-from bio_ce.ui.dialogs import ConfirmDialog, NameDialog, ReviewEditDialog
+from bio_ce.spaces import PERSONAL_SPACE
+from bio_ce.ui.dialogs import ChoiceDialog, ConfirmDialog, NameDialog, ReviewEditDialog
 from bio_ce.ui.format import preview
 from bio_ce.ui.pages import Page
 from bio_ce.ui.pages.connections import ConnectionsPage
@@ -404,6 +405,9 @@ class BIOCEDesktop:
     def ask_name(self, **options: Any) -> str | None:
         return NameDialog(self.root, self.theme, **options).ask()
 
+    def ask_choice(self, **options: Any) -> str | None:
+        return ChoiceDialog(self.root, self.theme, **options).ask()
+
     def open_path(self, path: Path) -> bool:
         try:
             os.startfile(str(path))  # type: ignore[attr-defined]
@@ -477,13 +481,65 @@ class BIOCEDesktop:
     # Spaces and the inbox -------------------------------------------------
 
     def spaces(self) -> tuple:
+        """General, then Personal while it is on, then the project spaces."""
         control = getattr(self.connection_manager, "control", None)
         if control is None:
             return ()
         try:
-            return control.spaces()
+            spaces = control.spaces()
+            personal = (PERSONAL_SPACE,) if control.personal_enabled() else ()
         except Exception:  # noqa: BLE001
             return ()
+        general = tuple(space for space in spaces if space.is_general)
+        return general + personal + tuple(space for space in spaces if not space.is_general)
+
+    def personal_enabled(self) -> bool:
+        control = getattr(self.connection_manager, "control", None)
+        try:
+            return bool(control is not None and control.personal_enabled())
+        except Exception:  # noqa: BLE001
+            return False
+
+    def set_personal_enabled(self, enabled: bool) -> bool:
+        """Turn Personal on or off. Off keeps its memories, removes every host's access, and shows General."""
+        control = getattr(self.connection_manager, "control", None)
+        if control is None:
+            return False
+        try:
+            control.set_personal_enabled(enabled)
+        except Exception as exc:  # noqa: BLE001 - shown to the user
+            self.notify("error", str(exc) or "BIO CE couldn't change Personal.", title="Personal")
+            return False
+        if not enabled and self._space_id == PERSONAL_SPACE.space_id:
+            general = next((space for space in self.spaces() if space.is_general), None)
+            self._space_id = "general"
+            if general is not None:
+                self.service.use_space(general.curated)
+            self.memories.selected = None
+        self.data_changed()
+        self.hosts_changed()
+        return True
+
+    def move_memories(self, memory_ids: list[str], target, *, inbox: bool = False) -> int | None:
+        """Move memories of the shown space to ``target`` (a Space) after an automatic backup."""
+        control = getattr(self.connection_manager, "control", None)
+        if control is None or not memory_ids or not self.require_action("edit"):
+            return None
+        if target.is_personal and not self.personal_enabled():
+            self.notify("warning", "Turn on Personal in Settings → Spaces first.", title="Personal is off")
+            return None
+        try:
+            result = self.service.move_memories(control, memory_ids, target.curated, inbox=inbox)
+        except Exception:  # noqa: BLE001 - shown to the user
+            self.notify("error", "BIO CE couldn't move these memories. Nothing was changed.", title="Not moved")
+            return None
+        self.memories.selected = None
+        self.data_changed()
+        moved = int(result.get("moved", 0))
+        self.notify("success", f"Moved {moved} {'memory' if moved == 1 else 'memories'} to {target.display_name}. "
+                    "A backup from just before the move is in the data folder's backups folder.",
+                    title="Moved")
+        return moved
 
     def current_space(self):
         return next((space for space in self.spaces() if space.space_id == self._space_id), None)

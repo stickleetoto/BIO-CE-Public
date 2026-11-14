@@ -50,6 +50,7 @@ from bio_ce.memory_policy import (
     normalize,
     prepare_text,
 )
+from bio_ce.spaces import PERSONAL_SPACE
 from bio_ce.storage.sqlite_store import INBOX_SUFFIX, SQLiteMemoryStore
 
 
@@ -109,6 +110,9 @@ class AutoMemoryWriter:
                 evidence=evidence, existing=existing,
             )
             if decision.action == STORE and prepared.absolute_paths:
+                if self._personal_writable():
+                    return self._personal_path_inbox(store, host, prepared, category=category, confidence=confidence,
+                                                     evidence=evidence, reason=reason)
                 decision = Decision(REVIEW, (PERSONAL_PATH_REASON,))
             detail = self._detail(category=category, confidence=confidence, evidence=evidence, reason=reason,
                                   decision=decision.summary, paths_redacted=prepared.paths_redacted)
@@ -261,6 +265,9 @@ class AutoMemoryWriter:
             decision = decide_collect(title=title, content=content, category=category, confidence=confidence,
                                       evidence=evidence, reason=reason, existing=existing)
             if decision.action == STORE and prepared.absolute_paths:
+                if self._personal_writable():
+                    return self._personal_path_inbox(store, host, prepared, category=category, confidence=confidence,
+                                                     evidence=evidence, reason=reason)
                 decision = Decision(REVIEW, (PERSONAL_PATH_REASON,))
             detail = self._detail(category=category, confidence=confidence, evidence=evidence, reason=reason,
                                   decision=decision.summary, paths_redacted=prepared.paths_redacted, stage="inbox")
@@ -359,6 +366,45 @@ class AutoMemoryWriter:
         return {"status": "discard_proposed", "stage": "inbox", "memory_id": memory_id,
                 "message": f"The user sees this in BIO CE's inbox clean-up. Unless they keep it, it is discarded in "
                            f"{wait} days."}
+
+    # Personal paths -----------------------------------------------------------
+
+    def _personal_writable(self) -> bool:
+        """Whether this connection may write to Personal (Personal on, explicit permission, Auto memory)."""
+        try:
+            return self.control.space_access(self.connection_id, PERSONAL_SPACE)[1]
+        except Exception:  # noqa: BLE001 - without a clear yes the item waits for review
+            return False
+
+    def _personal_path_inbox(self, store: SQLiteMemoryStore, host: str, prepared, *, category: str, confidence: str,
+                             evidence: str, reason: str) -> dict[str, Any]:
+        """A text that still names a local path is personal: it goes to the Personal inbox, never to General."""
+        title, content = prepared.title, prepared.content
+        inbox = PERSONAL_SPACE.inbox
+        detail = self._detail(category=category, confidence=confidence, evidence=evidence, reason=reason,
+                              decision="personal path: Personal inbox", paths_redacted=prepared.paths_redacted,
+                              stage="inbox", space="personal")
+        text = f"{title}\n{content}"
+        existing = self._similar(store, text, scope=inbox)
+        duplicate = next((memory_id for memory_id, found in existing if normalize(found) == normalize(text)), None)
+        if duplicate is not None:
+            current = store.read(inbox, duplicate)
+            return {"status": "duplicate", "memory_id": current.memory_id, "revision_id": current.revision_id,
+                    "stage": "inbox", "space": {"id": PERSONAL_SPACE.space_id, "name": PERSONAL_SPACE.display_name},
+                    "personal": True, "reasons": ["the Personal inbox already has this"]}
+        self._check_rate(host)
+        source = self._source(category, confidence, evidence, reason, stage="inbox", guess=evidence == "inferred")
+        revision = store.add(inbox, title=title, content=content, source=source)
+        self.control.inbox_seen(revision.memory_id)
+        self.control.record(host=host, connection_id=self.connection_id, action="create", outcome="created",
+                            memory_id=revision.memory_id, revision_id=revision.revision_id, title=title,
+                            detail=detail)
+        return self._redacted({
+            "status": "created", "stage": "inbox", "memory_id": revision.memory_id,
+            "revision_id": revision.revision_id, "revision_number": revision.revision_number,
+            "space": {"id": PERSONAL_SPACE.space_id, "name": PERSONAL_SPACE.display_name}, "personal": True,
+            "message": "It contains a local path, which can identify the user or their PC, so BIO CE saved it in the "
+                       "user's Personal inbox instead of General. The user sorts it in BIO CE."}, prepared)
 
     # Helpers ----------------------------------------------------------------
 

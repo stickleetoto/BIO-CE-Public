@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import ctypes
 from dataclasses import dataclass
+from datetime import datetime
 import json
 import os
 from pathlib import Path
@@ -254,6 +255,31 @@ class DesktopMemoryService:
 
     def finish_cleanups(self, control: ControlStore) -> int:
         return finish_pending_cleanups(self._store, control)
+
+    def move_memories(self, control: ControlStore, memory_ids: list[str] | tuple[str, ...], target: MemoryScope,
+                      *, inbox: bool = False) -> dict:
+        """Move memories of the current space (curated, or its inbox) to another space, after an automatic backup.
+
+        The same memory ids keep their whole revision history; only the space changes. Personal is a target only
+        while it is turned on (the caller checks), and the audit log keeps counts, never titles.
+        """
+        source = inbox_scope(self.scope) if inbox else self.scope
+        destination = inbox_scope(target) if inbox else target
+        ids = sorted(set(memory_ids))
+        if not ids or source == destination:
+            return {"moved": 0, "backup": None}
+        backup = self.automatic_backup("before-move")
+        moved = self._store.move(source, destination, ids)
+        control.record(host="bio-ce-desktop", connection_id=None, action="space-move", outcome="moved",
+                       detail={"count": moved, "from": f"{source.project}/{source.namespace}",
+                               "to": f"{destination.project}/{destination.namespace}"})
+        return {"moved": moved, "backup": backup}
+
+    def automatic_backup(self, reason: str) -> Path:
+        """A backup pair in the data folder's backups folder, made before a bulk change; never overwritten."""
+        folder = self.database.parent / "backups"
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+        return self.create_backup(folder / f"auto-{reason}-{stamp}.sqlite3")
 
     def create_backup(self, destination: str | Path) -> Path:
         """Memory snapshot X.sqlite3 plus the connection records X.control.sqlite3 beside it."""

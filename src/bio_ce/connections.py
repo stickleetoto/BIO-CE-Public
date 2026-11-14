@@ -306,6 +306,20 @@ class MCPConnectionManager:
             return None
         return self.control.connection_settings(status.connection_id)
 
+    def personal_access(self, host: str) -> tuple[bool, bool] | None:
+        """(can_read, can_write) in Personal for a connected host, None when it is not connected."""
+        status = self.status(host)
+        if not status.connected or status.connection_id is None:
+            return None
+        return self.control.personal_access(status.connection_id)
+
+    def set_personal_access(self, host: str, *, can_read: bool, can_write: bool) -> tuple[bool, bool]:
+        """Running servers apply the change on their next call. The app asks for the transfer consent first."""
+        status = self.status(host)
+        if not status.connected or status.connection_id is None:
+            raise MCPConnectionError("Connect this host in BIO CE first.")
+        return self.control.set_personal_access(status.connection_id, can_read=can_read, can_write=can_write)
+
     def set_connection_settings(self, host: str, *, save_mode: str | None = None,
                                 all_projects: bool | None = None) -> dict:
         """Running servers apply the change on their next call, like a mode change."""

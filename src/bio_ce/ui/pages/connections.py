@@ -187,8 +187,18 @@ class HostCard(Card):
         self.spaces_button = Button(spaces, theme, "Use General only", variant="link",
                                     command=lambda: page.toggle_projects(host))
         self.spaces_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
+        self.personal_row = tk.Frame(self.access, background=c.surface)
+        tk.Label(self.personal_row, text="Personal", font=theme.font("body_strong"), background=c.surface,
+                 foreground=c.text, width=12, anchor="w").pack(side="left")
+        self.personal_label = tk.Label(self.personal_row, text="", font=theme.font("body"), background=c.surface,
+                                       foreground=c.text_secondary, anchor="w")
+        self.personal_label.pack(side="left")
+        self.personal_button = Button(self.personal_row, theme, "Allow…", variant="link",
+                                      command=lambda: page.change_personal(host))
+        self.personal_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
         saving = tk.Frame(self.access, background=c.surface)
         saving.pack(fill="x", pady=(theme.px(SPACE_S), 0))
+        self.saving_row = saving
         tk.Label(saving, text="Saving", font=theme.font("body_strong"), background=c.surface,
                  foreground=c.text, width=12, anchor="w").pack(side="left")
         self.saving_label = tk.Label(saving, text="", font=theme.font("body"), background=c.surface,
@@ -260,6 +270,14 @@ class HostCard(Card):
             all_projects = bool(settings.get("all_projects", True))
             self.spaces_label.configure(text="General and all project spaces" if all_projects else "General only")
             self.spaces_button.set_text("Use General only" if all_projects else "Use all project spaces")
+            personal = self.page.personal_access(self.host)
+            if personal is None:
+                self.personal_row.pack_forget()
+            else:
+                self.personal_row.pack(fill="x", pady=(self.page.theme.px(SPACE_S), 0), before=self.saving_row)
+                read, write = personal
+                self.personal_label.configure(text="Read and save" if write else "Read only" if read else "Off")
+                self.personal_button.set_text("Change…" if read else "Allow…")
             collect = settings.get("save_mode") == "collect"
             self.saving_label.configure(text="Collect: lasting information goes to your inbox" if collect
                                         else "Curated: only what you stated or confirmed")
@@ -652,6 +670,62 @@ class ConnectionsPage(Page):
             return manager.connection_settings(host)
         except Exception:  # noqa: BLE001 - a settings read must never break the page
             return None
+
+    def personal_access(self, host: str) -> tuple[bool, bool] | None:
+        """This host's Personal access, or None when Personal is off or the host is not connected."""
+        manager = self.app.connection_manager
+        if not hasattr(manager, "personal_access") or not self.app.personal_enabled():
+            return None
+        try:
+            return manager.personal_access(host)
+        except Exception:  # noqa: BLE001 - a settings read must never break the page
+            return None
+
+    def change_personal(self, host: str) -> None:
+        """Allow, narrow, or remove one host's Personal access. Allowing needs the transfer consent."""
+        name = host_name(host)
+        current = self.personal_access(host)
+        if current is None:
+            self.app.notify("info", "Turn on Personal in Settings → Spaces first.", title="Personal is off")
+            return
+        choice = self.app.ask_choice(
+            title=f"{name}: Personal",
+            message=(f"Personal holds memories about you. {name} reads it only when you ask about personal "
+                     "matters, and session hooks never use it."),
+            choices=[("read", "Read only", f"{name} can search and read Personal."),
+                     ("write", "Read and save", f"{name} can also save personal memories you ask it to keep."),
+                     ("off", "Off", f"{name} can't use Personal.")],
+            confirm_text="Continue")
+        if choice is None:
+            return
+        read, write = choice in ("read", "write"), choice == "write"
+        if read and not current[0]:
+            choices: dict[str, bool] = {}
+            accepted = self.app.confirm(
+                title=f"Allow {name} to read Personal?",
+                message=(f"Personal memories {name} reads become part of your conversation and are sent to the AI "
+                         f"service {name} uses ({PROVIDER_EXAMPLES[host]}). BIO CE can't control what happens to "
+                         "them there."),
+                points=("Session hooks never add Personal memories to a conversation.",
+                        "You can turn this off here at any time."),
+                options=(("consent", "I understand that Personal memories this host reads are sent to its AI "
+                                     "service.", False),),
+                choices=choices, confirm_text="Allow")
+            if not accepted or not choices.get("consent"):
+                if accepted:
+                    self.app.notify("info", "Nothing changed: tick the box to confirm you understand.",
+                                    title=f"{name}: Personal")
+                return
+        try:
+            self.app.connection_manager.set_personal_access(host, can_read=read, can_write=write)
+        except Exception as exc:  # noqa: BLE001 - shown to the user
+            self.app.notify("error", str(exc) or "BIO CE couldn't change this setting.", title=f"{name}: Personal")
+            return
+        self.app.notify("success", {"read": f"{name} can now read Personal.",
+                                    "write": f"{name} can now read and save in Personal.",
+                                    "off": f"{name} can no longer use Personal."}[choice],
+                        title=f"{name}: Personal")
+        self.app.hosts_changed()
 
     def toggle_projects(self, host: str) -> None:
         """All project spaces on or off for one host. General access always follows the Access mode."""

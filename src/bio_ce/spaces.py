@@ -1,15 +1,19 @@
 # Copyright 2026 stickleetoto
 # SPDX-License-Identifier: Apache-2.0
 
-"""Spaces: General and Project memory areas, mapped onto the existing project and namespace columns.
+"""Spaces: General, Personal, and Project memory areas, mapped onto the existing project and namespace columns.
 
-| Space            | project            | curated namespace | inbox namespace  |
-|------------------|--------------------|-------------------|------------------|
-| General          | ``bio-ce-personal``| ``default``       | ``default.inbox``|
-| Project <name>   | ``project:<slug>`` | ``default``       | ``default.inbox``|
+| Space            | project            | curated namespace | inbox namespace   |
+|------------------|--------------------|-------------------|-------------------|
+| General          | ``bio-ce-personal``| ``default``       | ``default.inbox`` |
+| Personal         | ``bio-ce-personal``| ``personal``      | ``personal.inbox``|
+| Project <name>   | ``project:<slug>`` | ``default``       | ``default.inbox`` |
+
+Personal is built in (not a row of the ``spaces`` table, whose CHECK constraint allows only general and project).
+It is off until the user turns it on, and a host reaches it only through an explicit per-connection permission.
 
 When a name cannot be resolved to exactly one space, BIO CE uses General and says so. A permission denial is
-never redirected to General: that would turn a refusal into a way around it.
+never redirected to General: that would turn a refusal into a way around it. Nothing ever falls back to Personal.
 """
 
 from __future__ import annotations
@@ -31,6 +35,10 @@ GENERAL_PROJECT = "bio-ce-personal"
 PROJECT_PREFIX = "project:"
 CURATED_NAMESPACE = "default"
 INBOX_NAMESPACE = "default.inbox"
+PERSONAL_SPACE_ID = "personal"
+PERSONAL_NAMESPACE = "personal"
+PERSONAL_DISPLAY_NAME = "Personal"
+INBOX_SUFFIX = ".inbox"
 SLUG_LIMIT = 64
 
 RESOLVED_EXACT = "exact"
@@ -47,10 +55,15 @@ class Space:
     project: str
     display_name: str
     archived_at: str | None = None
+    namespace: str = CURATED_NAMESPACE
 
     @property
     def is_general(self) -> bool:
         return self.kind == "general"
+
+    @property
+    def is_personal(self) -> bool:
+        return self.kind == "personal"
 
     @property
     def slug(self) -> str:
@@ -58,11 +71,34 @@ class Space:
 
     @property
     def curated(self) -> MemoryScope:
-        return MemoryScope(self.project, CURATED_NAMESPACE)
+        return MemoryScope(self.project, self.namespace)
 
     @property
     def inbox(self) -> MemoryScope:
-        return MemoryScope(self.project, INBOX_NAMESPACE)
+        return MemoryScope(self.project, self.namespace + INBOX_SUFFIX)
+
+
+PERSONAL_SPACE = Space(PERSONAL_SPACE_ID, "personal", GENERAL_PROJECT, PERSONAL_DISPLAY_NAME,
+                       namespace=PERSONAL_NAMESPACE)
+
+
+def is_personal_request(requested: str | None) -> bool:
+    """space="personal" or "Personal" (any case) asks for the built-in Personal space."""
+    return requested is not None and requested.strip().casefold() == PERSONAL_SPACE_ID
+
+
+def is_reserved_name(display_name: str) -> bool:
+    """Project spaces can't be called Personal: that name always means the built-in space."""
+    return unicodedata.normalize("NFKC", display_name).strip().casefold() == PERSONAL_SPACE_ID
+
+
+def space_for_scope(spaces: Iterable[Space], scope: MemoryScope) -> Space | None:
+    """The space that owns a curated or inbox scope; Personal is included even though it is not a table row."""
+    namespace = scope.namespace[: -len(INBOX_SUFFIX)] if scope.namespace.endswith(INBOX_SUFFIX) else scope.namespace
+    for space in (*spaces, PERSONAL_SPACE):
+        if space.project == scope.project and space.namespace == namespace:
+            return space
+    return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,6 +200,11 @@ __all__ = [
     "GENERAL_PROJECT",
     "GENERAL_SPACE_ID",
     "INBOX_NAMESPACE",
+    "INBOX_SUFFIX",
+    "PERSONAL_DISPLAY_NAME",
+    "PERSONAL_NAMESPACE",
+    "PERSONAL_SPACE",
+    "PERSONAL_SPACE_ID",
     "PROJECT_PREFIX",
     "REASON_AMBIGUOUS",
     "REASON_UNKNOWN",
@@ -174,6 +215,9 @@ __all__ = [
     "Space",
     "folder_chain",
     "folder_key",
+    "is_personal_request",
+    "is_reserved_name",
+    "space_for_scope",
     "normalize_folder",
     "resolve_folder",
     "resolve_space",

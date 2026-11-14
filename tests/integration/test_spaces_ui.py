@@ -39,7 +39,7 @@ class SpacesUiTests(unittest.TestCase):
     def test_create_rename_link_unlink_and_archive_a_project_space(self):
         control = self.connections.control
         self.app.show_page("settings")
-        self.assertEqual(list(self.settings.space_rows), ["general"])
+        self.assertEqual(list(self.settings.space_rows), ["general", "personal"])
         with patch.object(self.app, "ask_name", return_value="Alpha App"):
             self.settings.new_space()
         alpha = next(space for space in control.spaces() if space.display_name == "Alpha App")
@@ -59,7 +59,7 @@ class SpacesUiTests(unittest.TestCase):
         self.assertEqual(control.folder_links(), ())
         with patch.object(self.app, "confirm", return_value=True):
             self.settings.archive_space(control.space(alpha.space_id))
-        self.assertEqual(list(self.settings.space_rows), ["general"])
+        self.assertEqual(list(self.settings.space_rows), ["general", "personal"])
 
     def test_connect_message_names_the_settings_that_apply(self):
         page = self.app.pages["connections"]

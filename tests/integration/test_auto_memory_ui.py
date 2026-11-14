@@ -52,6 +52,13 @@ class FakeManagedConnections:
         self.calls.append(("set_connection_settings", values))
         return self.control.set_connection_settings(self.grant.connection_id, **values)
 
+    def personal_access(self, host: str):
+        return self.control.personal_access(self.grant.connection_id) if host == "codex" else None
+
+    def set_personal_access(self, host: str, **values):
+        self.calls.append(("set_personal_access", values))
+        return self.control.set_personal_access(self.grant.connection_id, **values)
+
     def install_hooks(self, host: str, *, approved: bool = False):
         assert approved is True
         self.calls.append(("install_hooks", host))

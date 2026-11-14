@@ -22,6 +22,8 @@ ALLOWED_SERVICE_CALLS = {
     "create_backup", "restore_backup", "approve_review", "reject_review", "close",
     # v0.4.2 inbox and spaces (Community-only, like the review queue)
     "inbox", "similar_curated", "move_inbox", "discard_inbox", "discard_proposal", "run_inbox_expiry", "use_space",
+    # v0.4.3 moving memories between spaces (Community-only; gated by the edit action)
+    "move_memories",
 }
 
 

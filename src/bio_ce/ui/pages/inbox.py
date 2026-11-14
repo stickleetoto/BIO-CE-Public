@@ -17,7 +17,7 @@ from bio_ce.ui.dialogs import ReviewEditDialog
 from bio_ce.ui.format import format_timestamp, plural, preview, relative_time
 from bio_ce.ui.pages import Page
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS
-from bio_ce.ui.widgets import AutoScrollbar, Button, Card, EmptyState, WrapLabel, section_label
+from bio_ce.ui.widgets import AutoScrollbar, Button, Card, EmptyState, Pill, WrapLabel, section_label
 
 
 class SpaceBar(tk.Frame):
@@ -46,6 +46,7 @@ class SpaceBar(tk.Frame):
         tk.Label(self, text="Space", font=theme.font("caption_strong"), background=c.bg,
                  foreground=c.text_muted).pack(side="right", padx=(0, theme.px(SPACE_S)))
         self.picker.bind("<<ComboboxSelected>>", lambda _e: self._chosen())
+        self.personal_pill = Pill(self, theme, "Personal: hosts see it only with your permission", "warning")
         self._spaces: list = []
 
     def refresh(self) -> None:
@@ -53,6 +54,10 @@ class SpaceBar(tk.Frame):
         self.picker.configure(values=[space.display_name for space in self._spaces])
         current = self.app.current_space()
         self.space.set(current.display_name if current is not None else "General")
+        if current is not None and current.is_personal:
+            self.personal_pill.pack(side="right", padx=(0, self.app.theme.px(SPACE_M)))
+        else:
+            self.personal_pill.pack_forget()
         if len(self._spaces) <= 1:
             self.picker.configure(state="disabled")
         else:

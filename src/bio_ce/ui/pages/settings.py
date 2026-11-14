@@ -141,7 +141,8 @@ class SettingsPage(Page):
         backup = self._card(body, "Backup and restore",
                             "A backup is two files: a complete copy of your memories (name.sqlite3) and your "
                             "connection records (name.control.sqlite3). Keep them together. Backups are not "
-                            "encrypted, so store them somewhere private and don't share them.")
+                            "encrypted and may contain personal memories, so store them somewhere private and don't "
+                            "share them.")
         backup_row = tk.Frame(backup, background=c.surface)
         backup_row.pack(fill="x", pady=(theme.px(SPACE_M), 0))
         self.backup_button = Button(backup_row, theme, "Create backup…", icon="backup", command=app.backup_database)
@@ -273,6 +274,62 @@ class SettingsPage(Page):
                 Button(line, theme, "Unlink", variant="link",
                        command=lambda item=space, k=key: self.unlink_folder(item, k)).pack(side="right")
             self.space_rows[space.space_id] = frame
+            if space.is_general:
+                self._render_personal_row(control)
+
+    def _render_personal_row(self, control) -> None:
+        theme, c = self.theme, self.colors
+        try:
+            enabled = bool(control.personal_enabled())
+        except Exception:  # noqa: BLE001
+            return
+        frame = tk.Frame(self.spaces_list, background=c.surface_alt, highlightthickness=1,
+                         highlightbackground=c.border)
+        frame.pack(fill="x", pady=(0, theme.px(SPACE_S)))
+        inner = tk.Frame(frame, background=c.surface_alt)
+        inner.pack(fill="x", padx=theme.px(SPACE_M), pady=theme.px(SPACE_S))
+        top = tk.Frame(inner, background=c.surface_alt)
+        top.pack(fill="x")
+        tk.Label(top, text="Personal", font=theme.font("body_strong"), background=c.surface_alt,
+                 foreground=c.text, anchor="w").pack(side="left")
+        if enabled:
+            Button(top, theme, "Turn off…", variant="link", command=self.turn_off_personal).pack(side="right")
+            detail = ("On. Hosts read it only with the permission you give each one on the Connections page; "
+                      "session hooks never use it.")
+        else:
+            Button(top, theme, "Turn on Personal…", variant="link", command=self.turn_on_personal).pack(side="right")
+            detail = "Off. For memories about you: health, family, finances, where you studied or served."
+        tk.Label(inner, text=detail, font=theme.font("caption"), background=c.surface_alt, foreground=c.text_muted,
+                 anchor="w", justify="left", wraplength=theme.px(520)).pack(fill="x")
+        self.space_rows["personal"] = frame
+
+    def turn_on_personal(self) -> bool:
+        if not self.app.confirm(
+            title="Turn on Personal?",
+            message="Personal is a separate space for memories about you. Nothing changes for your hosts until "
+                    "you allow each one.",
+            points=("No AI host can read or save Personal until you allow it on the Connections page.",
+                    "Session hooks never add Personal memories to a conversation.",
+                    "Personal memories are in your backups like all other memories.",
+                    "Turning it off later keeps its memories and removes every host's access."),
+            confirm_text="Turn on Personal",
+        ):
+            return False
+        done = self.app.set_personal_enabled(True)
+        self.render_spaces()
+        return done
+
+    def turn_off_personal(self) -> bool:
+        if not self.app.confirm(
+            title="Turn off Personal?",
+            message="Personal memories stay in your database, but no host can use them and the space is hidden.",
+            points=("Every host's Personal access is removed. You allow each host again after turning it on.",),
+            confirm_text="Turn off Personal",
+        ):
+            return False
+        done = self.app.set_personal_enabled(False)
+        self.render_spaces()
+        return done
 
     def _space_action(self, title: str, action) -> bool:
         try:

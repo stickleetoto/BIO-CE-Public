@@ -333,6 +333,41 @@ class NameDialog(Dialog):
         return self.result  # type: ignore[return-value]
 
 
+class ChoiceDialog(Dialog):
+    """Pick one of a few options (for example the space to move memories to). Returns its key or None."""
+
+    def __init__(self, parent: tk.Misc, theme: Theme, *, title: str, message: str,
+                 choices: Sequence[tuple[str, str, str]], confirm_text: str, note: str = "") -> None:
+        """``choices`` are (key, label, detail); the first is selected."""
+        super().__init__(parent, theme, title)
+        c = theme.colors
+        wrap = theme.px(440)
+        tk.Label(self.content, text=title, font=theme.font("title"), background=c.surface, foreground=c.text,
+                 anchor="w").pack(fill="x")
+        WrapLabel(self.content, message, font=theme.font("body"), foreground=c.text_secondary).pack(
+            fill="x", pady=(theme.px(SPACE_S), 0))
+        self.choice = tk.StringVar(master=self, value=choices[0][0] if choices else "")
+        for key, label, detail in choices:
+            tk.Radiobutton(self.content, text=label, value=key, variable=self.choice, font=theme.font("body_strong"),
+                           background=c.surface, foreground=c.text, activebackground=c.surface,
+                           activeforeground=c.text, selectcolor=c.surface_alt, anchor="w", highlightthickness=0,
+                           borderwidth=0).pack(fill="x", pady=(theme.px(SPACE_S), 0))
+            if detail:
+                tk.Label(self.content, text=detail, font=theme.font("caption"), background=c.surface,
+                         foreground=c.text_muted, anchor="w", justify="left", wraplength=wrap).pack(
+                    fill="x", padx=(theme.px(24), 0))
+        if note:
+            WrapLabel(self.content, note, font=theme.font("caption"), foreground=c.text_muted).pack(
+                fill="x", pady=(theme.px(SPACE_M), 0))
+        self.add_button(confirm_text, lambda: self.finish(self.choice.get() or None), variant="primary")
+        self.add_button("Cancel", lambda: self.finish(None))
+        self.result = None
+
+    def ask(self) -> str | None:
+        self.present()
+        return self.result  # type: ignore[return-value]
+
+
 def ask_privacy_consent(root: tk.Tk, theme: Theme) -> bool:
     """Show the first-run data notice inside the main window; True to continue."""
     c = theme.colors
