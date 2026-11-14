@@ -47,6 +47,10 @@ class SpaceBar(tk.Frame):
         self.inbox_tab = Button(self, theme, "Inbox", variant="primary" if active == "inbox" else "subtle",
                                 command=lambda: app.show_page("inbox"))
         self.inbox_tab.pack(side="left", padx=(theme.px(SPACE_XS), 0))
+        self.suggestions_tab = Button(self, theme, "Suggestions",
+                                      variant="primary" if active == "suggestions" else "subtle",
+                                      command=lambda: app.show_page("suggestions"))
+        self.suggestions_tab.pack(side="left", padx=(theme.px(SPACE_XS), 0))
         self.space = tk.StringVar(master=self)
         self.picker = ttk.Combobox(self, textvariable=self.space, state="readonly", width=28, style="BIO.TCombobox",
                                    font=theme.font("body"))
@@ -77,6 +81,12 @@ class SpaceBar(tk.Frame):
             self.picker.configure(state="readonly")
         count = self.app.inbox_count()
         self.inbox_tab.set_text(f"Inbox ({count})" if count else "Inbox")
+        control = getattr(self.app.connection_manager, "control", None)
+        try:
+            waiting = int(control.pending_proposal_count()) if control is not None else 0
+        except Exception:  # noqa: BLE001
+            waiting = 0
+        self.suggestions_tab.set_text(f"Suggestions ({waiting})" if waiting else "Suggestions")
 
     def _chosen(self) -> None:
         index = self.picker.current()

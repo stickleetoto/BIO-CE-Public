@@ -26,6 +26,8 @@ ALLOWED_SERVICE_CALLS = {
     "move_memories",
     # v0.4.3 import (Community-only, like the inbox it writes to; gated by the create action)
     "import_planner", "import_service",
+    # v0.4.3 sorting suggestions (Community-only, like the inbox; gated by the review action)
+    "curation",
 }
 
 

@@ -182,6 +182,24 @@ CREATE TABLE IF NOT EXISTS import_batches (
     status TEXT NOT NULL DEFAULT 'partial' CHECK (status IN ('complete', 'partial', 'undone')),
     undone_at TEXT
 );
+CREATE TABLE IF NOT EXISTS curation_proposals (
+    proposal_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_at TEXT NOT NULL,
+    action TEXT NOT NULL CHECK (action IN ('merge', 'promote', 'update_existing')),
+    space_id TEXT NOT NULL,
+    memory_ids_json TEXT NOT NULL,
+    target_memory_id TEXT,
+    target_revision_id TEXT,
+    draft_title TEXT NOT NULL,
+    draft_content TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    batch_id TEXT,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'stale')),
+    decided_at TEXT,
+    signature TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS curation_proposals_status ON curation_proposals (status, run_at);
+CREATE INDEX IF NOT EXISTS curation_proposals_signature ON curation_proposals (signature);
 """
 SAVE_CURATED = "curated"
 SAVE_COLLECT = "collect"
@@ -955,6 +973,54 @@ class ControlStore:
                                             (limit,)).fetchall()
         return tuple(_batch(row) for row in rows)
 
+    # Sorting suggestions (v0.4.3 C) -------------------------------------------
+
+    def add_curation_proposal(self, *, action: str, space_id: str, items: list[tuple[str, str]],
+                              target: tuple[str, str] | None, draft_title: str, draft_content: str, reason: str,
+                              batch_id: str | None, signature: str) -> bool:
+        """Add a suggestion unless the same group is already waiting or the user rejected it before."""
+        with self._write():
+            known = self._connection.execute(
+                "SELECT 1 FROM curation_proposals WHERE signature = ? AND status IN ('pending', 'rejected')",
+                (signature,)).fetchone()
+            if known:
+                return False
+            self._connection.execute(
+                "INSERT INTO curation_proposals (run_at, action, space_id, memory_ids_json, target_memory_id, "
+                "target_revision_id, draft_title, draft_content, reason, batch_id, signature) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (_now(), action, space_id, json.dumps([list(item) for item in items]),
+                 target[0] if target else None, target[1] if target else None, draft_title[:512],
+                 draft_content, reason, batch_id, signature))
+        return True
+
+    def curation_proposals(self, *, status: str = "pending") -> tuple[dict[str, Any], ...]:
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT * FROM curation_proposals WHERE status = ? ORDER BY proposal_id", (status,)).fetchall()
+        return tuple(_proposal(row) for row in rows)
+
+    def curation_proposal(self, proposal_id: int) -> dict[str, Any]:
+        with self._lock:
+            row = self._connection.execute("SELECT * FROM curation_proposals WHERE proposal_id = ?",
+                                           (int(proposal_id),)).fetchone()
+        if row is None:
+            raise ControlStoreError("That suggestion no longer exists.")
+        return _proposal(row)
+
+    def set_curation_proposal_status(self, proposal_id: int, status: str) -> None:
+        if status not in ("pending", "approved", "rejected", "stale"):
+            raise ValueError("invalid suggestion status")
+        with self._write():
+            self._connection.execute(
+                "UPDATE curation_proposals SET status = ?, decided_at = ? WHERE proposal_id = ?",
+                (status, _now(), int(proposal_id)))
+
+    def pending_proposal_count(self) -> int:
+        with self._lock:
+            return int(self._connection.execute(
+                "SELECT COUNT(*) FROM curation_proposals WHERE status = 'pending'").fetchone()[0])
+
     # Restore ----------------------------------------------------------------
 
     def apply_restore(self, *, memories: list[tuple[str, str, str]], backup_control: Path | None,
@@ -1045,6 +1111,11 @@ class ControlStore:
                 "VALUES (?, NULL, 'bio-ce-desktop', 'restore', 'restored', ?)",
                 (stamp, json.dumps(summary, sort_keys=True)))
         return {**summary, "restored_spaces": spaces_added}
+
+
+def _proposal(row: sqlite3.Row) -> dict[str, Any]:
+    target = (row["target_memory_id"], row["target_revision_id"]) if row["target_memory_id"] else None
+    return {**dict(row), "items": json.loads(row["memory_ids_json"]), "target": target}
 
 
 def _batch(row: sqlite3.Row) -> dict[str, Any]:

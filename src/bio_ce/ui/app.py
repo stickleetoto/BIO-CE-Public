@@ -38,6 +38,7 @@ from bio_ce.ui.pages.importing import ImportPage
 from bio_ce.ui.pages.inbox import InboxPage
 from bio_ce.ui.pages.memories import MemoriesPage
 from bio_ce.ui.pages.settings import SettingsPage
+from bio_ce.ui.pages.suggestions import SuggestionsPage
 from bio_ce.ui.tasks import TaskRunner
 from bio_ce.ui.theme import (
     SIDEBAR_COMPACT_BELOW,
@@ -151,6 +152,7 @@ class BIOCEDesktop:
         self.memories = MemoriesPage(self, self.page_host)
         self.inbox = InboxPage(self, self.page_host)
         self.importer = ImportPage(self, self.page_host)
+        self.suggestions = SuggestionsPage(self, self.page_host)
         self.editor = EditorPage(self, self.page_host)
         self.connections = ConnectionsPage(self, self.page_host)
         self.settings = SettingsPage(self, self.page_host)
@@ -161,7 +163,7 @@ class BIOCEDesktop:
             "settings": self.settings,
         }
         self._routes: dict[str, Page] = dict(self.pages, editor=self.editor, inbox=self.inbox,
-                                             **{"import": self.importer})
+                                             suggestions=self.suggestions, **{"import": self.importer})
 
         self._bind_shortcuts()
         root.bind("<Configure>", self._on_resize, add="+")
@@ -441,7 +443,7 @@ class BIOCEDesktop:
 
     def data_changed(self, select: str | None = None) -> None:
         """Mark pages stale after a write and refresh the visible one."""
-        for page in (self.dashboard, self.memories, self.settings, self.inbox, self.importer):
+        for page in (self.dashboard, self.memories, self.settings, self.inbox, self.importer, self.suggestions):
             page.stale = True
         self.refresh_badges()
         if self.current in (self.dashboard, self.memories, self.settings, self.inbox):
@@ -461,12 +463,12 @@ class BIOCEDesktop:
             return None
 
     def pending_cleanup_count(self) -> int | None:
-        """Inbox items proposed for discarding, or None when the control database cannot be read."""
+        """Inbox items to sort: proposed discards plus sorting suggestions; None when the control file can't be read."""
         control = getattr(self.connection_manager, "control", None)
         if control is None:
             return None
         try:
-            return int(control.pending_cleanup_count())
+            return int(control.pending_cleanup_count()) + int(control.pending_proposal_count())
         except Exception:  # noqa: BLE001 - a count must never break the window
             return None
 
@@ -596,10 +598,28 @@ class BIOCEDesktop:
                     self.data_changed()
                 if result.waiting_cleanup:
                     delay = 2 * 60 * 1000
+            self.find_suggestions(quiet=True)
         try:
             self._maintenance_after = self.root.after(delay, self.inbox_maintenance)
         except tk.TclError:
             pass
+
+    def find_suggestions(self, *, batch_id: str | None = None, quiet: bool = False) -> int:
+        """Look for sorting suggestions (daily, after an import, or on request); never fails the caller."""
+        control = getattr(self.connection_manager, "control", None)
+        if control is None or not self.allowed("review").enabled:
+            return 0
+        try:
+            added = self.service.curation(control, self.spaces()).find(batch_id=batch_id)
+        except Exception:  # noqa: BLE001 - tried again on the next pass
+            return 0
+        if added:
+            self.refresh_badges()
+            self.suggestions.stale = True
+            if not quiet:
+                self.notify("info", f"BIO CE has {added} sorting suggestion(s) for your inbox.",
+                            title="Suggestions", action=("Open suggestions", lambda: self.show_page("suggestions")))
+        return added
 
     def schedule_cleanup_retry(self) -> None:
         if self._maintenance_after is not None:

@@ -563,6 +563,7 @@ class ImportPage(Page):
 
     def _imported(self, result) -> None:
         self.app.data_changed()
+        self.app.find_suggestions(batch_id=result.batch_id, quiet=True)
         self.render_history()
         if result.status == "partial":
             self.app.notify("warning", f"Only part of the import was saved ({result.to_inbox} to the inbox). Use "
@@ -612,7 +613,24 @@ class ImportPage(Page):
             if batch["status"] != "undone":
                 Button(row, theme, "Undo import…", variant="link",
                        command=lambda b=batch["batch_id"]: self.undo_batch(b)).pack(side="right")
+                Button(row, theme, "Review and keep…", variant="link",
+                       command=lambda b=batch["batch_id"]: self.review_and_keep(b)).pack(side="right")
             self.batch_rows[batch["batch_id"]] = row
+
+    def review_and_keep(self, batch_id: str) -> int:
+        """Rule (c): suggest keeping every entry of this import that is still in the inbox, then show them."""
+        control = self.control
+        if control is None or not self.app.require_action("review"):
+            return 0
+        try:
+            added = self.app.service.curation(control, self._planner_spaces()).promote_batch(batch_id)
+        except Exception:  # noqa: BLE001 - shown to the user
+            self.app.notify("error", "BIO CE couldn't prepare the suggestions.", title="Suggestions")
+            return 0
+        self.app.refresh_badges()
+        self.app.show_page("suggestions")
+        self.app.suggestions.show_batch(batch_id)
+        return added
 
     def undo_batch(self, batch_id: str) -> dict | None:
         control = self.control

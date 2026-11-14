@@ -272,6 +272,11 @@ class DesktopMemoryService:
         from bio_ce.importer import ImportService
         return ImportService(self._store, control, spaces)
 
+    def curation(self, control: ControlStore, spaces) -> "CurationService":
+        """Sorting suggestions for the inbox (v0.4.3 C) over this app's writable connection."""
+        from bio_ce.curation import CurationService
+        return CurationService(self._store, control, spaces)
+
     def move_memories(self, control: ControlStore, memory_ids: list[str] | tuple[str, ...], target: MemoryScope,
                       *, inbox: bool = False) -> dict:
         """Move memories of the current space (curated, or its inbox) to another space, after an automatic backup.
