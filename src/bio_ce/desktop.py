@@ -272,6 +272,11 @@ class DesktopMemoryService:
         from bio_ce.importer import ImportService
         return ImportService(self._store, control, spaces)
 
+    def export_text(self, spaces, options, *, personal_allowed: bool):
+        """The text of an export (v0.4.3 D); reading only."""
+        from bio_ce.exporter import build_export
+        return build_export(self._store, spaces, options, personal_allowed=personal_allowed)
+
     def curation(self, control: ControlStore, spaces) -> "CurationService":
         """Sorting suggestions for the inbox (v0.4.3 C) over this app's writable connection."""
         from bio_ce.curation import CurationService

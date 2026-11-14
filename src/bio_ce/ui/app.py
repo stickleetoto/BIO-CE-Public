@@ -28,7 +28,8 @@ from bio_ce.engine.presentation import ActionState, EngineBanner, action_states,
 from bio_ce.engine.switching import DEFAULT_SELECTION, EngineSelection, SwitchPhase
 from bio_ce.storage.backup import PAIR_MATCHED, BackupError, pair_path
 from bio_ce.spaces import PERSONAL_SPACE
-from bio_ce.ui.dialogs import ChoiceDialog, ConfirmDialog, NameDialog, ReviewEditDialog
+from bio_ce.exporter import SOURCE_KINDS, SOURCE_LABELS, UNENCRYPTED_NOTICE, ExportOptions, ExportRefused, write_export
+from bio_ce.ui.dialogs import ChoiceDialog, ConfirmDialog, ExportDialog, NameDialog, ReviewEditDialog
 from bio_ce.ui.format import preview
 from bio_ce.ui.pages import Page
 from bio_ce.ui.pages.connections import ConnectionsPage
@@ -524,6 +525,52 @@ class BIOCEDesktop:
         self.data_changed()
         self.hosts_changed()
         return True
+
+    def ask_export(self) -> dict | None:
+        return ExportDialog(self.root, self.theme, spaces=self.spaces(), current=self._space_id,
+                            sources=[(key, SOURCE_LABELS[key]) for key in SOURCE_KINDS]).ask()
+
+    def export_memories(self) -> Path | None:
+        """Export chosen memories as a "[date] - memory" .md file. Never overwrites; warns about Personal."""
+        if not self.require_action("browse"):
+            return None
+        chosen = self.ask_export()
+        if not chosen:
+            return None
+        options = ExportOptions(**chosen)
+        personal = "personal" in options.space_ids
+        if personal and not self.confirm(
+            title="Export personal memories?",
+            message="The file will contain your Personal memories in plain text.",
+            points=(UNENCRYPTED_NOTICE,), confirm_text="Include Personal"):
+            return None
+        try:
+            result = self.service.export_text(self.spaces(), options, personal_allowed=personal and
+                                              self.personal_enabled())
+        except ExportRefused as exc:
+            self.notify("warning", str(exc), title="Not exported")
+            return None
+        except Exception:  # noqa: BLE001 - shown to the user
+            self.notify("error", "BIO CE couldn't read the memories to export.", title="Not exported")
+            return None
+        from datetime import date as _date
+        path = self.ask_save_path(title="Export memories", defaultextension=".md",
+                                  initialfile=f"bio-ce-export-{_date.today().isoformat()}.md",
+                                  filetypes=(("Markdown", "*.md"),))
+        if not path:
+            return None
+        try:
+            written = write_export(path, result.text)
+        except ExportRefused as exc:
+            self.notify("warning", str(exc), title="Not exported")
+            return None
+        except OSError:
+            self.notify("error", "BIO CE couldn't write the file there.", title="Not exported")
+            return None
+        self.notify("success", f"Exported {result.count} {'memory' if result.count == 1 else 'memories'}. "
+                    + UNENCRYPTED_NOTICE, title="Exported",
+                    action=("Show in folder", lambda: self.reveal_file(written)))
+        return written
 
     def move_memories(self, memory_ids: list[str], target, *, inbox: bool = False) -> int | None:
         """Move memories of the shown space to ``target`` (a Space) after an automatic backup."""

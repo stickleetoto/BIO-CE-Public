@@ -57,6 +57,10 @@ class MemoriesPage(Page):
         app.gate(self.add_button, "create")
         Button(self.actions, theme, "Refresh", icon="refresh", variant="subtle",
                command=self.refresh, tooltip="Reload the list (F5)").pack(side="right", padx=(0, theme.px(SPACE_S)))
+        self.export_button = Button(self.actions, theme, "Export…", variant="subtle", command=app.export_memories,
+                                    tooltip="Save memories as a text file to paste into another AI")
+        self.export_button.pack(side="right", padx=(0, theme.px(SPACE_S)))
+        app.gate(self.export_button, "browse")
 
         self.space_bar = SpaceBar(self, app, active="memories")
         self.space_bar.pack(fill="x", pady=(0, theme.px(SPACE_M)))

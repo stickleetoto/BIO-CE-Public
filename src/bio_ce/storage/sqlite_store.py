@@ -525,6 +525,15 @@ class SQLiteMemoryStore:
                 "AND current_revision_id IS NOT NULL", ("%" + INBOX_SUFFIX,)).fetchall()
         return [(str(r[0]), str(r[1]), str(r[2]), str(r[3])) for r in rows]
 
+    def created_dates(self, scope: MemoryScope) -> dict[str, str]:
+        """memory_id -> when the memory was first saved, for one scope (exports use the first save day)."""
+        _validate_scope(scope)
+        with self._read_transaction():
+            rows = self._connection.execute(
+                "SELECT memory_id, created_at FROM memories WHERE project = ? AND namespace = ?",
+                (scope.project, scope.namespace)).fetchall()
+        return {str(row[0]): str(row[1]) for row in rows}
+
     def inventory(self) -> list[tuple[str, str, str]]:
         """Every memory's (memory_id, project, namespace), for restore bookkeeping."""
         with self._read_transaction():

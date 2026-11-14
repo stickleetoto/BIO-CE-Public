@@ -148,6 +148,8 @@ class SettingsPage(Page):
         self.backup_button = Button(backup_row, theme, "Create backup…", icon="backup", command=app.backup_database)
         self.backup_button.pack(side="left")
         app.gate(self.backup_button, "backup")
+        Button(backup_row, theme, "Export memories as text…", variant="link", command=app.export_memories).pack(
+            side="left", padx=(theme.px(SPACE_M), 0))
         tk.Frame(backup, height=1, background=c.border).pack(fill="x", pady=theme.px(SPACE_L))
         tk.Label(backup, text="Restore from a backup", font=theme.font("body_strong"), background=c.surface,
                  foreground=c.text, anchor="w").pack(fill="x")

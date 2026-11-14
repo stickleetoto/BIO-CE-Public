@@ -28,6 +28,8 @@ ALLOWED_SERVICE_CALLS = {
     "import_planner", "import_service",
     # v0.4.3 sorting suggestions (Community-only, like the inbox; gated by the review action)
     "curation",
+    # v0.4.3 export as text (Community-only; gated by the browse action)
+    "export_text",
 }
 
 

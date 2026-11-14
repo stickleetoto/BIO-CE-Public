@@ -371,6 +371,88 @@ class EntryEditDialog(Dialog):
         return self.result  # type: ignore[return-value]
 
 
+class ExportDialog(Dialog):
+    """Choose what to export: spaces (Personal only by ticking it), the inbox, sources, and dates."""
+
+    def __init__(self, parent: tk.Misc, theme: Theme, *, spaces: Sequence, current: str | None,
+                 sources: Sequence[tuple[str, str]]) -> None:
+        super().__init__(parent, theme, "Export memories", resizable=True)
+        c = theme.colors
+        tk.Label(self.content, text="Export memories", font=theme.font("title"), background=c.surface,
+                 foreground=c.text, anchor="w").pack(fill="x")
+        WrapLabel(self.content, "A .md file with one \"[date] - memory\" line each, which you can paste into another "
+                  "AI or import back into BIO CE. Retracted memories, the review queue, and older versions are left "
+                  "out.", font=theme.font("caption"), foreground=c.text_secondary).pack(fill="x")
+
+        def check(master, label, value=False):
+            variable = tk.BooleanVar(self, value=value)
+            tk.Checkbutton(master, text=label, variable=variable, font=theme.font("body"), background=c.surface,
+                           foreground=c.text, activebackground=c.surface, activeforeground=c.text,
+                           selectcolor=c.surface_alt, anchor="w", highlightthickness=0, borderwidth=0).pack(fill="x")
+            return variable
+
+        def heading(text):
+            tk.Label(self.content, text=text, font=theme.font("body_strong"), background=c.surface,
+                     foreground=c.text, anchor="w").pack(fill="x", pady=(theme.px(SPACE_M), 0))
+
+        heading("Spaces")
+        self.space_vars: dict[str, tk.BooleanVar] = {}
+        for space in spaces:
+            label = space.display_name + (" (your personal memories)" if space.is_personal else "")
+            self.space_vars[space.space_id] = check(self.content, label,
+                                                    space.space_id == current and not space.is_personal)
+            if space.is_personal:
+                self.personal_box = self.content.winfo_children()[-1]
+        self.personal_warning = WrapLabel(self.content, "Personal memories will be in the file.",
+                                          font=theme.font("caption"), foreground=c.warning)
+        if "personal" in self.space_vars:
+            self.space_vars["personal"].trace_add("write", lambda *_: self._sync_warning())
+        heading("What")
+        self.include_inbox = check(self.content, "Also the inbox (items not sorted yet)")
+        heading("Sources")
+        self.source_vars = {key: check(self.content, label, True) for key, label in sources}
+        heading("Dates (optional, for example 2025-01-01)")
+        row = tk.Frame(self.content, background=c.surface)
+        row.pack(fill="x")
+        self.date_from, self.date_to = tk.StringVar(master=self), tk.StringVar(master=self)
+        Field(row, theme, textvariable=self.date_from).pack(side="left", fill="x", expand=True)
+        tk.Label(row, text="to", font=theme.font("body"), background=c.surface, foreground=c.text_muted).pack(
+            side="left", padx=theme.px(SPACE_S))
+        Field(row, theme, textvariable=self.date_to).pack(side="left", fill="x", expand=True)
+        self.include_claimed = check(self.content, "Add the source's date to imported memories whose date you "
+                                                   "haven't confirmed")
+        self.error = WrapLabel(self.content, "", font=theme.font("caption"), foreground=c.danger)
+        self.error.pack(fill="x")
+        self.add_button("Export…", self._done, variant="primary")
+        self.add_button("Cancel", lambda: self.finish(None))
+        self.result = None
+
+    def _sync_warning(self) -> None:
+        if self.space_vars["personal"].get():
+            self.personal_warning.pack(fill="x", after=self.personal_box)
+        else:
+            self.personal_warning.pack_forget()
+
+    def _done(self) -> None:
+        import re as _re
+        spaces = tuple(key for key, variable in self.space_vars.items() if variable.get())
+        sources = frozenset(key for key, variable in self.source_vars.items() if variable.get())
+        dates = (self.date_from.get().strip(), self.date_to.get().strip())
+        if not spaces or not sources:
+            self.error.configure(text="Choose at least one space and one source.")
+            return
+        if any(value and not _re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) for value in dates):
+            self.error.configure(text="Use dates such as 2025-01-01, or leave them empty.")
+            return
+        self.finish({"space_ids": spaces, "include_inbox": bool(self.include_inbox.get()), "sources": sources,
+                     "date_from": dates[0] or None, "date_to": dates[1] or None,
+                     "include_claimed": bool(self.include_claimed.get())})
+
+    def ask(self) -> dict | None:
+        self.present(size=(self.theme.px(520), self.theme.px(640)))
+        return self.result  # type: ignore[return-value]
+
+
 class ChoiceDialog(Dialog):
     """Pick one of a few options (for example the space to move memories to). Returns its key or None."""
 
