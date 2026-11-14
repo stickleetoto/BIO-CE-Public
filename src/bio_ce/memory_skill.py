@@ -300,6 +300,22 @@ def render(version: str | None = None, mode: str = CURATED) -> str:
     return template(mode).replace(VERSION_PLACEHOLDER, version or display_version())
 
 
+def skill_zip(version: str | None = None, mode: str = CURATED) -> bytes:
+    """The skill as a ZIP (bio-ce-memory/SKILL.md) for hosts where the user uploads skills (Claude Customize → Skills).
+
+    The text is the same fixed text BIO CE installs elsewhere; it never contains memories.
+    """
+    import io
+    import zipfile
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        info = zipfile.ZipInfo(f"{SKILL_NAME}/SKILL.md", date_time=(2026, 1, 1, 0, 0, 0))
+        info.compress_type = zipfile.ZIP_DEFLATED
+        archive.writestr(info, render(version, mode))
+    return buffer.getvalue()
+
+
 def _normalized_digest(text: str) -> str:
     """Hash of a skill text with the CE version in its header comment ignored."""
     text = text.replace("\r\n", "\n")

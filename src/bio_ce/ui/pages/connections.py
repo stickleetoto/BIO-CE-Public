@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from tkinter import ttk
+from pathlib import Path
 import tkinter as tk
 
 from bio_ce import codex_options, memory_skill
@@ -29,7 +30,7 @@ from bio_ce.control_store import (
     ReviewItem,
 )
 from bio_ce.ui.dialogs import ReviewEditDialog, TextViewerDialog
-from bio_ce.ui.format import HOST_COMMANDS, host_name, preview, relative_time
+from bio_ce.ui.format import HOST_COMMANDS, HOSTS, host_name, preview, relative_time
 from bio_ce.ui.pages import Page
 from bio_ce.ui.pages.dashboard import host_pill
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS
@@ -39,8 +40,15 @@ from bio_ce.ui.widgets import Button, Card, Pill, ScrollFrame, WrapLabel, captio
 HOST_DESCRIPTIONS = {
     "codex": "OpenAI’s coding agent. The command-line tool and the desktop app use the same settings, so one "
              "connection covers both.",
-    "claude": "Anthropic’s command-line coding agent. The Claude desktop chat app is not supported.",
+    "claude": "Anthropic’s command-line coding agent. The Claude desktop chat app has its own card below.",
+    "claude_desktop": "Anthropic’s desktop chat app. BIO CE adds one entry to the app’s settings file; quit and "
+                      "reopen the app after connecting or disconnecting.",
 }
+DESKTOP = "claude_desktop"
+DESKTOP_RESTART = "Quit the Claude desktop app completely (also from the system tray) and open it again."
+DESKTOP_SKILL_NOTE = ("The Claude desktop app has no skills folder BIO CE can use. Save the skill as a ZIP and upload "
+                      "it yourself in Claude: Customize → Skills. It goes to your Claude account, needs code "
+                      "execution turned on, and contains only BIO CE’s fixed text, never your memories.")
 APP_CLOSED_NOTE = "You can close the BIO CE app: connected AI tools keep using your memories."
 SKILL_LABELS = {
     memory_skill.ABSENT: "Not installed",
@@ -62,6 +70,7 @@ CODE_MODE_LABELS = {
 PROVIDER_EXAMPLES = {
     "codex": "usually OpenAI, or another provider you configured in Codex",
     "claude": "usually Anthropic, or the cloud provider you configured in Claude Code",
+    "claude_desktop": "Anthropic",
 }
 _OUTCOME_STYLE = {
     "pass": ("success", "success"),
@@ -84,6 +93,9 @@ def host_message(host: str, status: HostStatus | None) -> str:
     command = HOST_COMMANDS[host]
     if status is None:
         return f"BIO CE couldn't check {name}. Select Refresh to try again."
+    if not status.installed and host == DESKTOP:
+        return ("BIO CE didn't find the Claude desktop app for this Windows user. Install it, open it once, then "
+                "select Refresh.")
     if not status.installed:
         return (f"BIO CE looks for the “{command}” command and didn't find it. Install {name}, confirm that "
                 f"“{command} --version” works in a new terminal, then select Refresh.")
@@ -208,7 +220,8 @@ class HostCard(Card):
                                     command=lambda: page.toggle_save_mode(host))
         self.saving_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
         hooks = tk.Frame(self.access, background=c.surface)
-        hooks.pack(fill="x", pady=(theme.px(SPACE_S), 0))
+        if host != DESKTOP:
+            hooks.pack(fill="x", pady=(theme.px(SPACE_S), 0))
         tk.Label(hooks, text="Session hooks", font=theme.font("body_strong"), background=c.surface,
                  foreground=c.text, width=12, anchor="w").pack(side="left")
         self.hooks_label = tk.Label(hooks, text="", font=theme.font("body"), background=c.surface,
@@ -236,6 +249,9 @@ class HostCard(Card):
                                     foreground=c.text_secondary, anchor="w")
         self.skill_label.pack(side="left")
         self.skill_button = Button(skill, theme, "Install", variant="link", command=lambda: page.toggle_skill(host))
+        if host == DESKTOP:
+            self.skill_button.set_text("Save skill as ZIP…")
+            self.skill_button.set_command(lambda: page.save_skill_zip(host))
         self.skill_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
         Button(skill, theme, "Preview", variant="link", command=lambda: page.preview_skill(host)).pack(
             side="left", padx=(theme.px(SPACE_XS), 0))
@@ -292,8 +308,11 @@ class HostCard(Card):
                 else:
                     self.code_mode_button.pack_forget()
             skill = status.skill or memory_skill.ABSENT
-            self.skill_label.configure(text=SKILL_LABELS.get(skill, "Unknown"))
-            self.skill_button.set_text(SKILL_ACTIONS.get(skill, "Install"))
+            if self.host == DESKTOP:
+                self.skill_label.configure(text="Upload it yourself in Claude")
+            else:
+                self.skill_label.configure(text=SKILL_LABELS.get(skill, "Unknown"))
+                self.skill_button.set_text(SKILL_ACTIONS.get(skill, "Install"))
         else:
             self.access.pack_forget()
         if status is not None and status.connected and status.legacy:
@@ -405,7 +424,7 @@ class ConnectionsPage(Page):
                   background=c.info_bg).pack(fill="x", pady=(theme.px(SPACE_S), 0))
 
         self.cards: dict[str, HostCard] = {}
-        for host in ("codex", "claude"):
+        for host in HOSTS:
             card = HostCard(self, body, host)
             card.pack(fill="x", pady=(theme.px(SPACE_M), 0))
             self.cards[host] = card
@@ -539,7 +558,62 @@ class ConnectionsPage(Page):
 
     # Actions --------------------------------------------------------------
 
+    def connect_desktop(self) -> None:
+        host, name = DESKTOP, host_name(DESKTOP)
+        manager = self.app.connection_manager
+        path = manager.desktop_config_path() if hasattr(manager, "desktop_config_path") else None
+        if not self.app.confirm(
+            title=f"Connect the {name}?",
+            message="BIO CE will add one MCP server entry named “bio-ce” to the Claude desktop app’s settings file. "
+                    "The app’s other settings and servers stay as they are.",
+            points=(
+                f"Settings file: {path}" if path else "BIO CE finds the settings file of your Claude desktop app.",
+                "The file is backed up first. If the file can’t be read, BIO CE changes nothing.",
+                f"Claude chats will be able to search and read active memories in your personal store. Memories "
+                f"read in a chat become part of the conversation and are sent to {PROVIDER_EXAMPLES[host]}. BIO "
+                "CE can't control what happens to them there.",
+                "Auto memory stays off: the app can only search and read until you turn it on.",
+                "BIO CE then runs a local read-only check against your database. No AI model is called.",
+                DESKTOP_RESTART,
+            ),
+            confirm_text="Connect",
+        ):
+            return
+        card = self.cards[host]
+        card.set_busy("Connecting…")
+        card.show_checks(())
+        self.app.run_task(lambda: (manager.connect(host, approved=True), None),
+                          lambda outcome: self._connected(host, *outcome),
+                          lambda error: self._failed(host, error, "connect"))
+
+    def save_skill_zip(self, host: str = DESKTOP) -> Path | None:
+        """Save the memory skill as a ZIP for the user to upload in Claude (BIO CE never uploads it)."""
+        manager = self.app.connection_manager
+        if not self.app.confirm(title="Save the memory skill as a ZIP?", message=DESKTOP_SKILL_NOTE,
+                                points=("BIO CE only saves the file. Uploading it is up to you.",),
+                                confirm_text="Choose where to save"):
+            return None
+        target = self.app.ask_save_path(title="Save the BIO CE memory skill", defaultextension=".zip",
+                                        initialfile="bio-ce-memory.zip", filetypes=(("ZIP", "*.zip"),))
+        if not target:
+            return None
+        try:
+            with open(target, "xb") as handle:
+                handle.write(manager.skill_zip(host))
+        except FileExistsError:
+            self.app.notify("warning", "A file with this name already exists. Choose a new name.", title="Not saved")
+            return None
+        except (OSError, MCPConnectionError):
+            self.app.notify("error", "BIO CE couldn't save the ZIP there.", title="Not saved")
+            return None
+        self.app.notify("success", "Saved. In Claude, open Customize → Skills and upload this ZIP.",
+                        title="Skill saved", action=("Show in folder", lambda: self.app.reveal_file(Path(target))))
+        return Path(target)
+
     def connect_host(self, host: str) -> None:
+        if host == DESKTOP:
+            self.connect_desktop()
+            return
         name = host_name(host)
         manager = self.app.connection_manager
         skill_path = manager.memory_skill_path(host)
@@ -1000,6 +1074,8 @@ class ConnectionsPage(Page):
             message += " The memory skill was not installed: " + str(skill)
         elif skill is not None:
             message += " " + _skill_message(name, skill[0])
+        if host == DESKTOP:
+            message += " " + DESKTOP_RESTART + " " + DESKTOP_SKILL_NOTE
         message += " " + APP_CLOSED_NOTE
         self.app.notify("success", message, title=f"{name} connected")
 
@@ -1008,7 +1084,8 @@ class ConnectionsPage(Page):
         name = host_name(host)
         if result.backup_file is not None:
             self.app.notify("success", f"BIO CE removed its entry from {name}. A backup of the previous MCP settings "
-                            "was saved.", title=f"{name} disconnected")
+                            "was saved." + (" " + DESKTOP_RESTART if host == DESKTOP else ""),
+                            title=f"{name} disconnected")
         else:
             self.app.notify("info", f"{name} was already disconnected.", title=f"{name} disconnected")
 

@@ -22,9 +22,9 @@ from typing import Any
 
 from bio_ce import host_hooks
 
-CODEX_MCP, CODEX_HOOKS, CLAUDE_MCP, CLAUDE_HOOKS = 1, 2, 4, 8
+CODEX_MCP, CODEX_HOOKS, CLAUDE_MCP, CLAUDE_HOOKS, CLAUDE_DESKTOP_MCP = 1, 2, 4, 8, 16
 FLAGS = {CODEX_MCP: "Codex MCP server", CODEX_HOOKS: "Codex hooks", CLAUDE_MCP: "Claude Code MCP server",
-         CLAUDE_HOOKS: "Claude Code hooks"}
+         CLAUDE_HOOKS: "Claude Code hooks", CLAUDE_DESKTOP_MCP: "Claude desktop app MCP server"}
 FOUND_BASE = 100
 
 
@@ -93,6 +93,16 @@ def references(app_dir: Path, env: Mapping[str, str]) -> int:
                 found |= CLAUDE_MCP
         except (ValueError, AttributeError):
             pass
+    from bio_ce import claude_desktop
+    _installed, desktop_config, _kind = claude_desktop.locate(env)
+    raw = _read(desktop_config) if desktop_config is not None else None
+    if raw is not None:
+        try:
+            entry = (json.loads(raw).get("mcpServers") or {}).get("bio-ce") or {}
+            if isinstance(entry, dict) and _same(entry.get("command"), executable):
+                found |= CLAUDE_DESKTOP_MCP
+        except (ValueError, AttributeError):
+            pass
     for flag, host in ((CODEX_HOOKS, "codex"), (CLAUDE_HOOKS, "claude")):
         raw = _read(host_hooks.hooks_path(host, env))
         if raw is None:
@@ -115,5 +125,5 @@ def main(app_dir: str, env: Mapping[str, str] | None = None) -> int:
     return FOUND_BASE + mask if mask else 0
 
 
-__all__ = ["CLAUDE_HOOKS", "CLAUDE_MCP", "CODEX_HOOKS", "CODEX_MCP", "FLAGS", "FOUND_BASE", "describe", "main",
+__all__ = ["CLAUDE_DESKTOP_MCP", "CLAUDE_HOOKS", "CLAUDE_MCP", "CODEX_HOOKS", "CODEX_MCP", "FLAGS", "FOUND_BASE", "describe", "main",
            "references", "server_executable"]

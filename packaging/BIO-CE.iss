@@ -92,6 +92,7 @@ english.HostsStillConnected=BIO CE is still connected to:%n%n%1%nUninstalling do
 english.DisconnectFirst=Open BIO CE, select Connections, and disconnect each host. Then run the uninstall again.
 english.HostCodex=Codex (CLI · desktop app)
 english.HostClaude=Claude Code
+english.HostClaudeDesktop=Claude desktop app
 english.PartMcp=MCP server
 english.PartHooks=session hooks
 korean.LaunchApp=BIO CE 시작
@@ -102,6 +103,7 @@ korean.HostsStillConnected=BIO CE가 아직 다음에 연결되어 있습니다:
 korean.DisconnectFirst=BIO CE를 열고 Connections에서 각 호스트의 연결을 해제한 뒤 다시 제거하세요.
 korean.HostCodex=Codex (CLI · 데스크톱 앱)
 korean.HostClaude=Claude Code
+korean.HostClaudeDesktop=Claude 데스크톱 앱
 korean.PartMcp=MCP 서버
 korean.PartHooks=세션 훅
 
@@ -191,7 +193,8 @@ begin
 end;
 
 { Before anything is removed: ask the installed MCP program (read-only) whether Codex or Claude Code still
-  start it. Exit code 100 + mask: 1 Codex MCP, 2 Codex hooks, 4 Claude MCP, 8 Claude hooks. Any failure to
+  start it. Exit code 100 + mask: 1 Codex MCP, 2 Codex hooks, 4 Claude MCP, 8 Claude hooks, 16 Claude desktop
+  app MCP. Any failure to
   check never blocks the uninstall. Silent uninstalls only log the result. }
 function InitializeUninstall(): Boolean;
 var
@@ -203,14 +206,15 @@ begin
               'host-check --app-dir "' + ExpandConstant('{app}') + '"', '', SW_HIDE,
               ewWaitUntilTerminated, Code) then
     Exit;
-  if (Code < 101) or (Code > 115) then
+  if (Code < 101) or (Code > 131) then
     Exit;
   Mask := Code - 100;
   Log(Format('BIO CE is still referenced by host settings (mask %d).', [Mask]));
   if UninstallSilent() then
     Exit;
   Hosts := HostLine(CustomMessage('HostCodex'), (Mask and 1) <> 0, (Mask and 2) <> 0)
-         + HostLine(CustomMessage('HostClaude'), (Mask and 4) <> 0, (Mask and 8) <> 0);
+         + HostLine(CustomMessage('HostClaude'), (Mask and 4) <> 0, (Mask and 8) <> 0)
+         + HostLine(CustomMessage('HostClaudeDesktop'), (Mask and 16) <> 0, False);
   if MsgBox(FmtMessage(CustomMessage('HostsStillConnected'), [Hosts]), mbConfirmation,
             MB_YESNO or MB_DEFBUTTON1) = IDYES then
   begin

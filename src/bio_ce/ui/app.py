@@ -30,7 +30,7 @@ from bio_ce.storage.backup import PAIR_MATCHED, BackupError, pair_path
 from bio_ce.spaces import PERSONAL_SPACE
 from bio_ce.exporter import SOURCE_KINDS, SOURCE_LABELS, UNENCRYPTED_NOTICE, ExportOptions, ExportRefused, write_export
 from bio_ce.ui.dialogs import ChoiceDialog, ConfirmDialog, ExportDialog, NameDialog, ReviewEditDialog
-from bio_ce.ui.format import preview
+from bio_ce.ui.format import HOSTS, preview
 from bio_ce.ui.pages import Page
 from bio_ce.ui.pages.connections import ConnectionsPage
 from bio_ce.ui.pages.dashboard import DashboardPage
@@ -434,7 +434,7 @@ class BIOCEDesktop:
     def host_statuses(self, *, refresh: bool) -> dict[str, HostStatus | None]:
         if refresh or not self._host_statuses:
             statuses: dict[str, HostStatus | None] = {}
-            for host in ("codex", "claude"):
+            for host in HOSTS:
                 try:
                     statuses[host] = self.connection_manager.status(host)
                 except Exception:

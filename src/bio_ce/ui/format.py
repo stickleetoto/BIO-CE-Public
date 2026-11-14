@@ -16,8 +16,9 @@ CONTENT_LIMIT = 100_000
 SOURCE_LIMIT = 512
 DEFAULT_SOURCE = "user-input"
 
-HOST_NAMES = {"codex": "Codex (CLI · desktop app)", "claude": "Claude Code"}
-HOST_COMMANDS = {"codex": "codex", "claude": "claude"}
+HOST_NAMES = {"codex": "Codex (CLI · desktop app)", "claude": "Claude Code", "claude_desktop": "Claude desktop app"}
+HOST_COMMANDS = {"codex": "codex", "claude": "claude", "claude_desktop": "Claude desktop app"}
+HOSTS = ("codex", "claude", "claude_desktop")
 
 _FIELD_LABELS = {
     "title": "Title",
@@ -150,6 +151,7 @@ __all__ = [
     "DEFAULT_SOURCE",
     "HOST_COMMANDS",
     "HOST_NAMES",
+    "HOSTS",
     "SOURCE_LIMIT",
     "TITLE_LIMIT",
     "file_size",

@@ -20,7 +20,7 @@ import tomllib
 from typing import Mapping, Sequence
 import uuid
 
-from bio_ce import codex_options, host_hooks, memory_skill
+from bio_ce import claude_desktop, codex_options, host_hooks, memory_skill
 from bio_ce.control_store import (
     AccessDenied,
     ControlStore,
@@ -36,6 +36,8 @@ from bio_ce.storage.sqlite_store import SQLiteMemoryStore
 
 
 SERVER_NAME = "bio-ce"
+DESKTOP = claude_desktop.HOST  # the Claude desktop chat app: no CLI, BIO CE edits its settings file (v0.4.3 E-1)
+HOSTS = ("codex", "claude", DESKTOP)
 _PERSONAL_SCOPE = MemoryScope("bio-ce-personal", "default")
 _EXPECTED_TOOLS = set(TOOL_NAMES)
 
@@ -109,6 +111,12 @@ AUTO_MEMORY_SUPPORT = {
         "claude", "available", "Available",
         "Verified with Claude Code 2.1.306: the model found BIO CE's tools on its own and saved, deduplicated, "
         "corrected, and recalled memories.",
+    ),
+    DESKTOP: AutoMemorySupport(
+        DESKTOP, "limited", "Limited",
+        "The Claude desktop app has no session hooks, so nothing is recalled automatically at the start of a chat. "
+        "Its model uses BIO CE's tools when you ask it to, and may use them on its own; that has not been verified "
+        "yet. Saving and searching from a chat were verified on 2026-11-14.",
     ),
     "codex": AutoMemorySupport(
         "codex", "limited", "Limited",
@@ -194,10 +202,12 @@ class MCPConnectionManager:
             self._control.close()
             self._control = None
 
-    def detect(self) -> tuple[HostStatus, HostStatus]:
-        return tuple(self.status(host) for host in ("codex", "claude"))  # type: ignore[return-value]
+    def detect(self) -> tuple[HostStatus, ...]:
+        return tuple(self.status(host) for host in HOSTS)
 
     def status(self, host: str) -> HostStatus:
+        if host == DESKTOP:
+            return self._desktop_status()
         host = _validate_host(host)
         executable = self._find_cli(host)
         if executable is None:
@@ -228,6 +238,8 @@ class MCPConnectionManager:
     def connect(self, host: str, *, approved: bool = False) -> ConnectionResult:
         if approved is not True:
             raise MCPConnectionConsentRequired("Host registration requires explicit user approval.")
+        if host == DESKTOP:
+            return self._desktop_connect()
         host = _validate_host(host)
         if self._find_cli(host) is None:
             raise MCPConnectionError(f"{host} CLI is not installed.")
@@ -290,6 +302,8 @@ class MCPConnectionManager:
             raise MCPConnectionError(
                 "Reconnect this host in BIO CE first; only connections made by this version can change modes."
             )
+        if host == DESKTOP:
+            return self.control.set_mode(status.connection_id, mode)  # the app asks per tool itself
         auto = mode == MODE_AUTO_MEMORY
         if auto:
             # Allow BIO CE's tools first: if that fails, the mode stays as it was.
@@ -383,6 +397,8 @@ class MCPConnectionManager:
                    remove_modified_skill: bool = False) -> ConnectionResult:
         if approved is not True:
             raise MCPConnectionConsentRequired("Host removal requires explicit user approval.")
+        if host == DESKTOP:
+            return self._desktop_disconnect()
         host = _validate_host(host)
         if self._find_cli(host) is None:
             raise MCPConnectionError(f"{host} CLI is not installed.")
@@ -422,6 +438,154 @@ class MCPConnectionManager:
             except (OSError, MCPConnectionError):
                 pass  # a leftover skill only names tools that no longer answer
         return ConnectionResult(host, False, False, backup_file)
+
+    # Claude desktop app (v0.4.3 E-1) -------------------------------------------------------------------
+
+    def desktop_config_path(self) -> Path | None:
+        return claude_desktop.locate(self.env)[1]
+
+    def _desktop_status(self) -> HostStatus:
+        installed, path, _kind = claude_desktop.locate(self.env)
+        if not installed or path is None:
+            return HostStatus(DESKTOP, False, False)
+        try:
+            data, _raw = claude_desktop.read_config(path)
+        except (OSError, ValueError):
+            return HostStatus(DESKTOP, True, False, True)
+        found = claude_desktop.entry(data)
+        if found is None:
+            return HostStatus(DESKTOP, True, False)
+        grant = self._grant_for_entry(DESKTOP, found)
+        if grant is None:
+            return HostStatus(DESKTOP, True, False, True)
+        return HostStatus(DESKTOP, True, True, mode=grant.mode, connection_id=grant.connection_id,
+                          skill=memory_skill.ABSENT)
+
+    def _desktop_connect(self) -> ConnectionResult:
+        installed, path, _kind = claude_desktop.locate(self.env)
+        if not installed or path is None:
+            raise MCPConnectionError("The Claude desktop app is not installed for this Windows user.")
+        if not path.parent.is_dir():
+            raise MCPConnectionError("Open the Claude desktop app once so it creates its settings, then connect.")
+        try:
+            validate_database(self.database)
+        except Exception as exc:
+            raise MCPConnectionError("BIO CE personal database is not ready for a read-only connection.") from exc
+        try:
+            data, original = claude_desktop.read_config(path)
+        except (OSError, ValueError) as exc:
+            raise MCPConnectionError("The Claude desktop settings file can't be read as JSON; BIO CE left it "
+                                     "unchanged.") from exc
+        existing = claude_desktop.entry(data)
+        if existing is not None:
+            grant = self._grant_for_entry(DESKTOP, existing)
+            if grant is None:
+                raise MCPConnectionConflict("The server name bio-ce is already used by a different MCP configuration.")
+            self._verify_or_raise(grant.connection_id, self._entry_token(existing))
+            return ConnectionResult(DESKTOP, True, True, None)
+        backup_file = self._backup_config(DESKTOP, path)
+        grant, token = self.control.create_grant(
+            DESKTOP, project=_PERSONAL_SCOPE.project, namespace=_PERSONAL_SCOPE.namespace)
+        command, server_args = self._mcp_server_command(grant.connection_id)
+        written = claude_desktop.render(
+            claude_desktop.with_entry(data, command, server_args, TOKEN_ENVIRONMENT_VARIABLE, token), original)
+        try:
+            claude_desktop.write_atomically(path, written)
+            check, _raw = claude_desktop.read_config(path)
+            if {k: v for k, v in check.items() if k != "mcpServers"} != \
+                    {k: v for k, v in data.items() if k != "mcpServers"} or \
+                    self._grant_for_entry(DESKTOP, claude_desktop.entry(check) or {}) is None:
+                raise MCPConnectionError("The Claude desktop settings did not keep the expected entry.")
+            self._sdk_verifier(self.database, _PERSONAL_SCOPE, command, server_args,
+                               {TOKEN_ENVIRONMENT_VARIABLE: token})
+        except Exception as exc:
+            self.control.revoke(grant.connection_id)
+            self._desktop_put_back(path, written, original)
+            if isinstance(exc, MCPConnectionError):
+                raise
+            raise MCPConnectionError("BIO CE MCP verification failed; the Claude desktop settings were put "
+                                     "back.") from exc
+        return ConnectionResult(DESKTOP, True, False, backup_file)
+
+    def _desktop_put_back(self, path: Path, written: bytes, original: bytes | None) -> None:
+        """Undo our write only if nobody changed the file since; otherwise keep the backup and say so."""
+        try:
+            current = path.read_bytes() if path.exists() else None
+        except OSError:
+            current = None
+        if current is not None and current != written:
+            raise MCPConnectionError("The Claude desktop settings changed meanwhile; BIO CE kept its backup and did "
+                                     "not overwrite them.")
+        if original is None:
+            path.unlink(missing_ok=True)
+        else:
+            claude_desktop.write_atomically(path, original)
+
+    def _desktop_disconnect(self) -> ConnectionResult:
+        installed, path, _kind = claude_desktop.locate(self.env)
+        self._revoke_host(DESKTOP)
+        if not installed or path is None or not path.exists():
+            return ConnectionResult(DESKTOP, False, False, None)
+        try:
+            data, original = claude_desktop.read_config(path)
+        except (OSError, ValueError) as exc:
+            raise MCPConnectionError("BIO CE revoked this connection, but the Claude desktop settings file can't be "
+                                     "read, so its entry was left in place.") from exc
+        found = claude_desktop.entry(data)
+        if found is None:
+            return ConnectionResult(DESKTOP, False, False, None)
+        if not self._entry_matches(found, self._entry_connection(found)):
+            raise MCPConnectionConflict("The configured bio-ce entry does not match BIO CE; it was left untouched.")
+        backup_file = self._backup_config(DESKTOP, path)
+        claude_desktop.write_atomically(path, claude_desktop.render(
+            claude_desktop.without_entry(data, had_servers_key=False), original))
+        if claude_desktop.entry(claude_desktop.read_config(path)[0]) is not None:
+            raise MCPConnectionError("BIO CE revoked this connection but could not remove its entry. The settings "
+                                     "backup was kept.")
+        return ConnectionResult(DESKTOP, False, False, backup_file)
+
+    @staticmethod
+    def _entry_connection(found: Mapping[str, object]) -> str | None:
+        args = found.get("args")
+        if isinstance(args, list) and "--connection" in args:
+            index = args.index("--connection")
+            if index + 1 < len(args):
+                return str(args[index + 1])
+        return None
+
+    def _desktop_diagnose(self, run_server_check: bool) -> tuple[DiagnosticCheck, ...]:
+        installed, path, kind = claude_desktop.locate(self.env)
+        checks = [DiagnosticCheck("Claude desktop app", "pass" if installed else "fail",
+                                  ("Found the " + ("Microsoft Store" if kind == "msix" else "installer") + " version.")
+                                  if installed else "The Claude desktop app was not found for this Windows user.")]
+        if not installed or path is None:
+            return tuple(checks)
+        try:
+            data, _raw = claude_desktop.read_config(path)
+            checks.append(DiagnosticCheck("Settings file", "pass" if path.exists() else "info",
+                                          f"{path}" if path.exists() else "Not created yet; open the app once."))
+        except (OSError, ValueError):
+            checks.append(DiagnosticCheck("Settings file", "fail", "The settings file can't be read as JSON."))
+            return tuple(checks)
+        found = claude_desktop.entry(data)
+        grant = self._grant_for_entry(DESKTOP, found) if found is not None else None
+        checks.append(DiagnosticCheck(
+            "BIO CE entry", "pass" if grant is not None else ("fail" if found is not None else "info"),
+            "Connected." if grant is not None else ("An entry named bio-ce exists but doesn't match BIO CE."
+                                                    if found is not None else "Not connected.")))
+        if grant is not None and run_server_check:
+            try:
+                self._verify_or_raise(grant.connection_id, self._entry_token(found))
+                checks.append(DiagnosticCheck("Server check", "pass", "BIO CE's server answered search and read."))
+            except MCPConnectionError as exc:
+                checks.append(DiagnosticCheck("Server check", "fail", str(exc)))
+        return tuple(checks)
+
+    def skill_zip(self, host: str = DESKTOP) -> bytes:
+        """The memory skill as a ZIP for Claude's Customize → Skills. The user uploads it; BIO CE never does."""
+        status = self.status(host)
+        mode = self._skill_mode(status.connection_id) if status.connection_id else memory_skill.CURATED
+        return memory_skill.skill_zip(mode=mode)
 
     # Memory skill --------------------------------------------------------------------------------
 
@@ -632,6 +796,8 @@ class MCPConnectionManager:
         The optional server check starts the local read-only MCP server once
         and exercises search/read exactly like the post-connect verification.
         """
+        if host == DESKTOP:
+            return self._desktop_diagnose(run_server_check)
         host = _validate_host(host)
         checks: list[DiagnosticCheck] = []
         cli_found = self._find_cli(host) is not None
@@ -1057,7 +1223,8 @@ class MCPConnectionManager:
 
 
 def host_name_for(host: str) -> str:
-    return {"codex": "Codex (CLI · desktop app)", "claude": "Claude Code"}.get(host, host)
+    return {"codex": "Codex (CLI · desktop app)", "claude": "Claude Code", DESKTOP: "Claude desktop app"}.get(
+        host, host)
 
 
 def _validate_host(host: str) -> str:

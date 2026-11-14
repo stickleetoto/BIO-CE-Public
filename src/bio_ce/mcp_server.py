@@ -65,6 +65,18 @@ from bio_ce.storage.sqlite_store import INBOX_SUFFIX, SQLiteMemoryStore
 
 
 TOKEN_ENVIRONMENT_VARIABLE = "BIO_CE_CONNECTION_TOKEN"
+NO_DATA_MESSAGE = ("BIO CE has no data here yet. Open the BIO CE app first (BIO CE 앱을 먼저 실행하세요), then start this "
+                   "AI app again.")
+EXIT_NO_DATA = 4
+
+
+class DataFolderMissing(RuntimeError):
+    """The BIO CE data folder or database does not exist. The server never creates them (v0.4.3 E rule).
+
+    An AI app can start this server in a sandbox: the Claude desktop app (MSIX) redirects a new top-level folder in
+    LocalAppData into its private package storage, where BIO CE and other hosts would never see it (S1, 2026-11-14).
+    Only the BIO CE app, started normally, creates the data folder.
+    """
 _SCOPE_HELP = "Optional. Omit it to use the scope this server is bound to; if given it must match exactly."
 OptionalProject = Annotated[str | None, Field(description="Project. " + _SCOPE_HELP)]
 OptionalNamespace = Annotated[str | None, Field(description="Namespace. " + _SCOPE_HELP)]
@@ -206,7 +218,10 @@ def create_mcp_server(
     ``release_hook`` (optional) receives a function that closes the database connections while idle.
     """
     request_activity = activity or nullcontext
-    database_path = Path(database).expanduser().resolve()
+    database_path = Path(database).expanduser().absolute()
+    if not database_path.parent.is_dir() or not database_path.is_file():
+        raise DataFolderMissing(NO_DATA_MESSAGE)
+    database_path = database_path.resolve()
     control: ControlStore | None = None
     if connection_id is not None:
         control = ControlStore(control_database_for(database_path))
@@ -555,6 +570,9 @@ def run_mcp_stdio(
             database, project=project, namespace=namespace, connection_id=connection_id, token=token,
             activity=lifetime.activity, release_hook=release,
         )
+    except DataFolderMissing as exc:
+        _logger.error("%s", exc)
+        return EXIT_NO_DATA
     except AccessDenied as exc:
         _logger.error("%s", exc)
         return 3

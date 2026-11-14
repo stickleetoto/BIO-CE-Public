@@ -32,11 +32,19 @@ class FakeManagedConnections:
         self.hooks = False
         self.skill = "absent"
         self.code_mode = "missing"
+        self.desktop_installed = True
         self.calls: list[tuple] = []
+
+    def skill_zip(self, host: str) -> bytes:
+        from bio_ce import memory_skill
+        self.calls.append(("skill_zip", host))
+        return memory_skill.skill_zip()
 
     def status(self, host: str) -> HostStatus:
         if host == "claude":
             return HostStatus("claude", True, True, legacy=True, mode="read_only")
+        if host == "claude_desktop":
+            return HostStatus("claude_desktop", self.desktop_installed, False)
         grant = self.control.grant(self.grant.connection_id)
         return HostStatus("codex", True, grant.active, mode=grant.mode, connection_id=grant.connection_id,
                           hooks_installed=self.hooks, code_mode=self.code_mode, skill=self.skill)
@@ -174,7 +182,7 @@ class AutoMemoryConnectionsPageTests(unittest.TestCase):
         self.root.update()
         texts = " ".join(str(w.cget("text")) for w in _all_widgets(page) if "text" in w.keys())
         self.assertIn("You can close the BIO CE app: connected AI tools keep using your memories.", texts)
-        self.assertIn("The Claude desktop chat app is not supported.", texts)
+        self.assertIn("The Claude desktop chat app has its own card below.", texts)
         self.assertIn("Codex (CLI · desktop app)", texts)
         self.assertNotIn("0.164", codex.support_detail.cget("text"))
 

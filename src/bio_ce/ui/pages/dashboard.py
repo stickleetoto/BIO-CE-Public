@@ -9,7 +9,7 @@ import tkinter as tk
 
 from bio_ce.connections import HostStatus, auto_memory_support
 from bio_ce.engine.contract import EngineUnavailable
-from bio_ce.ui.format import host_name, plural, preview, relative_time
+from bio_ce.ui.format import HOSTS, host_name, plural, preview, relative_time
 from bio_ce.ui.pages import Page
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS
 from bio_ce.ui.widgets import (
@@ -134,7 +134,7 @@ class DashboardPage(Page):
         section_label(header, theme, "AI hosts").pack(side="left")
         Button(header, theme, "Manage", variant="link", command=lambda: app.show_page("connections")).pack(side="right")
         self.host_rows: dict[str, Pill] = {}
-        for host in ("codex", "claude"):
+        for host in HOSTS:
             row = RowButton(self.connections_card.body, theme, lambda: app.show_page("connections"))
             row.pack(fill="x", pady=theme.px(1))
             glyph = row.track(tk.Label(row.body, text=theme.icon("terminal"), font=theme.icon_font("normal"),
