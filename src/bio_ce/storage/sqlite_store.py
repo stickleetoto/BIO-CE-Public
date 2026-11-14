@@ -211,6 +211,40 @@ class SQLiteMemoryStore:
             ).fetchone()
         return _row_to_revision(row, scope)
 
+    def add_many(self, entries: Sequence[tuple[MemoryScope, str, str, SourceProvenance]]) -> list[MemoryRevision]:
+        """Add several new memories in ONE transaction: all of them are stored, or none (an import chunk)."""
+        prepared = []
+        for scope, title, content, source in entries:
+            if not isinstance(scope, MemoryScope) or not isinstance(source, SourceProvenance):
+                raise ValidationError("scope and source must use BIO CE model types")
+            title = validate_memory_text(title, "title", 512)
+            content = validate_memory_text(content, "content", 100_000, allow_empty=True)
+            memory_id = validate_memory_id(f"mem_{uuid.uuid4().hex}")
+            recorded = utc_now()
+            values = {
+                "memory_id": memory_id, "revision_number": 1, "kind": RevisionKind.ASSERTION.value, "title": title,
+                "content": content, "source_type": source.source_type, "source_ref": source.source_ref,
+                "source_metadata_json": source.to_json(), "recorded_at": recorded, "valid_from": None,
+                "valid_until": None, "previous_revision_id": None,
+            }
+            prepared.append((scope, values, _revision_id(values)))
+        revisions: list[MemoryRevision] = []
+        with self._write_transaction():
+            for scope, values, revision_id in prepared:
+                self._connection.execute(
+                    "INSERT INTO memories(memory_id, project, namespace, current_revision_id, created_at, updated_at) "
+                    "VALUES (?, ?, ?, NULL, ?, ?)",
+                    (values["memory_id"], scope.project, scope.namespace, values["recorded_at"],
+                     values["recorded_at"]),
+                )
+                self._insert_revision(values, scope, revision_id)
+                self._connection.execute("UPDATE memories SET current_revision_id = ? WHERE memory_id = ?",
+                                         (revision_id, values["memory_id"]))
+                row = self._connection.execute("SELECT * FROM revisions WHERE revision_id = ?",
+                                               (revision_id,)).fetchone()
+                revisions.append(_row_to_revision(row, scope))
+        return revisions
+
     def revise(
         self,
         scope: MemoryScope,

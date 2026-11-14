@@ -34,6 +34,7 @@ from bio_ce.ui.pages import Page
 from bio_ce.ui.pages.connections import ConnectionsPage
 from bio_ce.ui.pages.dashboard import DashboardPage
 from bio_ce.ui.pages.editor import EditorPage
+from bio_ce.ui.pages.importing import ImportPage
 from bio_ce.ui.pages.inbox import InboxPage
 from bio_ce.ui.pages.memories import MemoriesPage
 from bio_ce.ui.pages.settings import SettingsPage
@@ -149,6 +150,7 @@ class BIOCEDesktop:
         self._maintenance_after: str | None = None
         self.memories = MemoriesPage(self, self.page_host)
         self.inbox = InboxPage(self, self.page_host)
+        self.importer = ImportPage(self, self.page_host)
         self.editor = EditorPage(self, self.page_host)
         self.connections = ConnectionsPage(self, self.page_host)
         self.settings = SettingsPage(self, self.page_host)
@@ -158,7 +160,8 @@ class BIOCEDesktop:
             "connections": self.connections,
             "settings": self.settings,
         }
-        self._routes: dict[str, Page] = dict(self.pages, editor=self.editor, inbox=self.inbox)
+        self._routes: dict[str, Page] = dict(self.pages, editor=self.editor, inbox=self.inbox,
+                                             **{"import": self.importer})
 
         self._bind_shortcuts()
         root.bind("<Configure>", self._on_resize, add="+")
@@ -438,7 +441,7 @@ class BIOCEDesktop:
 
     def data_changed(self, select: str | None = None) -> None:
         """Mark pages stale after a write and refresh the visible one."""
-        for page in (self.dashboard, self.memories, self.settings, self.inbox):
+        for page in (self.dashboard, self.memories, self.settings, self.inbox, self.importer):
             page.stale = True
         self.refresh_badges()
         if self.current in (self.dashboard, self.memories, self.settings, self.inbox):

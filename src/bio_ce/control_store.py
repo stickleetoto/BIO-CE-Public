@@ -168,6 +168,21 @@ CREATE TABLE IF NOT EXISTS app_settings (
     updated_at TEXT NOT NULL
 );
 """
+# v0.4.3 tables (V1 approved: two tables, same user_version). Older versions never read them, so rollback works.
+_SCHEMA_V043 = """
+CREATE TABLE IF NOT EXISTS import_batches (
+    batch_id TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    source TEXT NOT NULL,
+    default_space_id TEXT NOT NULL,
+    stage TEXT NOT NULL DEFAULT 'inbox',
+    counts_json TEXT NOT NULL DEFAULT '{}',
+    memory_ids_json TEXT NOT NULL DEFAULT '[]',
+    review_ids_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'partial' CHECK (status IN ('complete', 'partial', 'undone')),
+    undone_at TEXT
+);
+"""
 SAVE_CURATED = "curated"
 SAVE_COLLECT = "collect"
 SAVE_MODES = (SAVE_CURATED, SAVE_COLLECT)
@@ -291,6 +306,7 @@ class ControlStore:
         # Every statement is idempotent, so concurrent first opens are safe.
         self._connection.executescript(_SCHEMA)
         self._connection.executescript(_SCHEMA_V042)
+        self._connection.executescript(_SCHEMA_V043)
         with self._write():
             self._connection.execute(
                 "INSERT OR IGNORE INTO spaces (space_id, kind, project, display_name, created_at) "
@@ -813,6 +829,13 @@ class ControlStore:
                     "ON CONFLICT(memory_id) DO UPDATE SET last_used_at = excluded.last_used_at, "
                     "hit_count = inbox_usage.hit_count + 1", (memory_id, stamp, stamp))
 
+    def inbox_seen_many(self, memory_ids: list[str] | tuple[str, ...], *, first_seen: str) -> None:
+        """New inbox items from an import: their expiry clock starts when they were imported (V6)."""
+        with self._write():
+            self._connection.executemany(
+                "INSERT OR IGNORE INTO inbox_usage (memory_id, first_seen, hit_count) VALUES (?, ?, 0)",
+                [(memory_id, first_seen) for memory_id in memory_ids])
+
     def inbox_usage(self) -> dict[str, dict[str, Any]]:
         with self._lock:
             rows = self._connection.execute("SELECT * FROM inbox_usage").fetchall()
@@ -886,6 +909,51 @@ class ControlStore:
                 f"UPDATE audit_log SET title = NULL, detail_json = '{{\"discarded\": true}}' "
                 f"WHERE memory_id IN ({marks})", ids)
             self._connection.execute(f"DELETE FROM inbox_usage WHERE memory_id IN ({marks})", ids)
+
+    # Import batches -----------------------------------------------------------
+    # No file names or paths are stored: they can be personal. Entries are referenced only by id and line number.
+
+    def create_import_batch(self, batch_id: str, *, source: str, default_space_id: str, created_at: str) -> None:
+        with self._write():
+            self._connection.execute(
+                "INSERT INTO import_batches (batch_id, created_at, source, default_space_id) VALUES (?, ?, ?, ?)",
+                (batch_id, created_at, source, default_space_id))
+
+    def update_import_batch(self, batch_id: str, *, memory_ids: list | None = None, review_ids: list | None = None,
+                            status: str | None = None, counts: dict | None = None,
+                            undone_at: str | None = None) -> None:
+        values: dict[str, Any] = {}
+        if memory_ids is not None:
+            values["memory_ids_json"] = json.dumps(memory_ids)
+        if review_ids is not None:
+            values["review_ids_json"] = json.dumps(review_ids)
+        if status is not None:
+            values["status"] = status
+        if counts is not None:
+            values["counts_json"] = json.dumps(counts, ensure_ascii=False, sort_keys=True)
+        if undone_at is not None:
+            values["undone_at"] = undone_at
+        if not values:
+            return
+        assignments = ", ".join(f"{column} = ?" for column in values)
+        with self._write():
+            changed = self._connection.execute(f"UPDATE import_batches SET {assignments} WHERE batch_id = ?",
+                                               (*values.values(), batch_id)).rowcount
+        if not changed:
+            raise ControlStoreError("That import no longer exists.")
+
+    def import_batch(self, batch_id: str) -> dict[str, Any]:
+        with self._lock:
+            row = self._connection.execute("SELECT * FROM import_batches WHERE batch_id = ?", (batch_id,)).fetchone()
+        if row is None:
+            raise ControlStoreError("That import no longer exists.")
+        return _batch(row)
+
+    def import_batches(self, *, limit: int = 50) -> tuple[dict[str, Any], ...]:
+        with self._lock:
+            rows = self._connection.execute("SELECT * FROM import_batches ORDER BY created_at DESC LIMIT ?",
+                                            (limit,)).fetchall()
+        return tuple(_batch(row) for row in rows)
 
     # Restore ----------------------------------------------------------------
 
@@ -977,6 +1045,11 @@ class ControlStore:
                 "VALUES (?, NULL, 'bio-ce-desktop', 'restore', 'restored', ?)",
                 (stamp, json.dumps(summary, sort_keys=True)))
         return {**summary, "restored_spaces": spaces_added}
+
+
+def _batch(row: sqlite3.Row) -> dict[str, Any]:
+    return {**dict(row), "counts": json.loads(row["counts_json"]), "memory_ids": json.loads(row["memory_ids_json"]),
+            "review_ids": json.loads(row["review_ids_json"])}
 
 
 def _space(row: sqlite3.Row) -> Space:

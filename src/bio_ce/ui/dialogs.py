@@ -333,6 +333,44 @@ class NameDialog(Dialog):
         return self.result  # type: ignore[return-value]
 
 
+class EntryEditDialog(Dialog):
+    """Edit one import entry before importing: its text and, optionally, the date the user said it."""
+
+    def __init__(self, parent: tk.Misc, theme: Theme, *, content: str, said_at: str = "", reasons: str = "") -> None:
+        super().__init__(parent, theme, "Edit entry", resizable=True)
+        c = theme.colors
+        tk.Label(self.content, text="Edit entry", font=theme.font("title"), background=c.surface,
+                 foreground=c.text, anchor="w").pack(fill="x")
+        if reasons:
+            WrapLabel(self.content, reasons, font=theme.font("caption"), foreground=c.text_secondary).pack(
+                fill="x", pady=(theme.px(SPACE_XS), 0))
+        WrapLabel(self.content, "An instruction to an AI (\"always answer in Korean\") can be rewritten as your "
+                  "preference (\"I prefer answers in Korean\").", font=theme.font("caption"),
+                  foreground=c.text_muted).pack(fill="x", pady=(theme.px(SPACE_XS), 0))
+        self.text = TextArea(self.content, theme, font="body")
+        self.text.text.configure(height=6)
+        self.text.set(content)
+        self.text.pack(fill="both", expand=True, pady=(theme.px(SPACE_S), 0))
+        tk.Label(self.content, text="Said on (optional, for example 2025-03-14)", font=theme.font("body_strong"),
+                 background=c.surface, foreground=c.text, anchor="w").pack(fill="x", pady=(theme.px(SPACE_M), 0))
+        self.date = tk.StringVar(master=self, value=said_at)
+        Field(self.content, theme, textvariable=self.date).pack(fill="x", pady=(theme.px(SPACE_XS), 0))
+        self.add_button("Save", self._save, variant="primary")
+        self.add_button("Cancel", lambda: self.finish(None))
+        self.result = None
+
+    def _save(self) -> None:
+        text = " ".join(self.text.get().split())
+        if not text:
+            self.text.set_error(True)
+            return
+        self.finish((text, self.date.get().strip()))
+
+    def ask(self) -> tuple[str, str] | None:
+        self.present(focus=self.text, size=(self.theme.px(560), self.theme.px(420)))
+        return self.result  # type: ignore[return-value]
+
+
 class ChoiceDialog(Dialog):
     """Pick one of a few options (for example the space to move memories to). Returns its key or None."""
 

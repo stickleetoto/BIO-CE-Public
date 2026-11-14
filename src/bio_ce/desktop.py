@@ -200,8 +200,14 @@ class DesktopMemoryService:
         """Show and edit memories of another space (General or a project space)."""
         self.scope = curated
 
-    def inbox(self, *, limit: int = 500) -> tuple[MemoryRevision, ...]:
-        return self._store.list_current(inbox_scope(self.scope), limit=limit)
+    def inbox(self) -> tuple[MemoryRevision, ...]:
+        """Every inbox item of this space (an import can add thousands), newest first."""
+        items: list[MemoryRevision] = []
+        while True:
+            page = self._store.list_current(inbox_scope(self.scope), limit=500, offset=len(items))
+            items.extend(page)
+            if len(page) < 500:
+                return tuple(items)
 
     def read_inbox(self, memory_id: str) -> MemoryRevision:
         return self._store.read(inbox_scope(self.scope), memory_id)
@@ -255,6 +261,16 @@ class DesktopMemoryService:
 
     def finish_cleanups(self, control: ControlStore) -> int:
         return finish_pending_cleanups(self._store, control)
+
+    def import_planner(self, spaces, *, size_limit: int, folder_labels=()) -> "ImportPlanner":
+        """Reads the store to preview an import (v0.4.3 B); never writes."""
+        from bio_ce.importer import ImportPlanner
+        return ImportPlanner(self._store, spaces, size_limit=size_limit, folder_labels=folder_labels)
+
+    def import_service(self, control: ControlStore, spaces) -> "ImportService":
+        """Commits and undoes imports through this app's single writable connection."""
+        from bio_ce.importer import ImportService
+        return ImportService(self._store, control, spaces)
 
     def move_memories(self, control: ControlStore, memory_ids: list[str] | tuple[str, ...], target: MemoryScope,
                       *, inbox: bool = False) -> dict:

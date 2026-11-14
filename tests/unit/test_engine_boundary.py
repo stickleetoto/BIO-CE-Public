@@ -24,6 +24,8 @@ ALLOWED_SERVICE_CALLS = {
     "inbox", "similar_curated", "move_inbox", "discard_inbox", "discard_proposal", "run_inbox_expiry", "use_space",
     # v0.4.3 moving memories between spaces (Community-only; gated by the edit action)
     "move_memories",
+    # v0.4.3 import (Community-only, like the inbox it writes to; gated by the create action)
+    "import_planner", "import_service",
 }
 
 

@@ -20,6 +20,19 @@ from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS
 from bio_ce.ui.widgets import AutoScrollbar, Button, Card, EmptyState, Pill, WrapLabel, section_label
 
 
+def import_line(meta: dict) -> str:
+    """12.1: an imported item shows when it was said only if the user confirmed it, and the source's date apart."""
+    source = {"chatgpt": "ChatGPT", "claude": "Claude"}.get(meta.get("import_source"), "another AI")
+    if meta.get("said_at"):
+        when = f"Said on {meta['said_at']}"
+    elif meta.get("claimed_date"):
+        when = f"Source date {meta['claimed_date']} (not confirmed)"
+    else:
+        when = "Said on: unknown"
+    imported = format_timestamp(meta["imported_at"]) if meta.get("imported_at") else "unknown"
+    return f"Imported from {source} · {when} · Imported {imported}"
+
+
 class SpaceBar(tk.Frame):
     """Memories / Inbox tabs on the left, the space picker on the right."""
 
@@ -83,6 +96,11 @@ class InboxPage(Page):
         self.items: dict[str, MemoryRevision] = {}
         Button(self.actions, theme, "Refresh", icon="refresh", variant="subtle",
                command=self.refresh, tooltip="Reload the inbox").pack(side="right")
+        self.import_button = Button(self.actions, theme, "Import…", icon="add",
+                                    command=lambda: app.show_page("import"),
+                                    tooltip="Import memories from ChatGPT, Claude, or another AI")
+        self.import_button.pack(side="right", padx=(0, theme.px(SPACE_S)))
+        app.gate(self.import_button, "create")
         self.space_bar = SpaceBar(self, app, active="inbox")
         self.space_bar.pack(fill="x", pady=(0, theme.px(SPACE_M)))
         WrapLabel(self, "Hosts in collect mode save lasting information here without asking. Hosts don't see the "
@@ -209,6 +227,8 @@ class InboxPage(Page):
             parts.append("a guess the host made; you did not state it")
         if meta.get("evidence") == "external_content":
             parts.append("taken from a file or page you asked about")
+        if meta.get("import_source"):
+            parts = [import_line(meta)]
         self.detail_title.configure(text=item.title)
         self.detail_meta.configure(text=" · ".join(parts))
         self.detail_body.configure(text=item.content or "")
