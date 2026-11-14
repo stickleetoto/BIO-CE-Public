@@ -6,8 +6,9 @@
 Steps: install the previous release -> create data with it (memories, revisions, a retraction, review
 items, a grant, settings, a user backup) -> upgrade to the candidate -> prove every byte of user data
 survived -> launch checks -> installed MCP server and hook (Korean text, duplicate proposals) ->
-rollback: data only the candidate understands (a project space, an inbox item), reinstall the previous
-release over it, prove it still serves General and changes nothing, upgrade again and find the items ->
+rollback: data only the candidate understands (a project space, an inbox item; since v0.4.3 also a Personal
+memory, an import batch, and a sorting suggestion), reinstall the previous release over it, prove it still serves
+General without Personal and changes nothing, upgrade again and find the items ->
 Claude Code and Codex registration plus hook install/remove through the real CLIs in isolated profiles
 -> revoke -> backup/restore and recovery from the pre-upgrade backup -> uninstall keeping data ->
 reinstall into a folder with Korean letters, spaces, and '#' -> uninstall -> full cleanup.
@@ -70,7 +71,7 @@ def installed(directory: Path = APP_DIR) -> tuple[Path, Path]:
 
 
 V042_TABLES = ("spaces", "space_folders", "connection_spaces", "connection_settings", "inbox_usage",
-               "curation_items", "app_settings")
+               "curation_items", "app_settings", "import_batches", "curation_proposals")
 
 
 def everything() -> dict:
@@ -381,6 +382,60 @@ def main(argv: list[str]) -> int:
                  and project_found["titles"][:1] == ["Alpha release day"]
                  and everything()["memories"] == candidate_only["memories"],
                  files=total, mismatched=mismatched[:10], inbox=inbox_found, project=project_found)
+
+        # 3c. v0.4.3 data (Personal, an import, a suggestion): rollback and forward again -------------
+        from bio_ce.core.models import SourceProvenance
+        from bio_ce.curation import CurationService
+        from bio_ce.importer import ImportPlanner, ImportService, parse_text
+        from bio_ce.spaces import PERSONAL_SPACE
+        from bio_ce.storage.sqlite_store import SQLiteMemoryStore
+
+        control = ControlStore(control_database_for(DATABASE))
+        control.set_personal_enabled(True)
+        control.set_personal_access(grant.connection_id, can_read=True, can_write=False)
+        store = SQLiteMemoryStore(DATABASE)
+        user = SourceProvenance("user-entered", "release-e2e")
+        store.add(PERSONAL_SPACE.curated, title="개인 혈액형", content="사용자 혈액형: O형.", source=user)
+        spaces = (*control.spaces(), PERSONAL_SPACE)
+        preview = ImportPlanner(store, spaces).preview(parse_text(
+            "[2025-03-14] - Imported release check: weekly tennis on Saturdays.\n"
+            "[unknown] - Imported release check: green tea after lunch."), source="chatgpt", destination="general")
+        batch = ImportService(store, control, spaces).commit(preview)
+        general_inbox = MemoryScope("bio-ce-personal", "default.inbox")
+        for text in ("The user stretches every morning before work.",
+                     "The user stretches every morning before work starts."):
+            item = store.add(general_inbox, title="Stretching", content=text, source=user)
+            control.inbox_seen(item.memory_id)
+        suggestions = CurationService(store, control, spaces).find()
+        store.close()
+        control.close()
+        v043_only = everything()
+        run.step("v043-only-data-created", batch.status == "complete" and batch.to_inbox == 2 and suggestions >= 1,
+                 imported=batch.to_inbox, suggestions=suggestions)
+        ok = base.install(run, previous, "rollback-0.4.3")
+        _gui, rolled_mcp = installed()
+        rolled_general = asyncio.run(asyncio.wait_for(
+            mcp_search(rolled_mcp, grant.connection_id, token, {"query": "혈액형"}), timeout=120))
+        rolled_hook = run_hook(rolled_mcp, grant.connection_id, token, prompt="내 혈액형이 뭐였지?")
+        launched = base.launch_and_capture(run, gui_env, "gui-after-rollback-0.4.3")
+        run.step("rollback-v043-previous-serves-general-without-personal", ok and launched["window"]
+                 and launched["exit"] == 0 and "개인 혈액형" not in rolled_general["titles"]
+                 and "혈액형" not in rolled_hook["context"], search=rolled_general, **launched)
+        run.step("rollback-v043-keeps-every-row", everything() == v043_only, integrity=base.integrity())
+        ok = base.install(run, candidate, "re-upgrade-0.4.3")
+        _gui, again_mcp = installed()
+        personal_found = asyncio.run(asyncio.wait_for(mcp_search(again_mcp, grant.connection_id, token, {
+            "query": "혈액형", "space": "Personal"}), timeout=120))
+        control = ControlStore(control_database_for(DATABASE))
+        try:
+            batch_after = control.import_batch(batch.batch_id)
+            waiting = control.pending_proposal_count()
+        finally:
+            control.close()
+        run.step("re-upgrade-finds-personal-import-and-suggestions", ok
+                 and personal_found["titles"][:1] == ["개인 혈액형"] and batch_after["status"] == "complete"
+                 and waiting >= 1 and everything()["memories"] == v043_only["memories"],
+                 personal=personal_found, batch=batch_after["status"], suggestions=waiting)
 
         # 4. host registration and hooks through the real CLIs (isolated profiles) ---------------
         app_exe, _mcp = installed()

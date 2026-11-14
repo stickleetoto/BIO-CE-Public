@@ -52,6 +52,24 @@
   and discarded the next time it runs.
 - No real-model comparison of curated and collect mode was run for this candidate.
 
+## v0.4.3-rc1 (candidate)
+
+- The installer and the programs it installs are **not code-signed**.
+- Claude desktop app: verified with the Microsoft Store version 5.11492 on 2026-11-14 (a memory saved in a chat
+  was visible at once in BIO CE and Codex, and the other way round). The installer (non-Store) version was not
+  run. The app has no session hooks, and whether its model uses BIO CE on its own, without being asked, has not
+  been verified. The memory skill can only be added by uploading the ZIP yourself.
+- The Claude desktop app reads its settings when it starts: quit it completely and reopen it after connecting or
+  disconnecting. If it is open while BIO CE changes the file, it may write its old settings back when it quits.
+- Imports: sensitive-entry labels and source-note detection are local word patterns (Korean and English). They
+  can miss things or label harmless entries; check the preview. Dates written by another AI are never treated as
+  confirmed until you confirm them.
+- Sorting suggestions compare wording, not meaning: two entries that say the same in different words are not
+  suggested for merging.
+- Exports are plain text and not encrypted; a Personal export contains your personal memories.
+- The MCP server refuses to start until the BIO CE app has created its data folder. An AI app connected before
+  BIO CE was opened once shows the server as failed until you open BIO CE.
+
 ## v0.4.1-rc1 (pre-release)
 
 - The installer and the programs it installs are **not code-signed**. A Windows PC without Python or Git has **not been verified**; the automated clean install ran on a GitHub-hosted runner that has both.
