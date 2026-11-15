@@ -80,12 +80,20 @@ class MemoriesActionsFitTests(unittest.TestCase):
     def test_no_button_is_cut_off_at_any_width(self):
         self.check_every_width("default")
 
-    def test_no_button_is_cut_off_with_wider_fonts_either(self):
-        """CI runners and other PCs render wider text; a 25% wider font must still fit (wrapping is fine)."""
+    def widen_fonts(self, factor: float) -> None:
         for font in self.app.theme.fonts.values():
             size = int(font.cget("size"))
-            font.configure(size=round(size * 1.25) if size > 0 else -round(-size * 1.25))
+            font.configure(size=round(size * factor) if size > 0 else -round(-size * factor))
+
+    def test_no_button_is_cut_off_with_wider_fonts_either(self):
+        """CI runners and other PCs render wider text; 25% wider fonts must still fit (wrapping is fine)."""
+        self.widen_fonts(1.25)
         self.check_every_width("125%")
+
+    def test_no_button_is_cut_off_with_much_wider_fonts(self):
+        """A margin beyond what the CI runner showed (its text was about 15-25% wider than this PC's)."""
+        self.widen_fonts(1.5)
+        self.check_every_width("150%")
 
     def test_move_works_from_the_list_and_from_the_right_click_menu(self):
         self.show(960, 760)

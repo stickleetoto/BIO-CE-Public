@@ -34,49 +34,88 @@ def import_line(meta: dict) -> str:
 
 
 class SpaceBar(tk.Frame):
-    """Memories / Inbox tabs on the left, the space picker on the right."""
+    """Memories / Inbox / Suggestions tabs on the left, the space picker on the right.
+
+    Nothing in this bar is ever cut off (a cut-off button ignores clicks): every part keeps its requested size, and
+    when one line is too narrow the tabs wrap and the space picker moves to the next line.
+    """
 
     def __init__(self, master: tk.Misc, app, *, active: str) -> None:
         theme, c = app.theme, app.theme.colors
-        super().__init__(master, background=c.bg)
+        super().__init__(master, background=c.bg, height=1)
         self.app = app
         self.active = active
+        self.gap = theme.px(SPACE_XS)
+        self.memories_tab = Button(self, theme, "Memories", variant="primary" if active == "memories" else "subtle",
+                                   command=lambda: app.show_page("memories"))
+        self.inbox_tab = Button(self, theme, "Inbox", variant="primary" if active == "inbox" else "subtle",
+                                command=lambda: app.show_page("inbox"))
+        self.suggestions_tab = Button(self, theme, "Suggestions",
+                                      variant="primary" if active == "suggestions" else "subtle",
+                                      command=lambda: app.show_page("suggestions"))
+        self.personal_pill = Pill(self, theme, "Personal: only hosts you allow", "warning")
+        Tooltip(self.personal_pill, theme, "AI hosts see Personal only with the permission you give each one on the "
+                "Connections page. Session hooks never use it.")
+        self.chooser = tk.Frame(self, background=c.bg)
+        tk.Label(self.chooser, text="Space", font=theme.font("caption_strong"), background=c.bg,
+                 foreground=c.text_muted).pack(side="left", padx=(0, theme.px(SPACE_S)))
         self.space = tk.StringVar(master=self)
-        self.picker = ttk.Combobox(self, textvariable=self.space, state="readonly", width=24, style="BIO.TCombobox",
-                                   font=theme.font("body"))
+        self.picker = ttk.Combobox(self.chooser, textvariable=self.space, state="readonly", width=24,
+                                   style="BIO.TCombobox", font=theme.font("body"))
         # The drop-down list is a plain Tk listbox; give it the theme's colors.
         self.option_add("*TCombobox*Listbox.background", c.surface_alt)
         self.option_add("*TCombobox*Listbox.foreground", c.text)
         self.option_add("*TCombobox*Listbox.selectBackground", c.selection)
         self.option_add("*TCombobox*Listbox.selectForeground", c.text)
-        self.picker.pack(side="right")
-        tk.Label(self, text="Space", font=theme.font("caption_strong"), background=c.bg,
-                 foreground=c.text_muted).pack(side="right", padx=(0, theme.px(SPACE_S)))
+        self.picker.pack(side="left")
         self.picker.bind("<<ComboboxSelected>>", lambda _e: self._chosen())
-        self.memories_tab = Button(self, theme, "Memories", variant="primary" if active == "memories" else "subtle",
-                                   command=lambda: app.show_page("memories"))
-        self.memories_tab.pack(side="left")
-        self.inbox_tab = Button(self, theme, "Inbox", variant="primary" if active == "inbox" else "subtle",
-                                command=lambda: app.show_page("inbox"))
-        self.inbox_tab.pack(side="left", padx=(theme.px(SPACE_XS), 0))
-        self.suggestions_tab = Button(self, theme, "Suggestions",
-                                      variant="primary" if active == "suggestions" else "subtle",
-                                      command=lambda: app.show_page("suggestions"))
-        self.suggestions_tab.pack(side="left", padx=(theme.px(SPACE_XS), 0))
-        self.personal_pill = Pill(self, theme, "Personal: only hosts you allow", "warning")
-        Tooltip(self.personal_pill, theme, "AI hosts see Personal only with the permission you give each one on the "
-                "Connections page. Session hooks never use it.")
+        self._show_pill = False
+        self._width = 0
         self._spaces: list = []
+        self.bind("<Configure>", self._on_configure, add="+")
+        self.after_idle(self.relayout)
+
+    def _on_configure(self, event) -> None:
+        if int(event.width) != self._width:
+            self._width = int(event.width)
+            self.relayout()
+
+    def relayout(self) -> None:
+        """Place the tabs (wrapping if needed), then the picker: right-aligned when it fits, else on its own line."""
+        self.update_idletasks()
+        width = self._width if self._width > 1 else self.winfo_width()
+        items = [self.memories_tab, self.inbox_tab, self.suggestions_tab]
+        if self._show_pill:
+            items.append(self.personal_pill)
+        else:
+            self.personal_pill.place_forget()
+        if width <= 1:
+            width = sum(item.winfo_reqwidth() + self.gap for item in items) + self.chooser.winfo_reqwidth()
+        x = y = line = 0
+        for item in items:
+            need, high = item.winfo_reqwidth(), item.winfo_reqheight()
+            if x and x + need > width:
+                x, y, line = 0, y + line + self.gap, 0
+            gap = self.gap * 3 if item is self.personal_pill and x else 0
+            item.place(x=x + gap, y=y, width=need, height=high)
+            x += gap + need + self.gap
+            line = max(line, high)
+        need, high = self.chooser.winfo_reqwidth(), self.chooser.winfo_reqheight()
+        if x + need <= width:
+            self.chooser.place(x=width - need, y=y, width=need, height=high)
+            total = y + max(line, high)
+        else:
+            self.chooser.place(x=0, y=y + line + self.gap, width=need, height=high)
+            total = y + line + self.gap + high
+        if int(self.cget("height")) != total:
+            self.configure(height=total)
 
     def refresh(self) -> None:
         self._spaces = list(self.app.spaces())
         self.picker.configure(values=[space.display_name for space in self._spaces])
         current = self.app.current_space()
         self.space.set(current.display_name if current is not None else "General")
-        if current is not None and current.is_personal:
-            self.personal_pill.pack(side="left", padx=(self.app.theme.px(SPACE_M), 0))
-        else:
-            self.personal_pill.pack_forget()
+        self._show_pill = current is not None and current.is_personal
         if len(self._spaces) <= 1:
             self.picker.configure(state="disabled")
         else:
@@ -89,6 +128,7 @@ class SpaceBar(tk.Frame):
         except Exception:  # noqa: BLE001
             waiting = 0
         self.suggestions_tab.set_text(f"Suggestions ({waiting})" if waiting else "Suggestions")
+        self.relayout()
 
     def _chosen(self) -> None:
         index = self.picker.current()
