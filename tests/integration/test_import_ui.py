@@ -152,6 +152,24 @@ class ImportUiTests(unittest.TestCase):
                                                          "claimed_date": "2025-01-02"}))
         self.assertIn("Said on: unknown", import_line({"import_source": "other"}))
 
+    def test_every_preview_column_is_visible_in_a_normal_window(self):
+        """GUI check I6: the SENSITIVE column was off the right edge (the columns asked for about 1,000 px)."""
+        self.control.set_personal_enabled(True)
+        self.page.refresh()
+        self.page.set_text(LIST)
+        self.page.choose_destination("personal")
+        for width in (960, 1100, 1300):
+            self.root.geometry(f"{width}x760+20+20")
+            self.preview()
+            for _ in range(4):
+                self.root.update()
+            tree = self.page.tree
+            columns = tree.cget("columns")
+            total = sum(int(tree.column(column, "width")) for column in columns)
+            with self.subTest(width=width):
+                self.assertLessEqual(total, tree.winfo_width() + 2, {c: tree.column(c, "width") for c in columns})
+                self.assertGreaterEqual(int(tree.column("text", "width")), 150)  # the text keeps a readable width
+
     def test_the_inbox_page_opens_the_import_page(self):
         self.app.show_page("inbox")
         self.app.inbox.import_button.invoke()

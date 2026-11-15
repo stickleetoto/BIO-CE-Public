@@ -149,17 +149,23 @@ class ImportPage(Page):
         area.pack(fill="both", expand=True)
         self.tree = ttk.Treeview(area, columns=("check", "state", "date", "text", "space", "sensitive"),
                                  show="headings", selectmode="extended", height=14, style="BIO.Treeview")
-        for column, label, width, stretch in (("check", "", 34, False), ("state", "STATE", 170, False),
-                                              ("date", "DATE", 150, False), ("text", "TEXT", 420, True),
-                                              ("space", "DESTINATION", 120, False),
-                                              ("sensitive", "SENSITIVE", 110, False)):
+        # Fixed columns are compact; TEXT takes whatever width is left (at least 150 px), so the SENSITIVE column on
+        # the right is never off the edge (GUI check I6). A horizontal scroll bar appears only if even that can't fit.
+        self._fixed_columns = {"check": 30, "state": 150, "date": 150, "space": 100, "sensitive": 110}
+        for column, label in (("check", ""), ("state", "STATE"), ("date", "DATE"), ("text", "TEXT"),
+                              ("space", "DESTINATION"), ("sensitive", "SENSITIVE")):
             self.tree.heading(column, text=label, anchor="w")
-            self.tree.column(column, width=theme.px(width), stretch=stretch, anchor="w")
+            width = self._fixed_columns.get(column, 150)
+            self.tree.column(column, width=theme.px(width), minwidth=theme.px(width if column != "text" else 150),
+                             stretch=False, anchor="w")
         bar = AutoScrollbar(area, orient="vertical", command=self.tree.yview, style=theme.scrollbar_style(c.surface))
-        self.tree.configure(yscrollcommand=bar.set)
+        across = AutoScrollbar(area, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=bar.set, xscrollcommand=across.set)
         self.tree.grid(row=0, column=0, sticky="nsew")
         bar.grid(row=0, column=1, sticky="ns")
+        across.grid(row=1, column=0, sticky="ew")
         area.columnconfigure(0, weight=1)
+        self.tree.bind("<Configure>", lambda _e: self._fit_columns(), add="+")
         self.tree.bind("<ButtonRelease-1>", self._clicked)
         self.tree.bind("<space>", lambda _e: self.toggle_selected())
         self.tree.bind("<<TreeviewSelect>>", lambda _e: self._show_detail())
@@ -392,6 +398,19 @@ class ImportPage(Page):
             self.unreadable_toggle.pack_forget()
             self.unreadable_list.pack_forget()
         self._sync_buttons()
+
+    def _fit_columns(self) -> None:
+        """TEXT gets the width the fixed columns leave, at least 150 px."""
+        try:
+            width = self.tree.winfo_width()
+        except tk.TclError:
+            return
+        if width <= 1:
+            return
+        fixed = sum(self.theme.px(value) for value in self._fixed_columns.values())
+        text = max(self.theme.px(150), width - fixed - 2)
+        if int(self.tree.column("text", "width")) != text:
+            self.tree.column("text", width=text)
 
     def toggle_unreadable(self) -> None:
         if self.unreadable_list.winfo_manager():
