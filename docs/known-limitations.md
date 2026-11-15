@@ -67,6 +67,7 @@
 - Sorting suggestions compare wording, not meaning: two entries that say the same in different words are not
   suggested for merging.
 - Exports are plain text and not encrypted; a Personal export contains your personal memories.
+- On a small screen (768 px tall) with 125% display scaling and much larger text, the Memories reading pane can be too short to show its buttons; maximize the window or use the right-click menu on the list. Widths are handled: buttons wrap instead of being cut off.
 - The MCP server refuses to start until the BIO CE app has created its data folder. An AI app connected before
   BIO CE was opened once shows the server as failed until you open BIO CE.
 
