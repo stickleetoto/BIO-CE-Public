@@ -39,6 +39,9 @@ from bio_ce.retrieval.fts5 import FTS5Retriever
 
 _SCHEMA_VERSION = 1
 INBOX_SUFFIX = ".inbox"
+# Inbox items a suggestion used are kept aside here ("<space>.inbox.kept"), never deleted, so the suggestion can be
+# undone. Not an inbox (no expiry, not listed or searched by hosts) and not a space: only a move back reaches them.
+KEPT_SUFFIX = ".kept"
 
 
 @dataclass(frozen=True, slots=True)
@@ -485,7 +488,13 @@ class SQLiteMemoryStore:
         """
         _validate_scope(source)
         _validate_scope(target)
-        if source.namespace.endswith(INBOX_SUFFIX) != target.namespace.endswith(INBOX_SUFFIX):
+        kept = (source.namespace.endswith(KEPT_SUFFIX), target.namespace.endswith(KEPT_SUFFIX))
+        if any(kept):
+            inbox, aside = (source, target) if kept[1] else (target, source)
+            if all(kept) or aside != MemoryScope(inbox.project, inbox.namespace + KEPT_SUFFIX) \
+                    or not inbox.namespace.endswith(INBOX_SUFFIX):
+                raise ValidationError("kept items move only between an inbox and its own kept area")
+        elif source.namespace.endswith(INBOX_SUFFIX) != target.namespace.endswith(INBOX_SUFFIX):
             raise ValidationError("a move keeps the stage: curated to curated, inbox to inbox")
         if source == target:
             return 0
@@ -769,4 +778,4 @@ def _row_to_revision(row: sqlite3.Row, scope: MemoryScope) -> MemoryRevision:
     )
 
 
-__all__ = ["INBOX_SUFFIX", "PurgeResult", "SQLiteMemoryStore"]
+__all__ = ["INBOX_SUFFIX", "KEPT_SUFFIX", "PurgeResult", "SQLiteMemoryStore"]

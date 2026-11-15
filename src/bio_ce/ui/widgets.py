@@ -622,6 +622,7 @@ class FlowFrame(tk.Frame):
         super().__init__(master, background=background, height=1)
         self.gap = gap
         self._items: list[tk.Widget] = []
+        self._hidden: set[str] = set()
         self._width = 0
         self.bind("<Configure>", self._on_configure, add="+")
 
@@ -630,6 +631,18 @@ class FlowFrame(tk.Frame):
         widget.bind("<Configure>", lambda _e: self._relayout(), add="+")
         self._relayout()
         return widget
+
+    def set_visible(self, widget: tk.Widget, visible: bool) -> None:
+        """Show or hide one child; a hidden child takes no room."""
+        name = str(widget)
+        if visible == (name not in self._hidden):
+            return
+        if visible:
+            self._hidden.discard(name)
+        else:
+            self._hidden.add(name)
+            widget.place_forget()
+        self._relayout()
 
     def _on_configure(self, event) -> None:
         if int(event.width) != self._width:
@@ -644,9 +657,10 @@ class FlowFrame(tk.Frame):
         if not self.winfo_exists():
             return
         self._items = [widget for widget in self._items if widget.winfo_exists()]
-        width = self._width if self._width > 1 else sum(w.winfo_reqwidth() + self.gap for w in self._items)
+        shown = [widget for widget in self._items if str(widget) not in self._hidden]
+        width = self._width if self._width > 1 else sum(w.winfo_reqwidth() + self.gap for w in shown)
         x = y = line = 0
-        for widget in self._items:
+        for widget in shown:
             need, high = widget.winfo_reqwidth(), widget.winfo_reqheight()
             if x and x + need > width:
                 x, y, line = 0, y + line + self.gap, 0
@@ -658,7 +672,7 @@ class FlowFrame(tk.Frame):
             self.configure(height=total)
         # Ask for the width of one row: place() children don't make a frame ask for any width, and a paned window
         # gives a pane that asks for nothing almost no room (seen on a 1024x768 screen: a 42 px reading pane).
-        one_row = sum(widget.winfo_reqwidth() for widget in self._items) + self.gap * max(0, len(self._items) - 1)
+        one_row = sum(widget.winfo_reqwidth() for widget in shown) + self.gap * max(0, len(shown) - 1)
         if one_row and int(self.cget("width")) != one_row:
             self.configure(width=one_row)
 

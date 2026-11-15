@@ -65,7 +65,11 @@
   can miss things or label harmless entries; check the preview. Dates written by another AI are never treated as
   confirmed until you confirm them.
 - Sorting suggestions compare wording, not meaning: two entries that say the same in different words are not
-  suggested for merging.
+  suggested for merging, and entries that share only their opening words ("The user …") are not merged either.
+  An approved suggestion can be undone (right after approving, from History, or with Undo merge in the inbox): the
+  inbox items it used are kept, not deleted. They stay in your memory file, and in backups, until you undo; there
+  is no separate place to view them. A suggestion approved before 0.4.3-rc1's fourth candidate deleted them and
+  can't be undone.
 - Exports are plain text and not encrypted; a Personal export contains your personal memories.
 - The smallest supported window is 860x560 at 100% display scaling (1290x840 at 150%). A screen that can't fit it, such as 1024x768 at 150%, gets a smaller window: nothing is cut off sideways (buttons wrap, table columns fit, long lines end in “…”), but the Memories and Inbox reading panes can run out of height, so lines under the title, and in Memories the Show details row, may not fit. Maximize the window, use a lower display scaling, or use the right-click menu on the Memories list.
 - The MCP server refuses to start until the BIO CE app has created its data folder. An AI app connected before

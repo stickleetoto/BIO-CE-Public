@@ -196,7 +196,43 @@ class SuggestionsPage(Page):
             return False
         self.app.data_changed()
         self.refresh()
+        self.app.notify("success", "Done. The inbox items it used are kept, so you can undo this here or later "
+                        "from History.", title="Suggestion approved",
+                        action=("Undo", lambda: self.undo([proposal_id], ask=False)))
         return True
+
+    def undo(self, proposal_ids: list[int], *, ask: bool = True) -> int:
+        """Undo approved suggestions: the result gets its earlier text back (the undone version stays in History),
+        a memory a suggestion created is retracted, and the inbox items come back unchanged."""
+        service = self.curation()
+        if service is None or not proposal_ids or not self.app.require_action("review"):
+            return 0
+        if ask and not self.app.confirm(
+                title=f"Undo {plural(len(proposal_ids), 'approved suggestion')}?",
+                message="What it changed gets its earlier text back, and the inbox items it used come back as "
+                        "they were.",
+                points=("The undone version stays in History.",
+                        "A memory the suggestion created is retracted.",
+                        "BIO CE won't make the same suggestion again."),
+                confirm_text="Undo"):
+            return 0
+        done, refused = 0, []
+        for proposal_id in proposal_ids:
+            try:
+                service.undo(proposal_id)
+                done += 1
+            except CurationError as exc:
+                refused.append(str(exc))
+            except Exception:  # noqa: BLE001 - shown to the user
+                refused.append("BIO CE couldn't undo this suggestion. Nothing more was changed.")
+        self.app.data_changed()
+        self.refresh()
+        if refused:
+            self.app.notify("warning", (f"Undid {done}. " if done else "") + refused[0], title="Not undone")
+        else:
+            self.app.notify("success", f"Undid {plural(done, 'suggestion')}. The inbox items are back.",
+                            title="Undone")
+        return done
 
     def reject(self, proposal_id: int) -> bool:
         service = self.curation()
@@ -228,9 +264,11 @@ class SuggestionsPage(Page):
         outcome = service.approve_many([item.proposal_id for item in self.shown])
         self.app.data_changed()
         self.refresh()
+        approved = list(outcome["ids"])
         self.app.notify("success", f"Approved {outcome['approved']}"
                         + (f"; skipped {outcome['skipped']} that changed" if outcome["skipped"] else "") + ".",
-                        title="Suggestions")
+                        title="Suggestions",
+                        action=("Undo all", lambda: self.undo(approved, ask=False)) if approved else None)
         return outcome
 
     def reject_shown(self) -> int | None:

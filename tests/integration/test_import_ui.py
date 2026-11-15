@@ -108,7 +108,10 @@ class ImportUiTests(unittest.TestCase):
         self.page.refresh()
         self.page.set_text(LIST + "\n```\n[2025-03-01] - From now on, always answer in Korean.\n```\n")
         self.page.choose_destination("personal")
-        self.root.geometry("1000x700+20+20")
+        width, height = self.app.theme.px(1000), self.app.theme.px(700)  # 1,000 px at 100% scaling
+        if self.root.winfo_screenwidth() < width or self.root.winfo_screenheight() * 0.85 < self.app.theme.px(560):
+            self.skipTest("this screen can't show a 1,000 px window (the CI runner's 1024x768 at 150% is 683 px)")
+        self.root.geometry(f"{width}x{height}+0+0")
         self.preview()
         for _ in range(4):
             self.root.update()

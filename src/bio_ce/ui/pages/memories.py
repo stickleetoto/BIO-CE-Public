@@ -582,7 +582,13 @@ class MemoriesPage(Page):
             return None
         if self.history_dialog is not None and self.history_dialog.winfo_exists():
             self.history_dialog.destroy()
-        self.history_dialog = HistoryDialog(self, self.theme, revisions).show()
+        undo = None
+        service, space = self.app.suggestions.curation(), self.app.current_space()
+        if service is not None and space is not None:
+            proposal = service.result_of(space.curated, record.memory_id)
+            if proposal is not None:  # its current text came from an approved suggestion
+                undo = lambda: self.app.suggestions.undo([proposal])  # noqa: E731
+        self.history_dialog = HistoryDialog(self, self.theme, revisions, undo=undo).show()
         return self.history_dialog
 
 

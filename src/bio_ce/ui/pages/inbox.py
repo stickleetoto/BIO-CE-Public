@@ -225,6 +225,12 @@ class InboxPage(Page):
                                               command=self.move_selected))
         self.discard_button = buttons.add(Button(buttons, theme, "Discard…", variant="danger_subtle",
                                                  command=self.discard_selected))
+        # Shown for an item that is the result of an approved merge (the merged items are kept, so it can be undone).
+        self.undo_merge_button = buttons.add(Button(buttons, theme, "Undo merge…", variant="link",
+                                                    command=self.undo_merge))
+        self.detail_buttons = buttons
+        buttons.set_visible(self.undo_merge_button, False)
+        self._merge_proposal: int | None = None
         # The reading pane keeps room for its widest button (on the 1024x768 CI screen at 150% it was too narrow).
         self.keep_reading_pane = keep_side_pane(
             self.split, theme,
@@ -290,6 +296,8 @@ class InboxPage(Page):
         allowed = self.app.allowed("review").enabled  # inbox sorting is a Community-only, review-like action
         self.move_button.set_enabled(allowed and len(chosen) == 1)
         self.discard_button.set_enabled(allowed and bool(chosen))
+        self._merge_proposal = self._merge_of(chosen[0]) if allowed and len(chosen) == 1 else None
+        self.detail_buttons.set_visible(self.undo_merge_button, self._merge_proposal is not None)
         if len(chosen) != 1:
             self.detail_title.set_text(f"{plural(len(chosen), 'item')} selected" if chosen else "")
             self.detail_meta.configure(text="")
@@ -310,7 +318,21 @@ class InboxPage(Page):
         self.detail_meta.configure(text=" · ".join(parts))
         self.detail_body.configure(text=item.content or "")
 
+    def _merge_of(self, item) -> int | None:
+        if not item.source.metadata.get("merged_from"):
+            return None
+        page = getattr(self.app, "suggestions", None)  # not built yet while the app starts
+        service, space = (page.curation() if page is not None else None), self.app.current_space()
+        if service is None or space is None:
+            return None
+        return service.result_of(space.inbox, item.memory_id)
+
     # Actions --------------------------------------------------------------
+
+    def undo_merge(self) -> int:
+        if self._merge_proposal is None:
+            return 0
+        return self.app.suggestions.undo([self._merge_proposal])
 
     def control(self):
         return getattr(self.app.connection_manager, "control", None)

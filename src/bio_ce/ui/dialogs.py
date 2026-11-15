@@ -174,8 +174,11 @@ class ConfirmDialog(Dialog):
 class HistoryDialog(Dialog):
     """Read-only, newest-first view of every revision of one memory."""
 
-    def __init__(self, parent: tk.Misc, theme: Theme, revisions: Sequence[MemoryView]) -> None:
+    def __init__(self, parent: tk.Misc, theme: Theme, revisions: Sequence[MemoryView], *,
+                 undo: Callable[[], object] | None = None) -> None:
+        """``undo``: when the current revision came from an approved suggestion, a button that undoes it."""
         super().__init__(parent, theme, "Revision history", resizable=True)
+        self._undo = undo
         c = theme.colors
         latest = revisions[-1] if revisions else None
         tk.Label(self.content, text="Revision history", font=theme.font("title"), background=c.surface,
@@ -218,7 +221,14 @@ class HistoryDialog(Dialog):
             else:
                 text.insert(tk.END, "No memory text\n", "empty")
         text.configure(state="disabled")
+        self.undo_button = None
+        if undo is not None:
+            self.undo_button = self.add_button("Undo this suggestion…", self._undo_clicked, variant="secondary")
         self.close_button = self.add_button("Close", self.cancel, variant="primary")
+
+    def _undo_clicked(self) -> None:
+        if self._undo is not None and self._undo():
+            self.cancel()
 
     def show(self) -> "HistoryDialog":
         self.present(focus=self.close_button, modal=False, size=(self.theme.px(720), self.theme.px(560)))

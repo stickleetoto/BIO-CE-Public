@@ -37,6 +37,9 @@ class SuggestionsUiTests(unittest.TestCase):
         self.control.set_mode(self.connections.grant.connection_id, MODE_AUTO_MEMORY)
         self.root = new_root()
         self.app = BIOCEDesktop(self.root, self.service, self.paths, self.connections)
+        # The app's own inbox pass runs 5 s after start and also finds suggestions; a test that ran longer than that
+        # saw "0 new" from its own find() (flaky 2 of 6 combined runs, 2026-11-15). These tests call find() themselves.
+        self.root.after_cancel(self.app._maintenance_after)
         self.root.update()
         self.page = self.app.suggestions
 
@@ -73,9 +76,73 @@ class SuggestionsUiTests(unittest.TestCase):
         with patch.object(self.app, "confirm", return_value=True) as asked:
             outcome = self.page.approve_shown()
         self.assertEqual(asked.call_args.kwargs["points"], ["Merge: 2"])
-        self.assertEqual(outcome, {"approved": 2, "skipped": 0})
+        self.assertEqual((outcome["approved"], outcome["skipped"], len(outcome["ids"])), (2, 0, 2))
         self.assertEqual(len(self.service.inbox()), 2)
         self.assertTrue(self.page.empty.winfo_manager())
+
+    def test_undo_right_after_approving_and_undo_all(self):
+        """Owner request (2026-11-15): a wrong approval can be undone at once from the notice."""
+        self.app.show_page("suggestions")
+        self.page.find()
+        before = sorted((item.title, item.content) for item in self.service.inbox())
+        first = next(iter(self.page.cards))
+        with patch.object(self.app, "notify") as notice:
+            self.assertTrue(self.page.approve(first))
+        label, undo = notice.call_args.kwargs["action"]
+        self.assertEqual(label, "Undo")
+        self.assertEqual(len(self.service.inbox()), 3)
+        self.assertEqual(undo(), 1)
+        self.assertEqual(sorted((item.title, item.content) for item in self.service.inbox()), before)
+        self.page.find()  # the other group is still suggested; the undone one is not
+        self.assertEqual(len(self.page.cards), 1)
+        with patch.object(self.app, "confirm", return_value=True), patch.object(self.app, "notify") as notice:
+            self.page.approve_shown()
+        label, undo_all = notice.call_args.kwargs["action"]
+        self.assertEqual(label, "Undo all")
+        self.assertEqual(undo_all(), 1)
+        self.assertEqual(sorted((item.title, item.content) for item in self.service.inbox()), before)
+
+    def test_undo_merge_from_the_inbox_and_undo_an_update_from_history(self):
+        self.app.show_page("suggestions")
+        self.page.find()
+        first = next(iter(self.page.cards))
+        self.page.approve(first)
+        self.app.show_page("inbox")
+        self.app.inbox.refresh()
+        inbox = self.app.inbox
+        merged = [iid for iid, item in inbox.items.items() if item.source.metadata.get("merged_from")]
+        self.assertEqual(len(merged), 1)
+        others = [iid for iid in inbox.items if iid not in merged]
+        inbox.tree.selection_set(others[0])
+        self.root.update()
+        self.assertFalse(self.undo_merge_shown())  # positive control: not for an ordinary item
+        inbox.tree.selection_set(merged[0])
+        self.root.update()
+        self.assertTrue(self.undo_merge_shown())
+        with patch.object(self.app, "confirm", return_value=True):
+            self.assertEqual(inbox.undo_merge(), 1)
+        self.assertEqual(len(self.service.inbox()), 4)
+
+        coffee = self.service.add(title="Coffee", content="The user drinks two cups of coffee every morning.",
+                                  source_ref="test")
+        store = SQLiteMemoryStore(self.paths.user_database)
+        store.add(INBOX, title="Coffee", content="The user now drinks one cup of coffee every morning and green tea "
+                  "after lunch.", source=HOST)
+        store.close()
+        self.page.find()
+        update = next(s for s in self.page.shown if s.action == "update_existing")
+        self.page.approve(update.proposal_id)
+        self.app.show_page("memories")
+        self.app.memories.refresh()
+        self.app.memories.select(coffee.memory_id)
+        dialog = self.app.memories.show_history()
+        self.assertIsNotNone(dialog.undo_button)
+        with patch.object(self.app, "confirm", return_value=True):
+            dialog._undo_clicked()
+        self.assertEqual(self.service.read(coffee.memory_id).content, coffee.content)
+
+    def undo_merge_shown(self) -> bool:
+        return bool(self.app.inbox.undo_merge_button.winfo_manager())
 
     def test_reject_all_keeps_the_items_and_the_groups_are_not_suggested_again(self):
         self.app.show_page("suggestions")

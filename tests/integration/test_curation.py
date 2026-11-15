@@ -15,7 +15,15 @@ import unittest
 
 from bio_ce.control_store import ControlStore, ControlStoreError, control_database_for
 from bio_ce.core.models import MemoryScope, SourceProvenance
-from bio_ce.curation import MERGE, PROMOTE, UPDATE_EXISTING, CurationError, CurationService, merge_draft
+from bio_ce.curation import (
+    MERGE,
+    PROMOTE,
+    UPDATE_EXISTING,
+    CurationError,
+    CurationService,
+    kept_scope,
+    merge_draft,
+)
 from bio_ce.importer import ImportPlanner, ImportService, parse_text
 from bio_ce.spaces import PERSONAL_SPACE
 from bio_ce.storage.sqlite_store import SQLiteMemoryStore
@@ -138,6 +146,94 @@ class CurationTests(unittest.TestCase):
         (suggestion,) = self.service.suggestions()
         self.assertEqual(suggestion.action, UPDATE_EXISTING)
 
+    # Undo (owner request 2026-11-15: approving never deletes the originals; a wrong approval can be undone) -----
+
+    def kept(self, scope: MemoryScope = INBOX) -> list[str]:
+        return sorted(revision.memory_id for revision in self.store.list_current(kept_scope(scope), limit=100))
+
+    def test_a_merge_keeps_the_originals_and_undo_brings_everything_back(self):
+        old = self.inbox("Deploys", "The team deploys on Fridays. Releases need a tag.", recorded=day(2))
+        new = self.inbox("Deploys", "The team deploys on Fridays.", recorded=day(1))
+        self.service.find(now=NOW)
+        (suggestion,) = self.service.suggestions()
+        merged = self.service.approve(suggestion.proposal_id, content="WRONG MERGE")
+        self.assertEqual(merged.memory_id, new.memory_id)
+        self.assertEqual(self.titles(INBOX), ["Deploys"])  # one item in the inbox ...
+        self.assertEqual(self.kept(), [old.memory_id])  # ... and the other kept aside, not deleted
+        self.assertEqual(self.store.read(kept_scope(INBOX), old.memory_id).revision_id, old.revision_id)
+        self.assertEqual(self.service.result_of(INBOX, new.memory_id), suggestion.proposal_id)
+
+        restored = self.service.undo(suggestion.proposal_id)
+        self.assertEqual(self.kept(), [])
+        now_old = self.store.read(INBOX, old.memory_id)
+        now_new = self.store.read(INBOX, new.memory_id)
+        self.assertEqual((now_old.revision_id, now_old.content), (old.revision_id, old.content))  # untouched
+        self.assertEqual((now_new.title, now_new.content), (new.title, new.content))  # its text before the merge
+        self.assertEqual(restored.memory_id, new.memory_id)
+        self.assertEqual(len(self.store.history(INBOX, new.memory_id)), 3)  # the wrong merge stays in History
+        self.assertEqual(self.control.curation_proposal(suggestion.proposal_id)["status"], "rejected")
+        self.assertEqual(self.service.find(now=NOW), 0)  # an undone suggestion is not made again
+
+    def test_undoing_an_update_restores_the_memory_and_the_inbox_item(self):
+        current = self.store.add(GENERAL, title="Coffee", content="The user drinks two cups of coffee every morning.",
+                                 source=SourceProvenance("user-entered", "test"))
+        item = self.inbox("Coffee", "The user now drinks one cup of coffee every morning and green tea after lunch.")
+        self.service.find(now=NOW)
+        (suggestion,) = self.service.suggestions()
+        self.service.approve(suggestion.proposal_id, content="WRONG UPDATE")
+        self.assertEqual(self.store.read(GENERAL, current.memory_id).content, "WRONG UPDATE")
+        self.assertEqual(self.kept(), [item.memory_id])
+        self.assertEqual(self.service.result_of(GENERAL, current.memory_id), suggestion.proposal_id)
+        self.service.undo(suggestion.proposal_id)
+        self.assertEqual(self.store.read(GENERAL, current.memory_id).content, current.content)
+        self.assertEqual(self.store.read(INBOX, item.memory_id).revision_id, item.revision_id)
+        self.assertEqual(self.kept(), [])
+
+    def test_undoing_a_keep_retracts_the_new_memory_and_restores_the_items(self):
+        first = self.inbox("Tabs", "The user prefers tabs over spaces in Go code.", recorded=day(5))
+        again = self.inbox("Tabs", "The user prefers tabs over spaces in Go code.", recorded=day(1))
+        self.service.find(now=NOW)
+        (suggestion,) = self.service.suggestions()
+        kept = self.service.approve(suggestion.proposal_id)
+        self.assertEqual(self.titles(GENERAL), ["Tabs"])
+        self.service.undo(suggestion.proposal_id)
+        self.assertEqual(self.titles(GENERAL), [])  # retracted (hidden everywhere) ...
+        self.assertIn(kept.memory_id, [row[0] for row in self.store.inventory()])  # ... but not deleted
+        self.assertEqual(self.titles(INBOX), ["Tabs", "Tabs"])
+        self.assertEqual({self.store.read(INBOX, m.memory_id).revision_id for m in (first, again)},
+                         {first.revision_id, again.revision_id})
+
+    def test_undo_changes_nothing_when_the_result_was_edited_afterwards(self):
+        current = self.store.add(GENERAL, title="Coffee", content="The user drinks two cups of coffee every morning.",
+                                 source=SourceProvenance("user-entered", "test"))
+        self.inbox("Coffee", "The user now drinks one cup of coffee every morning and green tea after lunch.")
+        self.service.find(now=NOW)
+        (suggestion,) = self.service.suggestions()
+        updated = self.service.approve(suggestion.proposal_id)
+        edited = self.store.revise(GENERAL, current.memory_id, expected_revision_id=updated.revision_id,
+                                   title="Coffee", content="Edited by the user later.",
+                                   source=SourceProvenance("user-entered", "bio-ce-desktop"))
+        self.assertIsNone(self.service.result_of(GENERAL, current.memory_id))
+        with self.assertRaises(CurationError):
+            self.service.undo(suggestion.proposal_id)
+        self.assertEqual(self.store.read(GENERAL, current.memory_id).revision_id, edited.revision_id)
+        self.assertEqual(len(self.kept()), 1)  # still kept aside, nothing moved
+
+    def test_kept_originals_are_out_of_sight_and_never_expire(self):
+        a = self.inbox("Deploys", "The team deploys on Fridays after the stand-up.")
+        b = self.inbox("Deploys", "The team deploys on Fridays after the stand-up meeting.")
+        self.service.find(now=NOW)
+        (suggestion,) = self.service.suggestions()
+        merged = self.service.approve(suggestion.proposal_id)
+        aside = ({a.memory_id, b.memory_id} - {merged.memory_id}).pop()
+        listed = {memory_id for memory_id, _project, _namespace, _created in self.store.inbox_items()}
+        self.assertNotIn(aside, listed)  # the inbox expiry only looks at inbox items
+        self.assertIn(merged.memory_id, listed)  # positive control
+        self.assertEqual([hit.memory_id for hit in self.store.search(INBOX, "stand-up", limit=10)],
+                         [merged.memory_id])
+        with self.assertRaises(Exception):
+            self.store.move(kept_scope(INBOX), GENERAL, [aside])  # kept items only go back to their inbox
+
     def test_rejected_groups_are_not_suggested_again_and_changed_items_go_stale(self):
         self.inbox("Deploys", "The team deploys on Fridays after the stand-up.")
         changed = self.inbox("Deploys", "The team deploys on Fridays after the stand-up meeting.")
@@ -173,7 +269,8 @@ class CurationTests(unittest.TestCase):
         self.store.revise(INBOX, stale.memory_ids[0], expected_revision_id=stale.items[0][1], title="Changed",
                           content="Changed text about something else entirely.", source=HOST)
         outcome = self.service.approve_many([item.proposal_id for item in suggestions])
-        self.assertEqual(outcome, {"approved": 2, "skipped": 1})
+        self.assertEqual(outcome, {"approved": 2, "skipped": 1,
+                                   "ids": [suggestion.proposal_id for suggestion in suggestions[1:]]})
         self.assertEqual(self.service.reject_many([stale.proposal_id]), 0)  # stale is not pending
 
     def test_review_then_promote_an_import_keeps_claimed_dates_unconfirmed(self):

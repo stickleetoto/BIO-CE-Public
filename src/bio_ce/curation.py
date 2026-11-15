@@ -28,10 +28,9 @@ from typing import Any, Iterable
 
 from bio_ce.control_store import ControlStore, ControlStoreError
 from bio_ce.core.models import MemoryNotFoundError, MemoryRevision, MemoryScope, SourceProvenance
-from bio_ce.inbox import discard_inbox_items
 from bio_ce.memory_policy import DUPLICATE_THRESHOLD, detect_secrets, normalize, similarity
 from bio_ce.spaces import Space
-from bio_ce.storage.sqlite_store import SQLiteMemoryStore
+from bio_ce.storage.sqlite_store import KEPT_SUFFIX, SQLiteMemoryStore
 
 
 MERGE = "merge"
@@ -316,18 +315,20 @@ class CurationService:
         newest = originals[0]
         carried = {key: newest.source.metadata[key] for key in CARRIED if key in newest.source.metadata}
         ids = [revision.memory_id for revision in originals]
+        # The result names its suggestion, and the items it used are kept aside, never deleted: see undo().
+        mark = {"suggestion": int(proposal_id)}
         if suggestion.action == MERGE:
             source = SourceProvenance(newest.source.source_type, newest.source.source_ref,
-                                      {**newest.source.metadata, "merged_from": ids[1:], "stage": "inbox"})
+                                      {**newest.source.metadata, "merged_from": ids[1:], "stage": "inbox", **mark})
             revision = self.store.revise(space.inbox, newest.memory_id, expected_revision_id=newest.revision_id,
                                          title=title, content=content, source=source)
-            discard_inbox_items(self.store, self.control, space.inbox, ids[1:], host=DESKTOP_HOST)
+            self.store.move(space.inbox, kept_scope(space.inbox), ids[1:])
         elif suggestion.action == UPDATE_EXISTING:
             memory_id, revision_id = suggestion.target  # type: ignore[misc]
-            source = SourceProvenance("user-entered", "bio-ce-curation", {**carried, "from_inbox": ids})
+            source = SourceProvenance("user-entered", "bio-ce-curation", {**carried, "from_inbox": ids, **mark})
             revision = self.store.revise(space.curated, memory_id, expected_revision_id=revision_id, title=title,
                                          content=content, source=source)
-            discard_inbox_items(self.store, self.control, space.inbox, ids, host=DESKTOP_HOST)
+            self.store.move(space.inbox, kept_scope(space.inbox), ids)
         else:
             for hit in self.store.search(space.curated, _keywords(f"{title}\n{content}"), limit=5):
                 existing = self.store.read(space.curated, hit.memory_id)
@@ -336,29 +337,123 @@ class CurationService:
                     self.control.set_curation_proposal_status(proposal_id, "stale")
                     raise CurationError(f"Your memories already have this (“{existing.title}”). Discard the inbox "
                                         "item instead.")
-            source = SourceProvenance("user-entered", "bio-ce-curation", {**carried, "from_inbox": ids})
+            source = SourceProvenance("user-entered", "bio-ce-curation", {**carried, "from_inbox": ids, **mark})
             revision = self.store.add(space.curated, title=title, content=content, source=source)
-            discard_inbox_items(self.store, self.control, space.inbox, ids, host=DESKTOP_HOST)
+            self.store.move(space.inbox, kept_scope(space.inbox), ids)
         self.control.set_curation_proposal_status(proposal_id, "approved")
         self.control.record(host=DESKTOP_HOST, connection_id=None, action=f"suggestion-{suggestion.action}",
                             outcome="approved", memory_id=revision.memory_id, revision_id=revision.revision_id,
                             detail={"items": len(ids), "space": suggestion.space_id})
         return revision
 
+    # Undoing -----------------------------------------------------------------------------------------------
+
+    def result_of(self, scope: MemoryScope, memory_id: str) -> int | None:
+        """The approved suggestion whose result ``memory_id`` still is (not edited since), or None."""
+        try:
+            current = self.store.read(scope, memory_id)
+        except MemoryNotFoundError:
+            return None
+        proposal_id = current.source.metadata.get("suggestion")
+        if not isinstance(proposal_id, int):
+            return None
+        try:
+            if self.control.curation_proposal(proposal_id)["status"] != "approved":
+                return None
+        except ControlStoreError:
+            return None
+        return proposal_id
+
+    def undo(self, proposal_id: int) -> MemoryRevision:
+        """Put back what an approved suggestion changed: the result gets its earlier text again (a new revision,
+        so the undone one stays in History; a memory the suggestion created is retracted) and the items it used
+        return to the inbox unchanged. Refused, with nothing changed, if the result was edited since."""
+        try:
+            suggestion = _suggestion(self.control.curation_proposal(proposal_id))
+        except ControlStoreError as exc:
+            raise CurationError(str(exc)) from exc
+        if suggestion.status != "approved":
+            raise CurationError("This suggestion isn't an approved one, so there is nothing to undo.")
+        space = self.spaces.get(suggestion.space_id)
+        if space is None:
+            raise CurationError("The space of this suggestion is gone. Nothing was changed.")
+        aside = kept_scope(space.inbox)
+        result, earlier, scope = self._result(suggestion, space)
+        if result is None or result.source.metadata.get("suggestion") != suggestion.proposal_id:
+            raise CurationError("This was changed after the suggestion was approved, so BIO CE won't undo it. "
+                                "Nothing was changed. Use History to see what it said before.")
+        back = [memory_id for memory_id, _revision in suggestion.items
+                if memory_id != result.memory_id or suggestion.action != MERGE]
+        for memory_id in back:
+            try:
+                self.store.read(aside, memory_id)
+            except MemoryNotFoundError:
+                raise CurationError("BIO CE no longer has the items this suggestion used (it was approved by an "
+                                    "earlier version, which deleted them). Nothing was changed.") from None
+        undo_source = SourceProvenance("user-entered", "bio-ce-curation-undo",
+                                       {"undid_suggestion": suggestion.proposal_id})
+        if earlier is None:  # Keep as a memory: the new memory is retracted, never deleted
+            revision = self.store.retract(scope, result.memory_id, expected_revision_id=result.revision_id,
+                                          source=undo_source)
+        else:
+            source = earlier.source if suggestion.action == MERGE else SourceProvenance(
+                earlier.source.source_type, earlier.source.source_ref,
+                {**earlier.source.metadata, "undid_suggestion": suggestion.proposal_id})
+            revision = self.store.revise(scope, result.memory_id, expected_revision_id=result.revision_id,
+                                         title=earlier.title, content=earlier.content or "", source=source)
+        self.store.move(aside, space.inbox, back)
+        self.control.set_curation_proposal_status(suggestion.proposal_id, "rejected")  # never suggested again
+        self.control.record(host=DESKTOP_HOST, connection_id=None, action=f"suggestion-{suggestion.action}",
+                            outcome="undone", memory_id=revision.memory_id, revision_id=revision.revision_id,
+                            detail={"items": len(suggestion.items), "space": suggestion.space_id})
+        return revision
+
+    def _result(self, suggestion: Suggestion, space: Space):
+        """(current result, its revision before the suggestion or None if the suggestion created it, scope)."""
+        def revision_in(scope: MemoryScope, memory_id: str, revision_id: str) -> MemoryRevision | None:
+            return next((r for r in self.store.history(scope, memory_id) if r.revision_id == revision_id), None)
+
+        if suggestion.action == MERGE:
+            for memory_id, revision_id in suggestion.items:
+                try:
+                    current = self.store.read(space.inbox, memory_id)
+                except MemoryNotFoundError:
+                    continue
+                if current.source.metadata.get("suggestion") == suggestion.proposal_id:
+                    return current, revision_in(space.inbox, memory_id, revision_id), space.inbox
+            return None, None, space.inbox
+        if suggestion.action == UPDATE_EXISTING and suggestion.target is not None:
+            memory_id, revision_id = suggestion.target
+            try:
+                current = self.store.read(space.curated, memory_id)
+            except MemoryNotFoundError:
+                return None, None, space.curated
+            return current, revision_in(space.curated, memory_id, revision_id), space.curated
+        offset = 0
+        while True:  # Keep as a memory: find the memory it created
+            page = self.store.list_current(space.curated, limit=500, offset=offset)
+            for current in page:
+                if current.source.metadata.get("suggestion") == suggestion.proposal_id:
+                    return current, None, space.curated
+            if len(page) < 500:
+                return None, None, space.curated
+            offset += len(page)
+
     def reject(self, proposal_id: int) -> None:
         self._pending(proposal_id)
         self.control.set_curation_proposal_status(proposal_id, "rejected")
 
-    def approve_many(self, proposal_ids: Iterable[int]) -> dict[str, int]:
-        """Approve each with its draft; stale or refused ones are counted and skipped."""
-        done = skipped = 0
+    def approve_many(self, proposal_ids: Iterable[int]) -> dict[str, Any]:
+        """Approve each with its draft; stale or refused ones are counted and skipped. ``ids``: the approved ones."""
+        approved: list[int] = []
+        skipped = 0
         for proposal_id in proposal_ids:
             try:
                 self.approve(proposal_id)
-                done += 1
+                approved.append(int(proposal_id))
             except (CurationError, ControlStoreError, MemoryNotFoundError):
                 skipped += 1
-        return {"approved": done, "skipped": skipped}
+        return {"approved": len(approved), "skipped": skipped, "ids": approved}
 
     def reject_many(self, proposal_ids: Iterable[int]) -> int:
         count = 0
@@ -390,6 +485,11 @@ def _suggestion(row: dict[str, Any]) -> Suggestion:
 _WORD = re.compile(r"\w{2,}")
 _STOP = {"the", "and", "for", "with", "that", "this", "user", "users", "use", "about", "from", "has", "have",
          "are", "was", "were", "사용자", "사용자는", "사용자의", "있다", "한다"}
+
+
+def kept_scope(inbox: MemoryScope) -> MemoryScope:
+    """Where the inbox items an approved suggestion used are kept, so it can be undone (never deleted)."""
+    return MemoryScope(inbox.project, inbox.namespace + KEPT_SUFFIX)
 
 
 def _marks(text: str, common: frozenset[str]) -> set[str]:
@@ -431,4 +531,4 @@ def _keywords(text: str, limit: int = 8) -> str:
 
 
 __all__ = ["ACTIONS", "ACTION_LABELS", "CurationError", "CurationService", "MERGE", "PROMOTE", "Suggestion",
-           "UPDATE_EXISTING", "merge_draft", "signature"]
+           "UPDATE_EXISTING", "kept_scope", "merge_draft", "signature", "topic_overlap"]
