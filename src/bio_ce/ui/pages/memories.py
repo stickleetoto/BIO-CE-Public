@@ -72,6 +72,10 @@ class MemoriesPage(Page):
         self.search.entry.bind("<Return>", lambda _e: self._search_now())
         self.search.entry.bind("<KP_Enter>", lambda _e: self._search_now())
         self.search.entry.bind("<Down>", lambda _e: self._focus_list())
+        self.move_button = Button(toolbar, theme, "Move to…", command=self.move_selected,
+                                  tooltip="Move the selected memories to another space (or right-click them)")
+        self.move_button.pack(side="right", padx=(theme.px(SPACE_S), 0))
+        app.gate(self.move_button, "edit")
         self.result_label = tk.Label(toolbar, text="", font=theme.font("caption"), background=c.bg,
                                      foreground=c.text_muted, anchor="e")
         self.result_label.pack(side="right", padx=(theme.px(SPACE_L), 0))
@@ -109,6 +113,9 @@ class MemoriesPage(Page):
         list_area.columnconfigure(0, weight=1)
         self.tree.bind("<<TreeviewSelect>>", lambda _e: self._on_select())
         self.tree.bind("<Delete>", lambda _e: self.retract_selected())
+        self.tree.bind("<Button-3>", self._right_click)
+        self.tree.bind("<Shift-F10>", lambda _e: self._menu_from_keyboard())
+        self.tree.bind("<App>", lambda _e: self._menu_from_keyboard())
         self.tree.bind("<Return>", lambda _e: self.reader.text.focus_set())
         self.no_results = EmptyState(
             list_area, theme, icon="search", title="No matches",
@@ -149,16 +156,12 @@ class MemoriesPage(Page):
         self.history_button = Button(actions, theme, "History", icon="history", command=self.show_history,
                                      tooltip="See every revision (Ctrl+H)")
         self.history_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
-        self.move_button = Button(actions, theme, "Move to…", command=self.move_selected,
-                                  tooltip="Move the selected memories to another space")
-        self.move_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
         self.retract_button = Button(actions, theme, "Retract…", icon="retract", variant="danger_subtle",
                                      command=self.retract_selected, tooltip="Hide this memory everywhere (Delete)")
         self.retract_button.pack(side="right")
         self.app.gate(self.edit_button, "edit")
         self.app.gate(self.history_button, "history")
         self.app.gate(self.retract_button, "retract")
-        self.app.gate(self.move_button, "edit")
         divider(frame, theme).pack(fill="x")
 
         footer = tk.Frame(frame, background=c.surface)
@@ -454,14 +457,70 @@ class MemoriesPage(Page):
         self.app.notify("success", f"“{preview(record.title, 60)}” no longer appears in BIO CE or to "
                         "connected AI hosts.", title="Memory retracted")
 
-    def move_selected(self) -> None:
-        """Move one or more selected memories to General, Personal, or a project space (same ids and history)."""
+    # Right-click menu ---------------------------------------------------------------------------------
+
+    def _right_click(self, event) -> str:
+        """Right-click a row: it becomes the selection unless it is already part of it, then the menu opens."""
+        row = self.tree.identify_row(event.y)
+        if not row:
+            return "break"
+        if row not in self.tree.selection():
+            self.tree.selection_set(row)
+            self.tree.focus(row)
+            self._on_select()
+        self.context_menu().tk_popup(event.x_root, event.y_root)
+        return "break"
+
+    def _menu_from_keyboard(self) -> str:
+        if self.tree.selection():
+            bbox = self.tree.bbox(self.tree.selection()[0]) or (0, 0, 0, 0)
+            self.context_menu().tk_popup(self.tree.winfo_rootx() + bbox[0] + 20, self.tree.winfo_rooty() + bbox[1])
+        return "break"
+
+    def move_targets(self) -> list:
+        current = self.app.current_space()
+        return [space for space in self.app.spaces() if current is None or space.space_id != current.space_id]
+
+    def context_menu(self) -> tk.Menu:
+        """Edit, History, Move to ▸ (each other space), Retract… for the selected memories."""
+        c = self.colors
+        style = {"tearoff": 0, "background": c.surface_alt, "foreground": c.text, "activebackground": c.selection,
+                 "activeforeground": c.text, "disabledforeground": c.text_muted, "relief": "flat", "borderwidth": 1,
+                 "font": self.theme.font("body")}
+        menu = tk.Menu(self, **style)
+        selected = [iid for iid in self.tree.selection() if iid in self.records]
+        single = "normal" if len(selected) == 1 else "disabled"
+        menu.add_command(label="Edit", command=self.app.start_edit_memory,
+                         state=single if self.app.allowed("edit").enabled else "disabled")
+        menu.add_command(label="History", command=self.show_history,
+                         state=single if self.app.allowed("history").enabled else "disabled")
+        spaces = tk.Menu(menu, **style)
+        for space in self.move_targets():
+            spaces.add_command(label=space.display_name,
+                               command=lambda target=space.space_id: self.move_selected(target))
+        menu.add_cascade(label="Move to", menu=spaces,
+                         state="normal" if selected and spaces.index("end") is not None
+                         and self.app.allowed("edit").enabled else "disabled")
+        menu.add_separator()
+        menu.add_command(label="Retract…", command=self.retract_selected,
+                         state=single if self.app.allowed("retract").enabled else "disabled")
+        return menu
+
+    def move_selected(self, target_id: str | None = None) -> None:
+        """Move one or more selected memories to General, Personal, or a project space (same ids and history).
+
+        ``target_id`` comes from the right-click menu, where the space was already chosen.
+        """
         ids = [iid for iid in self.tree.selection() if iid in self.records]
         if not ids:
             self.app.notify("info", "Select one or more memories in the list first.")
             return
-        current = self.app.current_space()
-        targets = [space for space in self.app.spaces() if current is None or space.space_id != current.space_id]
+        targets = self.move_targets()
+        if target_id is not None:
+            target = next((space for space in targets if space.space_id == target_id), None)
+            if target is not None:
+                self.app.move_memories(ids, target)
+            return
         if not targets:
             self.app.notify("info", "There is no other space yet. Create a project space or turn on Personal in "
                             "Settings → Spaces.", title="Nowhere to move")
