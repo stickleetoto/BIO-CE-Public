@@ -31,7 +31,17 @@ from bio_ce.ui.dialogs import EntryEditDialog
 from bio_ce.ui.format import format_timestamp, plural, preview as short
 from bio_ce.ui.pages import Page
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS
-from bio_ce.ui.widgets import AutoScrollbar, Button, Card, Pill, ScrollFrame, TextArea, WrapLabel, section_label
+from bio_ce.ui.widgets import (
+    AutoScrollbar,
+    Button,
+    Card,
+    FlowFrame,
+    Pill,
+    ScrollFrame,
+    TextArea,
+    WrapLabel,
+    section_label,
+)
 
 PERSONAL_CHOICE = "Personal (recommended: memories from another AI are mostly about you)"
 GENERAL_NOTE = ("General is shared with every connected AI host and recalled by session hooks. Personal details "
@@ -131,12 +141,12 @@ class ImportPage(Page):
         Button(self.notes_box, theme, "Import this line as a memory", variant="link",
                command=self.note_to_entry).pack(anchor="w", padx=theme.px(SPACE_M), pady=(0, theme.px(SPACE_S)))
 
-        tools = tk.Frame(self.result.body, background=c.surface)
+        tools = FlowFrame(self.result.body, gap=theme.px(SPACE_S), background=c.surface)
         tools.pack(fill="x", pady=(theme.px(SPACE_M), theme.px(SPACE_XS)))
         self.filter = tk.StringVar(master=self, value=FILTERS[0][1])
         filter_box = ttk.Combobox(tools, textvariable=self.filter, state="readonly", width=18, style="BIO.TCombobox",
                                   values=[label for _key, label in FILTERS], font=theme.font("body"))
-        filter_box.pack(side="left")
+        tools.add(filter_box)
         filter_box.bind("<<ComboboxSelected>>", lambda _e: self.render_items())
         for text, command in (("Check visible", lambda: self.check_visible(True)),
                               ("Uncheck visible", lambda: self.check_visible(False)),
@@ -144,7 +154,7 @@ class ImportPage(Page):
                               ("Confirm dates…", self.confirm_dates_selected),
                               ("Edit…", self.edit_selected),
                               ("Not a memory", self.entry_to_note)):
-            Button(tools, theme, text, variant="link", command=command).pack(side="left", padx=(theme.px(SPACE_S), 0))
+            tools.add(Button(tools, theme, text, variant="link", command=command))
         area = tk.Frame(self.result.body, background=c.surface)
         area.pack(fill="both", expand=True)
         self.tree = ttk.Treeview(area, columns=("check", "state", "date", "text", "space", "sensitive"),

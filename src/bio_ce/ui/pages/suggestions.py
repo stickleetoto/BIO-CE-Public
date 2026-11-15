@@ -18,7 +18,7 @@ from bio_ce.ui.format import format_timestamp, plural, preview as short
 from bio_ce.ui.pages import Page
 from bio_ce.ui.pages.inbox import SpaceBar
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS
-from bio_ce.ui.widgets import Button, Card, EmptyState, Pill, ScrollFrame, TextArea, WrapLabel, section_label
+from bio_ce.ui.widgets import Button, Card, EmptyState, FlowFrame, Pill, ScrollFrame, TextArea, WrapLabel, section_label
 
 ALL = "All suggestions"
 
@@ -38,19 +38,17 @@ class SuggestionsPage(Page):
                command=lambda: app.show_page("inbox")).pack(side="right")
         self.space_bar = SpaceBar(self, app, active="suggestions")
         self.space_bar.pack(fill="x", pady=(0, theme.px(SPACE_M)))
-        top = tk.Frame(self, background=c.bg)
+        top = FlowFrame(self, gap=theme.px(SPACE_S), background=c.bg)
         top.pack(fill="x", pady=(0, theme.px(SPACE_M)))
-        self.find_button = Button(top, theme, "Find suggestions", icon="refresh", command=self.find)
-        self.find_button.pack(side="left")
+        self.find_button = top.add(Button(top, theme, "Find suggestions", icon="refresh", command=self.find))
         self.filter = tk.StringVar(master=self, value=ALL)
-        self.filter_box = ttk.Combobox(top, textvariable=self.filter, state="readonly", width=34,
-                                       style="BIO.TCombobox", font=theme.font("body"))
-        self.filter_box.pack(side="left", padx=(theme.px(SPACE_M), 0))
+        self.filter_box = top.add(ttk.Combobox(top, textvariable=self.filter, state="readonly", width=34,
+                                               style="BIO.TCombobox", font=theme.font("body")))
         self.filter_box.bind("<<ComboboxSelected>>", lambda _e: self.refresh())
-        self.reject_all = Button(top, theme, "Reject all shown…", variant="danger_subtle", command=self.reject_shown)
-        self.reject_all.pack(side="right")
-        self.approve_all = Button(top, theme, "Approve all shown…", variant="primary", command=self.approve_shown)
-        self.approve_all.pack(side="right", padx=(0, theme.px(SPACE_S)))
+        self.approve_all = top.add(Button(top, theme, "Approve all shown…", variant="primary",
+                                          command=self.approve_shown))
+        self.reject_all = top.add(Button(top, theme, "Reject all shown…", variant="danger_subtle",
+                                         command=self.reject_shown))
         for button in (self.find_button, self.approve_all, self.reject_all):
             app.gate(button, "review")
         WrapLabel(self, "BIO CE compares what is in the inbox and suggests merging repeats, keeping items your hosts "

@@ -19,6 +19,7 @@ from bio_ce.ui.widgets import (
     AutoScrollbar,
     Button,
     Card,
+    ElideLabel,
     EmptyState,
     FlowFrame,
     IconButton,
@@ -151,9 +152,10 @@ class MemoriesPage(Page):
         meta.pack(fill="x", pady=(theme.px(SPACE_S), 0))
         self.revision_pill = Pill(meta, theme)
         self.revision_pill.pack(side="left")
-        self.meta_label = tk.Label(meta, font=theme.font("caption"), background=c.surface, foreground=c.text_muted,
-                                   anchor="w")
-        self.meta_label.pack(side="left", padx=(theme.px(SPACE_M), 0))
+        # One line that ends in "…" when narrow: the full source and dates are under Show details.
+        self.meta_label = ElideLabel(meta, font=theme.font("caption"), background=c.surface,
+                                     foreground=c.text_muted, width=1)
+        self.meta_label.pack(side="left", fill="x", expand=True, padx=(theme.px(SPACE_M), 0))
         actions = FlowFrame(head, gap=theme.px(SPACE_S), background=c.surface)
         actions.pack(fill="x", pady=(theme.px(SPACE_M + 2), 0))
         self.detail_actions = actions
@@ -387,7 +389,7 @@ class MemoriesPage(Page):
         meta = f"Updated {format_timestamp(record.recorded_at)}"
         if record.source_ref:
             meta += f" · Source: {preview(record.source_ref, 48)}"
-        self.meta_label.configure(text=meta)
+        self.meta_label.set_text(meta)
         text = self.reader.text
         text.configure(state="normal")
         text.delete("1.0", tk.END)

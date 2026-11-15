@@ -15,6 +15,7 @@ from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS
 from bio_ce.ui.widgets import (
     Button,
     Card,
+    ElideLabel,
     EmptyState,
     Pill,
     RowButton,
@@ -248,11 +249,11 @@ class DashboardPage(Page):
                     side="right", anchor="n", padx=theme.px(SPACE_S), pady=theme.px(SPACE_S))
                 text_column = row.track(tk.Frame(row.body, background=c.surface))
                 text_column.pack(side="left", fill="x", expand=True, padx=theme.px(SPACE_S), pady=theme.px(SPACE_S))
-                row.track(tk.Label(text_column, text=preview(record.title, 80), font=theme.font("body_strong"),
-                                   background=c.surface, foreground=c.text, anchor="w")).pack(fill="x")
+                row.track(ElideLabel(text_column, text=preview(record.title, 80), font=theme.font("body_strong"),
+                                     background=c.surface, foreground=c.text, width=1)).pack(fill="x")
                 snippet = preview(record.content, 110) or "No memory text"
-                row.track(tk.Label(text_column, text=snippet, font=theme.font("caption"), background=c.surface,
-                                   foreground=c.text_secondary, anchor="w")).pack(fill="x")
+                row.track(ElideLabel(text_column, text=snippet, font=theme.font("caption"), background=c.surface,
+                                     foreground=c.text_secondary, width=1)).pack(fill="x")
         else:
             self.recent_list.pack_forget()
             if count is not None:

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Callable
 import tkinter as tk
+from tkinter import font as tkfont
 from tkinter import ttk
 
 from bio_ce.ui.theme import READING_MAX_WIDTH, SPACE_L, SPACE_M, SPACE_XS, Theme
@@ -294,6 +295,7 @@ class NavItem(tk.Frame):
         self.badge = tk.Label(self.row, text="", font=theme.font("caption_strong"), borderwidth=0,
                               background=c.warning, foreground=c.bg, padx=theme.px(6))
         self.badge_count = 0
+        self._compact = False
         Tooltip(self, theme, f"{text} ({shortcut})" if shortcut else text)
         for part in (self, self.row, self.indicator, self.icon_label, self.label, self.badge):
             part.bind("<Enter>", self._on_enter, add="+")
@@ -311,17 +313,29 @@ class NavItem(tk.Frame):
         self.badge_count = max(0, int(count))
         if self.badge_count:
             self.badge.configure(text=str(self.badge_count) if self.badge_count < 100 else "99+")
-            if not self.badge.winfo_manager():
-                self.badge.pack(side="right", padx=(0, self.theme.px(10)), pady=self.theme.px(8))
-        else:
-            self.badge.pack_forget()
+        self._show_badge()
 
     def set_compact(self, compact: bool) -> None:
+        self._compact = compact
         if compact:
             self.label.pack_forget()
         elif not self.label.winfo_manager():
-            self.label.pack(side="left", fill="x", expand=True, padx=(self.theme.px(6), self.theme.px(8)),
-                            before=self.badge if self.badge.winfo_manager() else None)
+            self.label.pack(side="left", fill="x", expand=True, padx=(self.theme.px(6), self.theme.px(8)))
+        self._show_badge()
+
+    def _show_badge(self) -> None:
+        """Beside the text, or on the icon's corner in the narrow sidebar (beside the icon it would be cut off)."""
+        self.badge.pack_forget()
+        self.badge.place_forget()
+        if not self.badge_count:
+            return
+        if self._compact:
+            self.badge.place(in_=self.row, relx=1.0, x=-self.theme.px(2), y=self.theme.px(2), anchor="ne")
+            self.badge.lift()
+        else:
+            # Packed before the text so the count keeps its width and a long text shortens instead.
+            self.badge.pack(side="right", padx=(0, self.theme.px(10)), pady=self.theme.px(8),
+                            before=self.label if self.label.winfo_manager() else None)
 
     def _paint(self) -> None:
         c = self.theme.colors
@@ -406,6 +420,45 @@ class RowButton(tk.Frame):
         if self.command is not None:
             self.command()
         return "break"
+
+
+class ElideLabel(tk.Label):
+    """One line of text that ends in "…" when it doesn't fit, instead of being cut off at the edge."""
+
+    def __init__(self, master: tk.Misc, text: str = "", **options) -> None:
+        options.setdefault("anchor", "w")
+        super().__init__(master, text=text, **options)
+        self._full = text
+        self.bind("<Configure>", lambda _e: self._fit(), add="+")
+
+    def set_text(self, text: str) -> None:
+        self._full = text
+        self.configure(text=text)
+        self._fit()
+
+    def _fit(self) -> None:
+        try:
+            width = self.winfo_width() - 4
+        except tk.TclError:
+            return
+        if width <= 1:
+            return
+        try:
+            measure = tkfont.nametofont(str(self.cget("font"))).measure  # the theme's named font, not a copy
+        except tk.TclError:
+            measure = tkfont.Font(font=self.cget("font")).measure
+        text = self._full
+        if measure(text) > width:
+            low, high = 0, len(text)
+            while low < high:
+                middle = (low + high + 1) // 2
+                if measure(text[:middle].rstrip() + "…") <= width:
+                    low = middle
+                else:
+                    high = middle - 1
+            text = text[:low].rstrip() + "…"
+        if self.cget("text") != text:
+            self.configure(text=text)
 
 
 class FlowFrame(tk.Frame):
