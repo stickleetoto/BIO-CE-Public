@@ -434,7 +434,14 @@ class FlowFrame(tk.Frame):
             self._width = int(event.width)
             self._relayout()
 
+    def relayout(self) -> None:
+        """Lay the children out again (also after their text or font changed)."""
+        self._relayout()
+
     def _relayout(self) -> None:
+        if not self.winfo_exists():
+            return
+        self._items = [widget for widget in self._items if widget.winfo_exists()]
         width = self._width if self._width > 1 else sum(w.winfo_reqwidth() + self.gap for w in self._items)
         x = y = line = 0
         for widget in self._items:

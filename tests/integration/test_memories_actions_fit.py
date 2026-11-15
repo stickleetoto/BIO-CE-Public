@@ -16,6 +16,8 @@ from unittest.mock import patch
 
 from bio_ce.desktop import AppDataPaths, BIOCEDesktop, DesktopMemoryService
 from bio_ce.spaces import PERSONAL_SPACE
+from bio_ce.ui.pages.inbox import SpaceBar
+from bio_ce.ui.widgets import FlowFrame
 from tests.integration.test_auto_memory_ui import FakeManagedConnections
 from tests.integration.test_desktop_ui_redesign import new_root
 
@@ -65,25 +67,51 @@ class MemoriesActionsFitTests(unittest.TestCase):
         return found
 
     def check_every_width(self, label: str) -> None:
-        # Every 20 px from the smallest window up: the sidebar switches modes at 1000 px, which an earlier version
-        # of this test skipped (and where Retract was cut off).
+        """Every 20 px from the smallest window up, in both spaces, on Memories and Inbox.
+
+        The sidebar switches modes at 1000 px, which an earlier version of this test skipped (Retract was cut off
+        there). All problems are collected and reported together with the geometry, so a CI failure says exactly
+        which widget, at which size, and why.
+        """
+        problems: list[str] = []
         for space in ("general", "personal"):
             self.app.set_space(space)
             for page in ("memories", "inbox"):
                 for width in range(860, 1301, 20):
                     self.show(width, 700, page)
                     for name, widget in self.buttons(page).items():
-                        with self.subTest(fonts=label, space=space, width=width, widget=name):
-                            self.assertTrue(widget.winfo_ismapped(), "not shown")
-                            self.assertGreaterEqual(widget.winfo_width(), widget.winfo_reqwidth(), "cut off")
+                        mapped = bool(widget.winfo_ismapped())
+                        if mapped and widget.winfo_width() >= widget.winfo_reqwidth():
+                            continue
+                        master = widget.nametowidget(widget.winfo_parent())
+                        problems.append(
+                            f"{label} {space} {page} {width}px {name}: mapped={mapped} viewable="
+                            f"{bool(widget.winfo_viewable())} size={widget.winfo_width()}/{widget.winfo_reqwidth()} at "
+                            f"{widget.winfo_x()},{widget.winfo_y()} manager={widget.winfo_manager()} master="
+                            f"{master.winfo_width()}x{master.winfo_height()} root={self.root.winfo_width()}x"
+                            f"{self.root.winfo_height()} screen={self.root.winfo_screenwidth()}x"
+                            f"{self.root.winfo_screenheight()} root_state={self.root.state()}")
+        newline = chr(10)
+        self.assertEqual(problems, [], f"{len(problems)} problems; first ones:{newline}"
+                         + newline.join(problems[:25]))
 
     def test_no_button_is_cut_off_at_any_width(self):
         self.check_every_width("default")
 
     def widen_fonts(self, factor: float) -> None:
+        """Wider text, as on another PC. The app never changes fonts while it runs, so lay out again afterwards,
+        as a restart would."""
         for font in self.app.theme.fonts.values():
             size = int(font.cget("size"))
             font.configure(size=round(size * factor) if size > 0 else -round(-size * factor))
+        self.root.update()
+        pending = [self.root]
+        while pending:
+            widget = pending.pop()
+            pending.extend(widget.winfo_children())
+            if isinstance(widget, (FlowFrame, SpaceBar)):
+                widget.relayout()
+        self.root.update()
 
     def test_no_button_is_cut_off_with_wider_fonts_either(self):
         """CI runners and other PCs render wider text; 25% wider fonts must still fit (wrapping is fine)."""

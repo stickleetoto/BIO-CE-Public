@@ -82,6 +82,8 @@ class SpaceBar(tk.Frame):
 
     def relayout(self) -> None:
         """Place the tabs (wrapping if needed), then the picker: right-aligned when it fits, else on its own line."""
+        if not self.winfo_exists():
+            return
         self.update_idletasks()
         width = self._width if self._width > 1 else self.winfo_width()
         items = [self.memories_tab, self.inbox_tab, self.suggestions_tab]
