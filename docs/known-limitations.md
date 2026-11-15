@@ -67,7 +67,7 @@
 - Sorting suggestions compare wording, not meaning: two entries that say the same in different words are not
   suggested for merging.
 - Exports are plain text and not encrypted; a Personal export contains your personal memories.
-- On a small screen (768 px tall) with 125% display scaling and much larger text, the Memories reading pane can be too short to show its buttons; maximize the window or use the right-click menu on the list. Widths are handled: buttons wrap instead of being cut off.
+- The smallest supported window is 860x560 at 100% display scaling (1290x840 at 150%). A screen that can't fit it, such as 1024x768 at 150%, gets a smaller window: nothing is cut off sideways (buttons wrap, table columns fit, long lines end in “…”), but the Memories and Inbox reading panes can run out of height, so lines under the title, and in Memories the Show details row, may not fit. Maximize the window, use a lower display scaling, or use the right-click menu on the Memories list.
 - The MCP server refuses to start until the BIO CE app has created its data folder. An AI app connected before
   BIO CE was opened once shows the server as failed until you open BIO CE.
 

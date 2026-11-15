@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from bio_ce.control_store import MODE_AUTO_MEMORY
 from bio_ce.core.models import MemoryScope, SourceProvenance
@@ -44,6 +45,9 @@ This is the complete set of memories I have stored.
 
 
 class LayoutAuditTests(unittest.TestCase):
+    SCREEN: tuple[int, int] | None = None  # None: this PC's screen
+    DPI = 96.0  # 96 = 100% scaling
+
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory(prefix="bio-ce-layout-audit-")
         self.paths = AppDataPaths.under(self.temp.name)
@@ -67,10 +71,25 @@ class LayoutAuditTests(unittest.TestCase):
         self.service.add(title="시험용: 개인 메모", content="개인", source_ref="test")
         self.service.use_space(self.control.space("general").curated)
         self.root = new_root()
+        width = height = None
+        if self.SCREEN is not None:
+            # Fonts in points and the app's px() both follow Tk's scaling, as on a PC with that display scaling.
+            self.root.tk.call("tk", "scaling", self.DPI / 72.0)
+            for name, value in (("winfo_screenwidth", self.SCREEN[0]), ("winfo_screenheight", self.SCREEN[1])):
+                screen = patch.object(self.root, name, return_value=value)
+                screen.start()
+                self.addCleanup(screen.stop)
+            # A window can't be larger than the screen (on the CI runner the minimum 860x560 at 150% became 1004x749).
+            width, height = self.SCREEN[0] - 20, self.SCREEN[1] - 19
         self.app = BIOCEDesktop(self.root, self.service, self.paths, self.connections)
         theme = self.app.theme
-        self.root.geometry(f"{theme.px(MINIMUM_SIZE[0])}x{theme.px(MINIMUM_SIZE[1])}+20+20")
+        width = min(width or 10**6, theme.px(MINIMUM_SIZE[0]))
+        height = min(height or 10**6, theme.px(MINIMUM_SIZE[1]))
+        self.root.geometry(f"{width}x{height}+0+0")
         self.settle()
+        # The app's minimum window is 860x560 at 100%; a smaller screen (the CI runner's 1024x768 at 150% is 683x512
+        # at 100%) can't show it. Width is still checked in full there; running out of height is a known limitation.
+        self.full_size = self.root.winfo_screenheight() * 0.85 >= theme.px(MINIMUM_SIZE[1])
 
     def tearDown(self) -> None:
         self.app.tasks.wait(10)
@@ -92,7 +111,7 @@ class LayoutAuditTests(unittest.TestCase):
             if not self.app.nav[key].badge_count:
                 self.app.nav[key].set_badge(count)
         self.settle()
-        return audit(self.root, page)
+        return audit(self.root, page, vertical=self.full_size)
 
     def all_screens(self) -> list[str]:
         problems: list[str] = []
@@ -129,7 +148,7 @@ class LayoutAuditTests(unittest.TestCase):
             dialog.space_vars["personal"].set(True)
             for _ in range(6):
                 dialog.update()
-            problems += audit(dialog, "export dialog")
+            problems += audit(dialog, "export dialog", vertical=self.full_size)
         finally:
             dialog.destroy()
         return problems
@@ -154,8 +173,23 @@ class LayoutAuditTests(unittest.TestCase):
         self.assertTrue(any("button" in p and "Move to a space" in p for p in found), found)
         self.assertTrue(any("badge" in p and "a very long note" in p for p in found), found)
 
+    def test_a_title_that_pushes_the_rest_out_is_caught(self):
+        """Positive control for "squeezed out": a title allowed to grow without limit hides what is below it."""
+        self.app.show_page("memories")
+        self.app.memories.refresh()
+        self.app.memories.select(self.first.memory_id)
+        self.settle()
+        title = self.app.memories.detail_title
+        title.max_lines = 200
+        title.set_text("시험용 긴 제목 " * 300)
+        self.settle()
+        found = audit(self.root, "memories")
+        self.assertTrue(any("squeezed out" in p or ("cut" in p and "clamplabel" in p) for p in found), found)
+
     def test_a_long_line_is_shortened_not_cut(self):
         """The one-line labels end in "…" instead of being cut; turning that off is caught."""
+        if not self.full_size:
+            self.skipTest("the reading pane has no height for this line on a screen below the minimum window size")
         self.app.show_page("memories")
         self.app.memories.refresh()
         self.app.memories.select(self.first.memory_id)
@@ -168,6 +202,13 @@ class LayoutAuditTests(unittest.TestCase):
         label.configure(text="Updated · Source: " + "a very long source name " * 8)  # skips the shortening
         self.root.update_idletasks()
         self.assertTrue(any("not shortened to fit" in p for p in audit(self.root, "memories")))
+
+
+class CiScreenLayoutAuditTests(LayoutAuditTests):
+    """The same at the release CI runner's display: a 1024x768 screen at 150% scaling (144 DPI)."""
+
+    SCREEN = (1024, 768)
+    DPI = 144.0
 
 
 if __name__ == "__main__":

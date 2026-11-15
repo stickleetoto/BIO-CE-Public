@@ -37,6 +37,7 @@ from bio_ce.ui.widgets import (
     Card,
     FlowFrame,
     Pill,
+    fit_tree_columns,
     ScrollFrame,
     TextArea,
     WrapLabel,
@@ -104,9 +105,10 @@ class ImportPage(Page):
         tk.Label(where, text="Destination", font=theme.font("body_strong"), background=c.surface, foreground=c.text,
                  width=12, anchor="w").pack(side="left")
         self.destination = tk.StringVar(master=self, value="")
-        self.destination_picker = ttk.Combobox(where, textvariable=self.destination, state="readonly", width=60,
+        # Narrow request, then as wide as the row allows (a 60-character request was cut at 150% scaling).
+        self.destination_picker = ttk.Combobox(where, textvariable=self.destination, state="readonly", width=24,
                                                style="BIO.TCombobox", font=theme.font("body"))
-        self.destination_picker.pack(side="left")
+        self.destination_picker.pack(side="left", fill="x", expand=True)
         self.destination_picker.bind("<<ComboboxSelected>>", lambda _e: self._destination_chosen())
         self.destination_note = WrapLabel(form.body, "", font=theme.font("caption"), foreground=c.text_secondary)
         self.destination_note.pack(fill="x", pady=(theme.px(SPACE_XS), 0))
@@ -137,6 +139,7 @@ class ImportPage(Page):
         self.notes.heading("text", text="TEXT", anchor="w")
         self.notes.column("line", width=theme.px(56), stretch=False)
         self.notes.column("text", width=theme.px(600), stretch=True)
+        fit_tree_columns(self.notes, theme, "text", floor=120)
         self.notes.pack(fill="x", padx=theme.px(SPACE_M), pady=theme.px(SPACE_XS))
         Button(self.notes_box, theme, "Import this line as a memory", variant="link",
                command=self.note_to_entry).pack(anchor="w", padx=theme.px(SPACE_M), pady=(0, theme.px(SPACE_S)))
@@ -175,7 +178,7 @@ class ImportPage(Page):
         bar.grid(row=0, column=1, sticky="ns")
         across.grid(row=1, column=0, sticky="ew")
         area.columnconfigure(0, weight=1)
-        self.tree.bind("<Configure>", lambda _e: self._fit_columns(), add="+")
+        fit_tree_columns(self.tree, theme, "text", floor=120)
         self.tree.bind("<ButtonRelease-1>", self._clicked)
         self.tree.bind("<space>", lambda _e: self.toggle_selected())
         self.tree.bind("<<TreeviewSelect>>", lambda _e: self._show_detail())
@@ -408,19 +411,6 @@ class ImportPage(Page):
             self.unreadable_toggle.pack_forget()
             self.unreadable_list.pack_forget()
         self._sync_buttons()
-
-    def _fit_columns(self) -> None:
-        """TEXT gets the width the fixed columns leave, at least 150 px."""
-        try:
-            width = self.tree.winfo_width()
-        except tk.TclError:
-            return
-        if width <= 1:
-            return
-        fixed = sum(self.theme.px(value) for value in self._fixed_columns.values())
-        text = max(self.theme.px(150), width - fixed - 2)
-        if int(self.tree.column("text", "width")) != text:
-            self.tree.column("text", width=text)
 
     def toggle_unreadable(self) -> None:
         if self.unreadable_list.winfo_manager():

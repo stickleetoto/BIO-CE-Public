@@ -17,7 +17,20 @@ from bio_ce.ui.dialogs import ReviewEditDialog
 from bio_ce.ui.format import format_timestamp, plural, preview, relative_time
 from bio_ce.ui.pages import Page
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS
-from bio_ce.ui.widgets import AutoScrollbar, Button, Card, EmptyState, Pill, Tooltip, WrapLabel, section_label
+from bio_ce.ui.widgets import (
+    AutoScrollbar,
+    Button,
+    Card,
+    ClampLabel,
+    EmptyState,
+    FlowFrame,
+    Pill,
+    Tooltip,
+    WrapLabel,
+    fit_tree_columns,
+    keep_side_pane,
+    section_label,
+)
 
 
 def import_line(meta: dict) -> str:
@@ -192,6 +205,7 @@ class InboxPage(Page):
         self.tree.heading("saved", text="SAVED", anchor="w")
         self.tree.column("title", anchor="w", minwidth=theme.px(140), width=theme.px(260), stretch=True)
         self.tree.column("saved", anchor="w", minwidth=theme.px(84), width=theme.px(110), stretch=False)
+        fit_tree_columns(self.tree, theme, "title", floor=140)
         scrollbar = AutoScrollbar(area, orient="vertical", command=self.tree.yview,
                                   style=theme.scrollbar_style(c.surface))
         self.tree.configure(yscrollcommand=scrollbar.set)
@@ -204,19 +218,24 @@ class InboxPage(Page):
 
         detail = tk.Frame(right.body, background=c.surface)
         detail.pack(fill="both", expand=True, padx=theme.px(SPACE_XL), pady=theme.px(SPACE_L))
-        self.detail_title = WrapLabel(detail, font=theme.font("title"), foreground=c.text)
+        # The buttons are packed first so a long text shortens the text, never the buttons.
+        buttons = FlowFrame(detail, gap=theme.px(SPACE_S), background=c.surface)
+        buttons.pack(fill="x", side="bottom", pady=(theme.px(SPACE_M), 0))
+        self.move_button = buttons.add(Button(buttons, theme, "Move to memories…", variant="primary",
+                                              command=self.move_selected))
+        self.discard_button = buttons.add(Button(buttons, theme, "Discard…", variant="danger_subtle",
+                                                 command=self.discard_selected))
+        # The reading pane keeps room for its widest button (on the 1024x768 CI screen at 150% it was too narrow).
+        self.keep_reading_pane = keep_side_pane(
+            self.split, theme,
+            lambda: max(self.move_button.winfo_reqwidth(), self.discard_button.winfo_reqwidth())
+            + 2 * theme.px(SPACE_XL) + theme.px(16))
+        self.detail_title = ClampLabel(detail, theme, font=theme.font("title"), foreground=c.text)
         self.detail_title.pack(fill="x")
         self.detail_meta = WrapLabel(detail, font=theme.font("caption"), foreground=c.text_muted)
         self.detail_meta.pack(fill="x", pady=(theme.px(SPACE_XS), theme.px(SPACE_M)))
         self.detail_body = WrapLabel(detail, font=theme.font("body"), foreground=c.text_secondary)
         self.detail_body.pack(fill="x")
-        buttons = tk.Frame(detail, background=c.surface)
-        buttons.pack(fill="x", side="bottom", pady=(theme.px(SPACE_M), 0))
-        self.move_button = Button(buttons, theme, "Move to memories…", variant="primary", command=self.move_selected)
-        self.move_button.pack(side="left")
-        self.discard_button = Button(buttons, theme, "Discard…", variant="danger_subtle",
-                                     command=self.discard_selected)
-        self.discard_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
 
     # Data -----------------------------------------------------------------
 
@@ -272,7 +291,7 @@ class InboxPage(Page):
         self.move_button.set_enabled(allowed and len(chosen) == 1)
         self.discard_button.set_enabled(allowed and bool(chosen))
         if len(chosen) != 1:
-            self.detail_title.configure(text=f"{plural(len(chosen), 'item')} selected" if chosen else "")
+            self.detail_title.set_text(f"{plural(len(chosen), 'item')} selected" if chosen else "")
             self.detail_meta.configure(text="")
             self.detail_body.configure(text="")
             return
@@ -287,7 +306,7 @@ class InboxPage(Page):
             parts.append("taken from a file or page you asked about")
         if meta.get("import_source"):
             parts = [import_line(meta)]
-        self.detail_title.configure(text=item.title)
+        self.detail_title.set_text(item.title)
         self.detail_meta.configure(text=" · ".join(parts))
         self.detail_body.configure(text=item.content or "")
 

@@ -422,6 +422,136 @@ class RowButton(tk.Frame):
         return "break"
 
 
+def fit_tree_columns(tree: ttk.Treeview, theme: Theme, flexible: str, floor: int = 150) -> None:
+    """Keep every column of ``tree`` inside its width: ``flexible`` takes what the others leave (at least ``floor``
+    px before scaling), and when that isn't enough the others shrink toward their headings' width."""
+    columns = [str(column) for column in tree.cget("columns")]
+    designed = {column: int(tree.column(column, "width")) for column in columns}
+    try:
+        heading_font = tkfont.nametofont(str(ttk.Style(tree).lookup(str(tree.cget("style")) + ".Heading", "font")))
+    except (tk.TclError, ValueError):
+        heading_font = theme.font("caption_strong")
+    lowest = {}
+    for column in columns:
+        heading = str(tree.heading(column, "text"))
+        lowest[column] = max(theme.px(24), heading_font.measure(heading) + theme.px(18))
+        tree.column(column, minwidth=min(lowest[column], designed[column]), stretch=False)
+
+    def fit(_event=None) -> None:
+        try:
+            available = tree.winfo_width() - 2
+        except tk.TclError:
+            return
+        if available <= 1:
+            return
+        others = [column for column in columns if column != flexible]
+        widths = {column: designed[column] for column in others}
+        floor_px = theme.px(floor)
+        deficit = sum(widths.values()) + floor_px - available
+        room = sum(max(0, widths[column] - lowest[column]) for column in others)
+        if deficit > 0 and room > 0:
+            share = min(1.0, deficit / room)
+            for column in others:
+                widths[column] -= int((widths[column] - lowest[column]) * share + 0.999) if widths[column] > lowest[
+                    column] else 0
+        widths[flexible] = max(theme.px(40), available - sum(widths.values()))
+        for column, width in widths.items():
+            if int(tree.column(column, "width")) != width:
+                tree.column(column, width=width)
+
+    tree.bind("<Configure>", fit, add="+")
+    fit()
+
+
+def _wrapped_lines(text: str, measure: Callable[[str], int], width: int) -> list[str]:
+    """``text`` broken into lines no wider than ``width``: at spaces where possible, inside a long word if not."""
+    lines: list[str] = []
+    for paragraph in text.split("\n"):
+        current = ""
+        for word in paragraph.split(" "):
+            candidate = f"{current} {word}" if current else word
+            if measure(candidate) <= width:
+                current = candidate
+                continue
+            if current:
+                lines.append(current)
+            current = word
+            while current and measure(current) > width:
+                cut = len(current) - 1
+                while cut > 1 and measure(current[:cut]) > width:
+                    cut -= 1
+                lines.append(current[:cut])
+                current = current[cut:]
+        lines.append(current)
+    return lines
+
+
+class ClampLabel(tk.Label):
+    """Wrapping text of at most ``max_lines`` lines; the last one ends in "…" when there is more, and the full
+    text is then shown on hover. For titles, which must not push the buttons below them out of a short pane."""
+
+    def __init__(self, master: tk.Misc, theme: Theme, text: str = "", *, max_lines: int = 3, **options) -> None:
+        options.setdefault("justify", "left")
+        options.setdefault("anchor", "w")
+        options.setdefault("borderwidth", 0)
+        options.setdefault("background", surface_of(master))
+        super().__init__(master, text=text, wraplength=theme.px(320), **options)
+        self._full = text
+        self.max_lines = max_lines
+        self._tooltip = Tooltip(self, theme, "")
+        self.bind("<Configure>", lambda _e: self._fit(), add="+")
+
+    def set_text(self, text: str) -> None:
+        self._full = text
+        self.configure(text=text)
+        self._fit()
+
+    def _fit(self) -> None:
+        try:
+            width = self.winfo_width() - 4
+        except tk.TclError:
+            return
+        if width <= 40:
+            return
+        try:
+            measure = tkfont.nametofont(str(self.cget("font"))).measure
+        except tk.TclError:
+            measure = tkfont.Font(font=self.cget("font")).measure
+        lines = _wrapped_lines(self._full, measure, width)
+        clamped = len(lines) > self.max_lines
+        if clamped:
+            lines = lines[:self.max_lines]
+            last = lines[-1]
+            while last and measure(last.rstrip() + "…") > width:
+                last = last[:-1]
+            lines[-1] = last.rstrip() + "…"
+        self._tooltip.text = self._full if clamped else ""
+        text = "\n".join(lines)
+        if self.cget("text") != text or int(self.cget("wraplength")) != 0:
+            self.configure(text=text, wraplength=0)  # already broken into lines that fit
+
+
+def keep_side_pane(split: ttk.Panedwindow, theme: Theme, need: Callable[[], int], *, share: float = 0.4,
+                   list_min: int = 200) -> Callable[[], None]:
+    """Keep the right pane of ``split`` at least ``share`` of it, or ``need()`` px (its widest button with margins);
+    the left pane keeps ``list_min`` px. Runs whenever the split is resized or its divider is released."""
+
+    def keep() -> None:
+        try:
+            total = split.winfo_width()
+            if total < theme.px(400) or len(split.panes()) < 2:
+                return
+            wanted = min(max(int(total * share), need()), total - theme.px(list_min))
+            if total - int(split.sashpos(0)) < wanted:
+                split.sashpos(0, total - wanted)
+        except tk.TclError:
+            return  # the window is closing
+
+    split.bind("<Configure>", lambda _e: split.after_idle(keep), add="+")
+    split.bind("<ButtonRelease-1>", lambda _e: split.after_idle(keep), add="+")
+    return keep
+
+
 class ElideLabel(tk.Label):
     """One line of text that ends in "…" when it doesn't fit, instead of being cut off at the edge."""
 

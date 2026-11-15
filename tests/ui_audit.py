@@ -8,7 +8,9 @@ A widget the user should see is a problem when it is
 - cut: given less width (or height) than it asks for — a cut-off Button ignores clicks, a cut-off label hides text;
 - off view: its right or bottom edge is outside the window, or, inside a scrolling area, outside the area's width
   (scrolling areas scroll vertically, so only their width counts);
-- a table whose columns are wider than the table (the right columns are off the edge).
+- a table whose columns are wider than the table (the right columns are off the edge);
+- squeezed out: laid out (pack/grid/place) inside a visible parent but given no room at all, so Tk hides it.
+  Without this check such a widget would just be skipped as "not visible".
 
 Checked: Buttons, labels (WrapLabel only for being off view: it wraps by design; ElideLabel for its shown text
 fitting after shortening), badges (Pill), check and radio buttons, combo boxes, and tables. Entry fields and text areas are not: they scroll their own text.
@@ -76,6 +78,20 @@ def _kind(widget: tk.Misc) -> str | None:
     return None
 
 
+def _has_content(widget: tk.Misc) -> bool:
+    return any(_kind(part) is not None for part in _walk(widget))
+
+
+def _squeezed_out(widget: tk.Misc) -> bool:
+    try:
+        if widget.winfo_ismapped() or widget.winfo_manager() not in ("pack", "grid", "place"):
+            return False
+        master = widget.master
+        return master is not None and bool(master.winfo_viewable()) and _has_content(widget)
+    except tk.TclError:
+        return False
+
+
 def describe(widget: tk.Misc) -> str:
     try:
         text = str(widget.cget("text"))
@@ -87,8 +103,12 @@ def describe(widget: tk.Misc) -> str:
     return f"{widget.winfo_class()} '{text}' ({widget})"
 
 
-def audit(top: tk.Misc, where: str) -> list[str]:
-    """Problems in the viewable widgets under ``top`` (a page, a dialog, or the whole window)."""
+def audit(top: tk.Misc, where: str, *, vertical: bool = True) -> list[str]:
+    """Problems in the viewable widgets under ``top`` (a page, a dialog, or the whole window).
+
+    ``vertical=False`` leaves out running out of height (cut in height, below the window, squeezed out): for a
+    screen too small for the app's minimum window, where that is a known limitation. Width is always checked.
+    """
     top.update_idletasks()
     window = top.winfo_toplevel()
     win_left, win_top = window.winfo_rootx(), window.winfo_rooty()
@@ -97,6 +117,8 @@ def audit(top: tk.Misc, where: str) -> list[str]:
     for widget in _walk(top):
         try:
             if not widget.winfo_viewable():
+                if vertical and _squeezed_out(widget):
+                    problems.append(f"{where}: squeezed out (no room left, so hidden): {describe(widget)}")
                 continue
         except tk.TclError:
             continue
@@ -115,12 +137,12 @@ def audit(top: tk.Misc, where: str) -> list[str]:
             if x < win_left - TOLERANCE or x + width > win_right + TOLERANCE:
                 problems.append(f"{where}: {kind} off view (right edge outside the window): {describe(widget)} "
                                 f"x={x - win_left}..{x + width - win_left} window={window.winfo_width()}")
-            if y + height > win_bottom + TOLERANCE:
+            if vertical and y + height > win_bottom + TOLERANCE:
                 problems.append(f"{where}: {kind} off view (below the window): {describe(widget)} "
                                 f"y={y - win_top}..{y + height - win_top} window={window.winfo_height()}")
         if kind in ("button", "label", "badge", "choice", "combo"):
             need_w, need_h = widget.winfo_reqwidth(), widget.winfo_reqheight()
-            if width < need_w - TOLERANCE or height < need_h - TOLERANCE:
+            if width < need_w - TOLERANCE or (vertical and height < need_h - TOLERANCE):
                 problems.append(f"{where}: {kind} cut: {describe(widget)} size={width}x{height} "
                                 f"needs={need_w}x{need_h}")
         if kind == "elide" and width > 1:

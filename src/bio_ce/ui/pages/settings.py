@@ -301,8 +301,8 @@ class SettingsPage(Page):
         else:
             Button(top, theme, "Turn on Personal…", variant="link", command=self.turn_on_personal).pack(side="right")
             detail = "Off. For memories about you: health, family, finances, where you studied or served."
-        tk.Label(inner, text=detail, font=theme.font("caption"), background=c.surface_alt, foreground=c.text_muted,
-                 anchor="w", justify="left", wraplength=theme.px(520)).pack(fill="x")
+        WrapLabel(inner, text=detail, font=theme.font("caption"), background=c.surface_alt,
+                  foreground=c.text_muted, max_width=theme.px(520)).pack(fill="x")
         self.space_rows["personal"] = frame
 
     def turn_on_personal(self) -> bool:

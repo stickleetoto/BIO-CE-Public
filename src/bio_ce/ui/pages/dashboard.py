@@ -167,7 +167,7 @@ class DashboardPage(Page):
 
         self._layout_mode: str | None = None
         self.bind("<Configure>", self._relayout, add="+")
-        self._apply_layout("wide")
+        self._apply_layout("wide", 4)
 
     def focus_default(self) -> None:
         self.search.focus_set()
@@ -178,27 +178,46 @@ class DashboardPage(Page):
         self.app.open_search(query)
         return "break"
 
-    def _relayout(self, event) -> None:
-        width = int(event.width)
-        mode = "wide" if width >= self.theme.px(820) else "medium" if width >= self.theme.px(560) else "narrow"
-        if mode != self._layout_mode:
-            self._apply_layout(mode)
+    def _card_need(self) -> int:
+        """The width a status card needs: its widest button or badge, which can't wrap, plus the card's padding."""
+        need = 0
+        for card in self._stat_cards:
+            pending = list(card.body.winfo_children())
+            while pending:
+                widget = pending.pop()
+                if isinstance(widget, (Button, Pill)):
+                    need = max(need, widget.winfo_reqwidth())
+                else:
+                    pending.extend(widget.winfo_children())
+        return need + 2 * self.theme.px(SPACE_L + 2) + self.theme.px(8)
 
-    def _apply_layout(self, mode: str) -> None:
-        self._layout_mode = mode
+    def _relayout(self, event=None) -> None:
+        try:
+            width = int(event.width) if event is not None else self.winfo_width()
+        except tk.TclError:
+            return
+        if width <= 1:
+            return
+        gap = self.theme.px(SPACE_M)
+        need = self._card_need()
+        columns = 4 if width >= 4 * need + 3 * gap else 2 if width >= 2 * need + gap else 1
+        mode = "wide" if width >= self.theme.px(820) else "narrow"
+        if (mode, columns) != self._layout_mode:
+            self._apply_layout(mode, columns)
+
+    def _apply_layout(self, mode: str, columns: int) -> None:
+        self._layout_mode = (mode, columns)
         gap = self.theme.px(SPACE_M)
         for card in self._stat_cards:
             card.grid_forget()
         for index in range(len(self._stat_cards)):
             self.stats.columnconfigure(index, weight=0, uniform="")
-        if mode == "narrow":
-            for row, card in enumerate(self._stat_cards):
-                card.grid(row=row, column=0, sticky="nsew", pady=(0 if row == 0 else gap, 0))
-            self.stats.columnconfigure(0, weight=1)
-        else:
-            for column, card in enumerate(self._stat_cards):
-                card.grid(row=0, column=column, sticky="nsew", padx=(0 if column == 0 else gap, 0))
-                self.stats.columnconfigure(column, weight=1, uniform="stat")
+        for index, card in enumerate(self._stat_cards):
+            row, column = divmod(index, columns)
+            card.grid(row=row, column=column, sticky="nsew", padx=(0 if column == 0 else gap, 0),
+                      pady=(0 if row == 0 else gap, 0))
+        for column in range(columns):
+            self.stats.columnconfigure(column, weight=1, uniform="stat")
         self.recent_card.grid_forget()
         self.connections_card.grid_forget()
         for index in range(2):
@@ -286,6 +305,7 @@ class DashboardPage(Page):
             text, target = "Nothing waiting", "connections"
         self.review_detail.set_text(text)
         self.review_detail.set_command(lambda: self.app.show_page(target))
+        self.after_idle(self._relayout)  # a longer button text may need fewer cards per row
 
 
 __all__ = ["DashboardPage", "host_pill"]

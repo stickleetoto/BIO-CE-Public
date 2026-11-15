@@ -54,7 +54,7 @@ from bio_ce.ui.theme import (
     app_icon,
     apply_window_chrome,
 )
-from bio_ce.ui.widgets import InfoBar, NavItem, Tooltip, install_mousewheel
+from bio_ce.ui.widgets import InfoBar, NavItem, Tooltip, WrapLabel, install_mousewheel
 
 if TYPE_CHECKING:
     from bio_ce.desktop import AppDataPaths, DesktopMemoryService
@@ -140,8 +140,8 @@ class BIOCEDesktop:
         self.header_title = tk.Label(titles, font=self.theme.font("display"), background=c.bg,
                                      foreground=c.text, anchor="w")
         self.header_title.pack(fill="x")
-        self.header_subtitle = tk.Label(titles, font=self.theme.font("body"), background=c.bg,
-                                        foreground=c.text_secondary, anchor="w")
+        self.header_subtitle = WrapLabel(titles, font=self.theme.font("body"), background=c.bg,
+                                         foreground=c.text_secondary)
         self.header_subtitle.pack(fill="x", pady=(self.theme.px(2), 0))
 
         self.page_host = tk.Frame(self.main, background=c.bg)

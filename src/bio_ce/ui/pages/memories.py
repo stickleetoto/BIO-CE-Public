@@ -19,6 +19,7 @@ from bio_ce.ui.widgets import (
     AutoScrollbar,
     Button,
     Card,
+    ClampLabel,
     ElideLabel,
     EmptyState,
     FlowFrame,
@@ -29,6 +30,7 @@ from bio_ce.ui.widgets import (
     WrapLabel,
     copy_to_clipboard,
     divider,
+    fit_tree_columns,
     reading_padding,
 )
 
@@ -111,6 +113,7 @@ class MemoriesPage(Page):
         self.tree.heading("updated", text="UPDATED", anchor="w")
         self.tree.column("title", anchor="w", minwidth=theme.px(140), width=theme.px(260), stretch=True)
         self.tree.column("updated", anchor="w", minwidth=theme.px(84), width=theme.px(110), stretch=False)
+        fit_tree_columns(self.tree, theme, "title", floor=140)
         scrollbar = AutoScrollbar(list_area, orient="vertical", command=self.tree.yview,
                                   style=theme.scrollbar_style(c.surface))
         self.tree.configure(yscrollcommand=scrollbar.set)
@@ -146,7 +149,7 @@ class MemoriesPage(Page):
         theme, c = self.theme, self.colors
         head = tk.Frame(frame, background=c.surface)
         head.pack(fill="x", padx=theme.px(SPACE_XL), pady=(theme.px(SPACE_L + 4), theme.px(SPACE_M)))
-        self.detail_title = WrapLabel(head, font=theme.font("title"), foreground=c.text)
+        self.detail_title = ClampLabel(head, theme, font=theme.font("title"), foreground=c.text)
         self.detail_title.pack(fill="x")
         meta = tk.Frame(head, background=c.surface)
         meta.pack(fill="x", pady=(theme.px(SPACE_S), 0))
@@ -157,7 +160,9 @@ class MemoriesPage(Page):
                                      foreground=c.text_muted, width=1)
         self.meta_label.pack(side="left", fill="x", expand=True, padx=(theme.px(SPACE_M), 0))
         actions = FlowFrame(head, gap=theme.px(SPACE_S), background=c.surface)
-        actions.pack(fill="x", pady=(theme.px(SPACE_M + 2), 0))
+        # Below the title, but packed from the bottom before it: in a short pane a long title is clipped, never
+        # the buttons (on the 1024x768 CI screen at 150% they were pushed below the window).
+        actions.pack(side="bottom", fill="x", pady=(theme.px(SPACE_M + 2), 0), before=self.detail_title)
         self.detail_actions = actions
         self.edit_button = actions.add(Button(actions, theme, "Edit", icon="edit", command=self.app.start_edit_memory,
                                               tooltip="Edit this memory (Ctrl+E)"))
@@ -384,7 +389,7 @@ class MemoriesPage(Page):
             return
         self.detail_empty.pack_forget()
         self.detail.pack(fill="both", expand=True)
-        self.detail_title.configure(text=record.title)
+        self.detail_title.set_text(record.title)
         self.revision_pill.set(f"Revision {record.revision_number}", "neutral")
         meta = f"Updated {format_timestamp(record.recorded_at)}"
         if record.source_ref:
