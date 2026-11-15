@@ -96,6 +96,11 @@ class MemoriesPage(Page):
         right = Card(self.split, theme, padding=0)
         self.split.add(left, weight=2)
         self.split.add(right, weight=3)
+        self.reading_card = right
+        # Keep the reading pane wide enough for its buttons, whatever the first layout or a dragged divider did
+        # (on a 1024x768 screen at 125% it once got 42 px and its buttons were hidden).
+        self.split.bind("<Configure>", lambda _e: self.after_idle(self.keep_reading_pane), add="+")
+        self.split.bind("<ButtonRelease-1>", lambda _e: self.after_idle(self.keep_reading_pane), add="+")
 
         list_area = tk.Frame(left.body, background=c.surface)
         list_area.pack(fill="both", expand=True)
@@ -192,6 +197,22 @@ class MemoriesPage(Page):
         self.reader.pack(fill="both", expand=True, padx=(theme.px(SPACE_XL), theme.px(SPACE_S)),
                          pady=(theme.px(SPACE_L), theme.px(SPACE_S)))
         frame.bind("<Configure>", self._fit_reader, add="+")
+        frame.bind("<Configure>", lambda _e: self.after_idle(self.keep_reading_pane), add="+")
+
+    def keep_reading_pane(self) -> None:
+        """At least 40% of the split, or the widest action button with its margins; the list keeps 200 px."""
+        try:
+            total = self.split.winfo_width()
+            if total < self.theme.px(400) or len(self.split.panes()) < 2:
+                return
+            widest = max(button.winfo_reqwidth() for button in (self.edit_button, self.history_button,
+                                                                 self.retract_button))
+            need = max(int(total * 0.4), widest + 2 * self.theme.px(SPACE_XL) + self.theme.px(16))
+            need = min(need, total - self.theme.px(200))
+            if total - int(self.split.sashpos(0)) < need:
+                self.split.sashpos(0, total - need)
+        except tk.TclError:
+            return  # the window is closing
 
     def _fit_reader(self, event) -> None:
         extra = reading_padding(self.theme, int(event.width) - self.theme.px(SPACE_XL + SPACE_S))
@@ -354,6 +375,7 @@ class MemoriesPage(Page):
 
     def _show_record(self, record: MemoryView | None) -> None:
         self.selected = record
+        self.after_idle(self.keep_reading_pane)
         if record is None:
             self.detail.pack_forget()
             self.detail_empty.pack(fill="both", expand=True)

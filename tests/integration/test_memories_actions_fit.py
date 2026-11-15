@@ -11,6 +11,7 @@ a normal window size Move to… and Retract were cut off.
 from __future__ import annotations
 
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -23,6 +24,8 @@ from tests.integration.test_desktop_ui_redesign import new_root
 
 
 class MemoriesActionsFitTests(unittest.TestCase):
+    SCREEN: tuple[int, int] | None = None
+    DPI = 96.0
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory(prefix="bio-ce-actions-fit-")
         self.paths = AppDataPaths.under(self.temp.name)
@@ -35,7 +38,14 @@ class MemoriesActionsFitTests(unittest.TestCase):
         self.private = self.service.add(title="시험용: 개인 메모", content="개인", source_ref="test")
         self.service.use_space(self.connections.control.space("general").curated)
         self.root = new_root()
-        self.app = BIOCEDesktop(self.root, self.service, self.paths, self.connections)
+        if self.SCREEN is None:
+            self.app = BIOCEDesktop(self.root, self.service, self.paths, self.connections)
+        else:  # the app sizes its first window from the screen; pretend the screen is small, as on a CI runner
+            screen = (patch.object(self.root, "winfo_screenwidth", return_value=self.SCREEN[0]),
+                      patch.object(self.root, "winfo_screenheight", return_value=self.SCREEN[1]),
+                      patch.object(self.root, "winfo_fpixels", return_value=self.DPI))
+            with screen[0], screen[1], screen[2]:
+                self.app = BIOCEDesktop(self.root, self.service, self.paths, self.connections)
         self.page = self.app.memories
 
     def tearDown(self) -> None:
@@ -123,6 +133,28 @@ class MemoriesActionsFitTests(unittest.TestCase):
         self.widen_fonts(1.5)
         self.check_every_width("150%")
 
+    def test_a_squeezed_reading_pane_recovers_and_keeps_its_buttons(self):
+        """On a CI runner (1024x768, 125%) the reading pane once ended up 42 px wide and its buttons were hidden.
+        Squeeze it like that, resize the window, and the pane must come back wide enough for its buttons."""
+        self.show(972, 700)
+        total = self.page.split.winfo_width()
+        self.page.split.sashpos(0, total - 42)
+        self.assertEqual(self.page.split.sashpos(0), total - 42)  # the squeeze happened (positive control)
+        self.show(990, 700)
+        deadline = time.monotonic() + 3  # events can arrive late while other windows of the run are closing
+        needed = self.page.edit_button.winfo_reqwidth()
+        while self.page.reading_card.winfo_width() < needed and time.monotonic() < deadline:
+            self.root.update()
+            time.sleep(0.02)
+        for _ in range(4):
+            self.root.update()
+        for name in ("edit_button", "history_button", "retract_button"):
+            button = getattr(self.page, name)
+            with self.subTest(button=name):
+                self.assertTrue(button.winfo_ismapped(), "not shown")
+                self.assertGreaterEqual(button.winfo_width(), button.winfo_reqwidth(), "cut off")
+        self.assertGreaterEqual(self.page.reading_card.winfo_width(), self.page.edit_button.winfo_reqwidth())
+
     def test_move_works_from_the_list_and_from_the_right_click_menu(self):
         self.show(960, 760)
         self.page.tree.selection_set((self.first.memory_id, self.second.memory_id))
@@ -167,6 +199,19 @@ class MemoriesActionsFitTests(unittest.TestCase):
 def tk_menu_type():
     import tkinter as tk
     return tk.Menu
+
+
+
+class SmallScreenFitTests(MemoriesActionsFitTests):
+    """The window first opens small, as on a 1024x768 screen (the CI runner). There the reading pane once got only
+    42 px, because the wrapping button row asked for no width at all."""
+
+    SCREEN = (1024, 768)
+    DPI = 120.0  # 125% display scaling: the app's 860 px minimum becomes 1075 px, so the window stays 972 px wide
+
+    test_move_works_from_the_list_and_from_the_right_click_menu = None
+    test_right_click_on_an_unselected_row_selects_it_first = None
+    test_no_button_is_cut_off_with_much_wider_fonts = None
 
 
 if __name__ == "__main__":

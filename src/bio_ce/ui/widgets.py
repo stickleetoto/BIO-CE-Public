@@ -454,6 +454,11 @@ class FlowFrame(tk.Frame):
         total = y + line
         if total and int(self.cget("height")) != total:
             self.configure(height=total)
+        # Ask for the width of one row: place() children don't make a frame ask for any width, and a paned window
+        # gives a pane that asks for nothing almost no room (seen on a 1024x768 screen: a 42 px reading pane).
+        one_row = sum(widget.winfo_reqwidth() for widget in self._items) + self.gap * max(0, len(self._items) - 1)
+        if one_row and int(self.cget("width")) != one_row:
+            self.configure(width=one_row)
 
 
 class Card(tk.Frame):

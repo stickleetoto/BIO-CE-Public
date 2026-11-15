@@ -111,6 +111,9 @@ class SpaceBar(tk.Frame):
             total = y + line + self.gap + high
         if int(self.cget("height")) != total:
             self.configure(height=total)
+        one_row = sum(item.winfo_reqwidth() + self.gap for item in items) + self.chooser.winfo_reqwidth()
+        if int(self.cget("width")) != one_row:
+            self.configure(width=one_row)  # ask for one line's width; narrower is fine, it wraps
 
     def refresh(self) -> None:
         self._spaces = list(self.app.spaces())

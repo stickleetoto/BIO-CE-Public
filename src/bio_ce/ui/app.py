@@ -131,6 +131,10 @@ class BIOCEDesktop:
         gutter = self.theme.px(SPACE_XXL)
         header = tk.Frame(self.main, background=c.bg)
         header.pack(fill="x", padx=gutter, pady=(self.theme.px(SPACE_XL + 4), self.theme.px(SPACE_L + 4)))
+        # The page's buttons are packed first: when the header is too narrow the title text is shortened, never a
+        # button (a cut-off button ignores clicks).
+        self.header_actions = tk.Frame(header, background=c.bg)
+        self.header_actions.pack(side="right", anchor="s")
         titles = tk.Frame(header, background=c.bg)
         titles.pack(side="left", fill="x", expand=True)
         self.header_title = tk.Label(titles, font=self.theme.font("display"), background=c.bg,
@@ -139,8 +143,6 @@ class BIOCEDesktop:
         self.header_subtitle = tk.Label(titles, font=self.theme.font("body"), background=c.bg,
                                         foreground=c.text_secondary, anchor="w")
         self.header_subtitle.pack(fill="x", pady=(self.theme.px(2), 0))
-        self.header_actions = tk.Frame(header, background=c.bg)
-        self.header_actions.pack(side="right", anchor="s")
 
         self.page_host = tk.Frame(self.main, background=c.bg)
         self.page_host.pack(fill="both", expand=True, padx=gutter, pady=(0, self.theme.px(SPACE_XL)))
