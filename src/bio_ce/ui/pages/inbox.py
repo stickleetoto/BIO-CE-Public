@@ -17,7 +17,7 @@ from bio_ce.ui.dialogs import ReviewEditDialog
 from bio_ce.ui.format import format_timestamp, plural, preview, relative_time
 from bio_ce.ui.pages import Page
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS
-from bio_ce.ui.widgets import AutoScrollbar, Button, Card, EmptyState, Pill, WrapLabel, section_label
+from bio_ce.ui.widgets import AutoScrollbar, Button, Card, EmptyState, Pill, Tooltip, WrapLabel, section_label
 
 
 def import_line(meta: dict) -> str:
@@ -41,18 +41,8 @@ class SpaceBar(tk.Frame):
         super().__init__(master, background=c.bg)
         self.app = app
         self.active = active
-        self.memories_tab = Button(self, theme, "Memories", variant="primary" if active == "memories" else "subtle",
-                                   command=lambda: app.show_page("memories"))
-        self.memories_tab.pack(side="left")
-        self.inbox_tab = Button(self, theme, "Inbox", variant="primary" if active == "inbox" else "subtle",
-                                command=lambda: app.show_page("inbox"))
-        self.inbox_tab.pack(side="left", padx=(theme.px(SPACE_XS), 0))
-        self.suggestions_tab = Button(self, theme, "Suggestions",
-                                      variant="primary" if active == "suggestions" else "subtle",
-                                      command=lambda: app.show_page("suggestions"))
-        self.suggestions_tab.pack(side="left", padx=(theme.px(SPACE_XS), 0))
         self.space = tk.StringVar(master=self)
-        self.picker = ttk.Combobox(self, textvariable=self.space, state="readonly", width=28, style="BIO.TCombobox",
+        self.picker = ttk.Combobox(self, textvariable=self.space, state="readonly", width=24, style="BIO.TCombobox",
                                    font=theme.font("body"))
         # The drop-down list is a plain Tk listbox; give it the theme's colors.
         self.option_add("*TCombobox*Listbox.background", c.surface_alt)
@@ -63,7 +53,19 @@ class SpaceBar(tk.Frame):
         tk.Label(self, text="Space", font=theme.font("caption_strong"), background=c.bg,
                  foreground=c.text_muted).pack(side="right", padx=(0, theme.px(SPACE_S)))
         self.picker.bind("<<ComboboxSelected>>", lambda _e: self._chosen())
-        self.personal_pill = Pill(self, theme, "Personal: hosts see it only with your permission", "warning")
+        self.memories_tab = Button(self, theme, "Memories", variant="primary" if active == "memories" else "subtle",
+                                   command=lambda: app.show_page("memories"))
+        self.memories_tab.pack(side="left")
+        self.inbox_tab = Button(self, theme, "Inbox", variant="primary" if active == "inbox" else "subtle",
+                                command=lambda: app.show_page("inbox"))
+        self.inbox_tab.pack(side="left", padx=(theme.px(SPACE_XS), 0))
+        self.suggestions_tab = Button(self, theme, "Suggestions",
+                                      variant="primary" if active == "suggestions" else "subtle",
+                                      command=lambda: app.show_page("suggestions"))
+        self.suggestions_tab.pack(side="left", padx=(theme.px(SPACE_XS), 0))
+        self.personal_pill = Pill(self, theme, "Personal: only hosts you allow", "warning")
+        Tooltip(self.personal_pill, theme, "AI hosts see Personal only with the permission you give each one on the "
+                "Connections page. Session hooks never use it.")
         self._spaces: list = []
 
     def refresh(self) -> None:
@@ -72,7 +74,7 @@ class SpaceBar(tk.Frame):
         current = self.app.current_space()
         self.space.set(current.display_name if current is not None else "General")
         if current is not None and current.is_personal:
-            self.personal_pill.pack(side="right", padx=(0, self.app.theme.px(SPACE_M)))
+            self.personal_pill.pack(side="left", padx=(self.app.theme.px(SPACE_M), 0))
         else:
             self.personal_pill.pack_forget()
         if len(self._spaces) <= 1:
@@ -106,17 +108,18 @@ class InboxPage(Page):
         self.items: dict[str, MemoryRevision] = {}
         Button(self.actions, theme, "Refresh", icon="refresh", variant="subtle",
                command=self.refresh, tooltip="Reload the inbox").pack(side="right")
-        self.import_button = Button(self.actions, theme, "Import…", icon="add",
-                                    command=lambda: app.show_page("import"),
-                                    tooltip="Import memories from ChatGPT, Claude, or another AI")
-        self.import_button.pack(side="right", padx=(0, theme.px(SPACE_S)))
-        app.gate(self.import_button, "create")
         self.space_bar = SpaceBar(self, app, active="inbox")
         self.space_bar.pack(fill="x", pady=(0, theme.px(SPACE_M)))
-        WrapLabel(self, "Hosts in collect mode save lasting information here without asking. Hosts don't see the "
+        intro = tk.Frame(self, background=c.bg)
+        intro.pack(fill="x", pady=(0, theme.px(SPACE_M)))
+        self.import_button = Button(intro, theme, "Import…", icon="add", command=lambda: app.show_page("import"),
+                                    tooltip="Import memories from ChatGPT, Claude, or another AI")
+        self.import_button.pack(side="right", anchor="n", padx=(theme.px(SPACE_M), 0))
+        app.gate(self.import_button, "create")
+        WrapLabel(intro, "Hosts in collect mode save lasting information here without asking. Hosts don't see the "
                   "inbox unless they ask for it, and session hooks never use it. Move what you want to keep to "
                   "your memories; discard the rest.", font=theme.font("body"), foreground=c.text_secondary,
-                  background=c.bg).pack(fill="x", pady=(0, theme.px(SPACE_M)))
+                  background=c.bg).pack(side="left", fill="x", expand=True)
 
         self.cleanup = Card(self, theme, padding=SPACE_L)
         section_label(self.cleanup.body, theme, "Proposed for discarding").pack(fill="x")

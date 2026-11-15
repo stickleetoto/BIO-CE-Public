@@ -29,6 +29,9 @@ class MemoriesActionsFitTests(unittest.TestCase):
         self.second = self.service.add(title="시험용: 이동 B", content="둘째", source_ref="test")
         self.connections = FakeManagedConnections(self.paths.user_database)
         self.connections.control.set_personal_enabled(True)
+        self.service.use_space(PERSONAL_SPACE.curated)
+        self.private = self.service.add(title="시험용: 개인 메모", content="개인", source_ref="test")
+        self.service.use_space(self.connections.control.space("general").curated)
         self.root = new_root()
         self.app = BIOCEDesktop(self.root, self.service, self.paths, self.connections)
         self.page = self.app.memories
@@ -40,23 +43,49 @@ class MemoriesActionsFitTests(unittest.TestCase):
         self.connections.close()
         self.temp.cleanup()
 
-    def show(self, width: int, height: int) -> None:
+    def show(self, width: int, height: int, page: str = "memories") -> None:
         self.root.geometry(f"{width}x{height}+20+20")
-        self.app.show_page("memories")
-        self.page.refresh()
-        self.page.select(self.first.memory_id)
-        for _ in range(5):
+        self.app.show_page(page)
+        if page == "memories":
+            self.page.refresh()
+            rows = self.page.tree.get_children()
+            self.page.select(rows[0])  # a memory of the space shown, so the reading pane is open
+        for _ in range(6):
             self.root.update()
 
-    def test_no_button_is_cut_off_from_the_smallest_window_up(self):
-        for width, height in ((860, 600), (960, 760), (1280, 800)):
-            self.show(width, height)
-            for name in ("edit_button", "history_button", "retract_button", "move_button", "export_button",
-                         "add_button"):
-                button = getattr(self.page, name)
-                with self.subTest(size=(width, height), button=name):
-                    self.assertTrue(button.winfo_ismapped(), "not shown")
-                    self.assertGreaterEqual(button.winfo_width(), button.winfo_reqwidth(), "cut off")
+    def buttons(self, page: str) -> dict:
+        target = self.app.memories if page == "memories" else self.app.inbox
+        found = {f"{page}.space_bar.{name}": getattr(target.space_bar, name)
+                 for name in ("memories_tab", "inbox_tab", "suggestions_tab", "picker")}
+        if page == "memories":
+            found.update({f"memories.{name}": getattr(target, name) for name in (
+                "edit_button", "history_button", "retract_button", "move_button", "export_button", "add_button")})
+        else:
+            found["inbox.import_button"] = target.import_button
+        return found
+
+    def check_every_width(self, label: str) -> None:
+        # Every 20 px from the smallest window up: the sidebar switches modes at 1000 px, which an earlier version
+        # of this test skipped (and where Retract was cut off).
+        for space in ("general", "personal"):
+            self.app.set_space(space)
+            for page in ("memories", "inbox"):
+                for width in range(860, 1301, 20):
+                    self.show(width, 700, page)
+                    for name, widget in self.buttons(page).items():
+                        with self.subTest(fonts=label, space=space, width=width, widget=name):
+                            self.assertTrue(widget.winfo_ismapped(), "not shown")
+                            self.assertGreaterEqual(widget.winfo_width(), widget.winfo_reqwidth(), "cut off")
+
+    def test_no_button_is_cut_off_at_any_width(self):
+        self.check_every_width("default")
+
+    def test_no_button_is_cut_off_with_wider_fonts_either(self):
+        """CI runners and other PCs render wider text; a 25% wider font must still fit (wrapping is fine)."""
+        for font in self.app.theme.fonts.values():
+            size = int(font.cget("size"))
+            font.configure(size=round(size * 1.25) if size > 0 else -round(-size * 1.25))
+        self.check_every_width("125%")
 
     def test_move_works_from_the_list_and_from_the_right_click_menu(self):
         self.show(960, 760)
@@ -66,7 +95,8 @@ class MemoriesActionsFitTests(unittest.TestCase):
             self.page.move_button.invoke()
         self.assertEqual(self.service.list(), ())
         self.service.use_space(PERSONAL_SPACE.curated)
-        self.assertEqual({r.memory_id for r in self.service.list()}, {self.first.memory_id, self.second.memory_id})
+        self.assertEqual({r.memory_id for r in self.service.list()},
+                         {self.first.memory_id, self.second.memory_id, self.private.memory_id})
         self.app.set_space("personal")
         self.page.refresh()
         self.page.tree.selection_set((self.first.memory_id,))

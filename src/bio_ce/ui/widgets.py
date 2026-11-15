@@ -408,6 +408,47 @@ class RowButton(tk.Frame):
         return "break"
 
 
+class FlowFrame(tk.Frame):
+    """Buttons in a row that wraps to the next line when the frame is too narrow, so none is ever cut off.
+
+    pack shrinks the last widgets of a row that doesn't fit, and a cut-off Button ignores clicks. Here every child
+    keeps its requested size; children are placed left to right and start a new line when the next one would not
+    fit. Add children with :meth:`add`; they must be created with this frame as their master.
+    """
+
+    def __init__(self, master: tk.Misc, *, gap: int, background: str) -> None:
+        super().__init__(master, background=background, height=1)
+        self.gap = gap
+        self._items: list[tk.Widget] = []
+        self._width = 0
+        self.bind("<Configure>", self._on_configure, add="+")
+
+    def add(self, widget: tk.Widget) -> tk.Widget:
+        self._items.append(widget)
+        widget.bind("<Configure>", lambda _e: self._relayout(), add="+")
+        self._relayout()
+        return widget
+
+    def _on_configure(self, event) -> None:
+        if int(event.width) != self._width:
+            self._width = int(event.width)
+            self._relayout()
+
+    def _relayout(self) -> None:
+        width = self._width if self._width > 1 else sum(w.winfo_reqwidth() + self.gap for w in self._items)
+        x = y = line = 0
+        for widget in self._items:
+            need, high = widget.winfo_reqwidth(), widget.winfo_reqheight()
+            if x and x + need > width:
+                x, y, line = 0, y + line + self.gap, 0
+            widget.place(x=x, y=y, width=need, height=high)
+            x += need + self.gap
+            line = max(line, high)
+        total = y + line
+        if total and int(self.cget("height")) != total:
+            self.configure(height=total)
+
+
 class Card(tk.Frame):
     """Raised surface with a 1px border. Put content in ``card.body``."""
 

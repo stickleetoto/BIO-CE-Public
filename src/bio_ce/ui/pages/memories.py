@@ -20,6 +20,7 @@ from bio_ce.ui.widgets import (
     Button,
     Card,
     EmptyState,
+    FlowFrame,
     IconButton,
     Pill,
     SearchBox,
@@ -57,28 +58,28 @@ class MemoriesPage(Page):
         app.gate(self.add_button, "create")
         Button(self.actions, theme, "Refresh", icon="refresh", variant="subtle",
                command=self.refresh, tooltip="Reload the list (F5)").pack(side="right", padx=(0, theme.px(SPACE_S)))
-        self.export_button = Button(self.actions, theme, "Export…", variant="subtle", command=app.export_memories,
-                                    tooltip="Save memories as a text file to paste into another AI")
-        self.export_button.pack(side="right", padx=(0, theme.px(SPACE_S)))
-        app.gate(self.export_button, "browse")
 
         self.space_bar = SpaceBar(self, app, active="memories")
         self.space_bar.pack(fill="x", pady=(0, theme.px(SPACE_M)))
         toolbar = tk.Frame(self, background=c.bg)
         toolbar.pack(fill="x", pady=(0, theme.px(SPACE_M)))
         self.query = tk.StringVar(master=self)
-        self.search = SearchBox(toolbar, theme, self.query, "Search titles and text", on_clear=self.refresh)
-        self.search.pack(side="left", fill="x", expand=True)
-        self.search.entry.bind("<Return>", lambda _e: self._search_now())
-        self.search.entry.bind("<KP_Enter>", lambda _e: self._search_now())
-        self.search.entry.bind("<Down>", lambda _e: self._focus_list())
+        self.export_button = Button(toolbar, theme, "Export…", variant="subtle", command=app.export_memories,
+                                    tooltip="Save memories as a text file to paste into another AI")
+        self.export_button.pack(side="right", padx=(theme.px(SPACE_S), 0))
+        app.gate(self.export_button, "browse")
         self.move_button = Button(toolbar, theme, "Move to…", command=self.move_selected,
                                   tooltip="Move the selected memories to another space (or right-click them)")
         self.move_button.pack(side="right", padx=(theme.px(SPACE_S), 0))
         app.gate(self.move_button, "edit")
         self.result_label = tk.Label(toolbar, text="", font=theme.font("caption"), background=c.bg,
                                      foreground=c.text_muted, anchor="e")
-        self.result_label.pack(side="right", padx=(theme.px(SPACE_L), 0))
+        self.result_label.pack(side="right", padx=(theme.px(SPACE_M), 0))
+        self.search = SearchBox(toolbar, theme, self.query, "Search titles and text", on_clear=self.refresh)
+        self.search.pack(side="left", fill="x", expand=True)
+        self.search.entry.bind("<Return>", lambda _e: self._search_now())
+        self.search.entry.bind("<KP_Enter>", lambda _e: self._search_now())
+        self.search.entry.bind("<Down>", lambda _e: self._focus_list())
         self.query.trace_add("write", lambda *_: self._schedule_search())
 
         self.stack = tk.Frame(self, background=c.bg)
@@ -148,17 +149,16 @@ class MemoriesPage(Page):
         self.meta_label = tk.Label(meta, font=theme.font("caption"), background=c.surface, foreground=c.text_muted,
                                    anchor="w")
         self.meta_label.pack(side="left", padx=(theme.px(SPACE_M), 0))
-        actions = tk.Frame(head, background=c.surface)
+        actions = FlowFrame(head, gap=theme.px(SPACE_S), background=c.surface)
         actions.pack(fill="x", pady=(theme.px(SPACE_M + 2), 0))
-        self.edit_button = Button(actions, theme, "Edit", icon="edit", command=self.app.start_edit_memory,
-                                  tooltip="Edit this memory (Ctrl+E)")
-        self.edit_button.pack(side="left")
-        self.history_button = Button(actions, theme, "History", icon="history", command=self.show_history,
-                                     tooltip="See every revision (Ctrl+H)")
-        self.history_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
-        self.retract_button = Button(actions, theme, "Retract…", icon="retract", variant="danger_subtle",
-                                     command=self.retract_selected, tooltip="Hide this memory everywhere (Delete)")
-        self.retract_button.pack(side="right")
+        self.detail_actions = actions
+        self.edit_button = actions.add(Button(actions, theme, "Edit", icon="edit", command=self.app.start_edit_memory,
+                                              tooltip="Edit this memory (Ctrl+E)"))
+        self.history_button = actions.add(Button(actions, theme, "History", icon="history", command=self.show_history,
+                                                 tooltip="See every revision (Ctrl+H)"))
+        self.retract_button = actions.add(Button(actions, theme, "Retract…", icon="retract", variant="danger_subtle",
+                                                 command=self.retract_selected,
+                                                 tooltip="Hide this memory everywhere (Delete)"))
         self.app.gate(self.edit_button, "edit")
         self.app.gate(self.history_button, "history")
         self.app.gate(self.retract_button, "retract")
