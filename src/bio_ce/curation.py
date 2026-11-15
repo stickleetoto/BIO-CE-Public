@@ -41,6 +41,9 @@ ACTIONS = (MERGE, PROMOTE, UPDATE_EXISTING)
 MERGE_THRESHOLD = 0.6
 MERGE_LIMIT = 8
 UPDATE_LOW = 0.45
+# Character similarity alone counts shared openings and endings ("사용자는 … 선호한다"), so two different facts
+# scored 0.6-0.75. A merge or an update also needs this share of the shorter text's distinctive content in common.
+TOPIC_THRESHOLD = 0.6
 PROMOTE_DAYS = 7
 PROMOTE_USES = 2
 DESKTOP_HOST = "bio-ce-desktop"
@@ -169,6 +172,7 @@ class CurationService:
         text = {item.memory_id: f"{item.title}\n{item.content or ''}" for item in items}
         parent = {item.memory_id: item.memory_id for item in items}
         closeness: dict[tuple[str, str], float] = {}
+        common = _common_words(text.values())
 
         def find(node: str) -> str:
             while parent[node] != node:
@@ -185,7 +189,8 @@ class CurationService:
                 if pair in closeness:
                     continue
                 closeness[pair] = similarity(text[item.memory_id], text[other])
-                if closeness[pair] >= self.merge_threshold:
+                if closeness[pair] >= self.merge_threshold and topic_overlap(
+                        text[item.memory_id], text[other], common) >= TOPIC_THRESHOLD:
                     a, b = find(pair[0]), find(pair[1])
                     if a != b:
                         parent[b] = a
@@ -209,7 +214,8 @@ class CurationService:
             if item.memory_id in grouped:
                 continue
             target, score = self._closest_curated(space, text[item.memory_id])
-            if target is not None and UPDATE_LOW <= score < DUPLICATE_THRESHOLD:
+            if target is not None and UPDATE_LOW <= score < DUPLICATE_THRESHOLD and topic_overlap(
+                    text[item.memory_id], f"{target.title}\n{target.content or ''}", common) >= TOPIC_THRESHOLD:
                 yield UPDATE_EXISTING, [item], target, "it may add to or change a memory you have"
                 continue
             row = usage.get(item.memory_id, {})
@@ -384,6 +390,39 @@ def _suggestion(row: dict[str, Any]) -> Suggestion:
 _WORD = re.compile(r"\w{2,}")
 _STOP = {"the", "and", "for", "with", "that", "this", "user", "users", "use", "about", "from", "has", "have",
          "are", "was", "were", "사용자", "사용자는", "사용자의", "있다", "한다"}
+
+
+def _marks(text: str, common: frozenset[str]) -> set[str]:
+    """Two-letter pieces of the words that carry the meaning (not stop words or words most items share).
+    Pieces, not whole words, so "달리기를" and "달리기는" still match."""
+    marks: set[str] = set()
+    for word in _WORD.findall(normalize(text)):
+        if word not in _STOP and word not in common:
+            marks |= {word[index:index + 2] for index in range(len(word) - 1)}
+    return marks
+
+
+def topic_overlap(left: str, right: str, common: frozenset[str] = frozenset()) -> float:
+    """Share of the shorter text's distinctive pieces that the other text has too (0 to 1)."""
+    a, b = _marks(left, common), _marks(right, common)
+    if common and (not a or not b):  # every word is shared (an inbox of repeats of one fact): compare all words
+        a, b = _marks(left, frozenset()), _marks(right, frozenset())
+    if not a or not b:
+        return 0.0
+    return len(a & b) / min(len(a), len(b))
+
+
+def _common_words(texts: Iterable[str]) -> frozenset[str]:
+    """Words in at least 80% of the inbox items (with 5 or more), such as a tag every imported line starts with.
+    Not lower: a few repeats of one fact must keep their own words (3 of 4 items once lost "deploys" this way)."""
+    texts = list(texts)
+    if len(texts) < 5:
+        return frozenset()
+    counts: dict[str, int] = defaultdict(int)
+    for text in texts:
+        for word in set(_WORD.findall(normalize(text))):
+            counts[word] += 1
+    return frozenset(word for word, count in counts.items() if count * 5 >= len(texts) * 4)
 
 
 def _keywords(text: str, limit: int = 8) -> str:

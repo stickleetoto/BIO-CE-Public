@@ -110,6 +110,34 @@ class CurationTests(unittest.TestCase):
         self.assertEqual(updated.source.metadata["from_inbox"], [item.memory_id])
         self.assertEqual(self.titles(INBOX), [])
 
+    def test_items_that_only_share_their_opening_words_are_not_merged(self):
+        """GUI check C (2026-11-15): imported memories all start alike ("사용자는 …"), and two different facts
+        (morning running, tabs over spaces) were suggested as one. Positive control: a real repeat still merges."""
+        lines = ("시험용: 사용자는 아침에 30분 달리기를 한다.", "시험용: 사용자는 탭보다 스페이스를 선호한다.",
+                 "시험용: 사용자는 회의록을 마크다운으로 쓴다.", "시험용: 사용자는 주말에 자전거를 탄다.",
+                 "시험용: 사용자는 한국어 답변을 선호한다.")
+        for line in lines:
+            self.inbox(line, line)  # imported items: the title is the text
+        self.assertEqual(self.service.find(now=NOW), 0, [s.memory_ids for s in self.service.suggestions()])
+        self.inbox("시험용: 사용자는 매일 아침 30분 달리기를 한다.", "시험용: 사용자는 매일 아침 30분 달리기를 한다.")
+        self.assertEqual(self.service.find(now=NOW), 1)
+        (suggestion,) = self.service.suggestions()
+        self.assertEqual(suggestion.action, MERGE)
+        self.assertIn("달리기", suggestion.draft_content)
+        self.assertNotIn("스페이스", suggestion.draft_content)
+
+    def test_an_item_that_only_shares_its_opening_words_does_not_suggest_an_update(self):
+        self.store.add(PERSONAL_SPACE.curated, title="사용자는 탭보다 스페이스를 선호한다.",
+                       content="사용자는 탭보다 스페이스를 선호한다.", source=SourceProvenance("user-entered", "test"))
+        for line in ("사용자는 다크 테마를 선호한다.", "사용자는 한국어 답변을 선호한다."):  # scored 0.75 and 0.62
+            self.inbox(line, line, scope=PERSONAL_SPACE.inbox)
+        self.assertEqual(self.service.find(now=NOW), 0, [s.action for s in self.service.suggestions()])
+        self.inbox("사용자는 코드에서 탭보다 스페이스 네 칸을 선호한다.", "사용자는 코드에서 탭보다 스페이스 네 칸을 선호한다.",
+                   scope=PERSONAL_SPACE.inbox)
+        self.assertEqual(self.service.find(now=NOW), 1)  # positive control: an item that adds to it is suggested
+        (suggestion,) = self.service.suggestions()
+        self.assertEqual(suggestion.action, UPDATE_EXISTING)
+
     def test_rejected_groups_are_not_suggested_again_and_changed_items_go_stale(self):
         self.inbox("Deploys", "The team deploys on Fridays after the stand-up.")
         changed = self.inbox("Deploys", "The team deploys on Fridays after the stand-up meeting.")

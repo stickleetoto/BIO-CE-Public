@@ -178,7 +178,7 @@ class ImportPage(Page):
         bar.grid(row=0, column=1, sticky="ns")
         across.grid(row=1, column=0, sticky="ew")
         area.columnconfigure(0, weight=1)
-        fit_tree_columns(self.tree, theme, "text", floor=120)
+        self.fit_contents = fit_tree_columns(self.tree, theme, "text", floor=120)
         self.tree.bind("<ButtonRelease-1>", self._clicked)
         self.tree.bind("<space>", lambda _e: self.toggle_selected())
         self.tree.bind("<<TreeviewSelect>>", lambda _e: self._show_detail())
@@ -381,6 +381,7 @@ class ImportPage(Page):
                 ", ".join(SENSITIVE_LABELS[key] for key in item.sensitive)))
             if iid in selection:
                 self.tree.selection_add(iid)
+        self.fit_contents(("state", "date", "space", "sensitive"))
         summary = preview.summary()
         self.summary.configure(text=(
             f"New {summary['new']} · Already there {summary['exists']} · To review "

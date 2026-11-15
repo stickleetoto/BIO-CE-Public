@@ -9,7 +9,7 @@ show a visible focus ring, and activate with Enter or Space.
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Callable, Iterable
 import tkinter as tk
 from tkinter import font as tkfont
 from tkinter import ttk
@@ -422,20 +422,31 @@ class RowButton(tk.Frame):
         return "break"
 
 
-def fit_tree_columns(tree: ttk.Treeview, theme: Theme, flexible: str, floor: int = 150) -> None:
+def fit_tree_columns(tree: ttk.Treeview, theme: Theme, flexible: str,
+                     floor: int = 150) -> Callable[[Iterable[str], int], None]:
     """Keep every column of ``tree`` inside its width: ``flexible`` takes what the others leave (at least ``floor``
-    px before scaling), and when that isn't enough the others shrink toward their headings' width."""
+    px before scaling), and when that isn't enough the others shrink toward their headings' width. No column is
+    narrower than its heading while there is room (a "DESTINATION" heading was cut at about 1,000 px).
+
+    Returns ``fit_contents(columns, cap)``: call it after filling the table so those columns get the width of their
+    widest text (at most ``cap`` px before scaling) before ``flexible`` takes the rest."""
     columns = [str(column) for column in tree.cget("columns")]
-    designed = {column: int(tree.column(column, "width")) for column in columns}
+    style = str(tree.cget("style")) or "Treeview"
     try:
-        heading_font = tkfont.nametofont(str(ttk.Style(tree).lookup(str(tree.cget("style")) + ".Heading", "font")))
+        heading_font = tkfont.nametofont(str(ttk.Style(tree).lookup(style + ".Heading", "font")))
     except (tk.TclError, ValueError):
         heading_font = theme.font("caption_strong")
+    try:
+        body_font = tkfont.nametofont(str(ttk.Style(tree).lookup(style, "font")))
+    except (tk.TclError, ValueError):
+        body_font = theme.font("body")
     lowest = {}
     for column in columns:
         heading = str(tree.heading(column, "text"))
         lowest[column] = max(theme.px(24), heading_font.measure(heading) + theme.px(18))
-        tree.column(column, minwidth=min(lowest[column], designed[column]), stretch=False)
+    designed = {column: max(lowest[column], int(tree.column(column, "width"))) for column in columns}
+    for column in columns:
+        tree.column(column, minwidth=lowest[column], stretch=False)
 
     def fit(_event=None) -> None:
         try:
@@ -459,8 +470,16 @@ def fit_tree_columns(tree: ttk.Treeview, theme: Theme, flexible: str, floor: int
             if int(tree.column(column, "width")) != width:
                 tree.column(column, width=width)
 
+    def fit_contents(names: Iterable[str], cap: int = 260) -> None:
+        for column in names:
+            texts = [str(tree.set(iid, column)) for iid in tree.get_children()]
+            widest = max((body_font.measure(text) for text in texts), default=0) + theme.px(18)
+            designed[column] = max(lowest[column], min(theme.px(cap), widest))
+        fit()
+
     tree.bind("<Configure>", fit, add="+")
     fit()
+    return fit_contents
 
 
 def _wrapped_lines(text: str, measure: Callable[[str], int], width: int) -> list[str]:
@@ -917,6 +936,13 @@ class ScrollFrame(tk.Frame):
         self._window = self.canvas.create_window(0, 0, window=self.body, anchor="nw")
         self.body.bind("<Configure>", self._on_body_configure)
         self.canvas.bind("<Configure>", self._on_canvas_configure)
+        # A section that closes or is removed while the view is scrolled below it gets no redraw, so the body keeps
+        # its old size and sends no <Configure>: the page looked empty after an import (GUI check, 2026-11-15).
+        # Unmap and Destroy events of everything inside also reach the window's bindings, so refit on those.
+        self._refit_pending = False
+        top = self.winfo_toplevel()
+        for sequence in ("<Unmap>", "<Destroy>"):
+            top.bind(sequence, self._inside_changed, add="+")
 
     def scroll(self, units: int) -> None:
         first, last = self.canvas.yview()
@@ -933,8 +959,28 @@ class ScrollFrame(tk.Frame):
         if top < view_top * height or top + widget.winfo_height() > view_top * height + visible:
             self.canvas.yview_moveto(max(0.0, (top - self.theme.px(SPACE_L)) / height))
 
+    def _inside_changed(self, event) -> None:
+        if self._refit_pending:
+            return
+        try:
+            if not self.winfo_exists() or not str(event.widget).startswith(str(self.body) + "."):
+                return
+        except tk.TclError:
+            return
+        self._refit_pending = True
+        self.after_idle(self._on_body_configure)
+
     def _on_body_configure(self, _event=None) -> None:
-        self.canvas.configure(scrollregion=(0, 0, self.body.winfo_reqwidth(), self.body.winfo_reqheight()))
+        self._refit_pending = False
+        try:
+            content = self.body.winfo_reqheight()
+            self.canvas.configure(scrollregion=(0, 0, self.body.winfo_reqwidth(), content))
+            # Keep the view on the content when it gets shorter.
+            lowest = max(0, content - self.canvas.winfo_height())
+            if self.canvas.canvasy(0) > lowest + 1:
+                self.canvas.yview_moveto(lowest / content if content else 0.0)
+        except tk.TclError:
+            return  # closing
 
     def _on_canvas_configure(self, event) -> None:
         width = int(event.width)

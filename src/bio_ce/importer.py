@@ -68,10 +68,12 @@ TOO_LONG = "too_long"
 PATH_REVIEW = "path_review"
 EMPTY = "empty"
 BLOCKED = (SECRET, INSTRUCTION, TOO_LONG, EMPTY)
+# Short: the table must fit about 1,000 px with its date column (GUI check I6, 2026-11-15). The full reason is in
+# the line under the table when a row is selected.
 STATE_LABELS = {
-    NEW: "New", EXISTS: "Already there", CONFLICT: "May conflict: goes to review", BATCH_DUPLICATE: "Repeated",
-    SECRET: "Blocked: secret", INSTRUCTION: "Blocked: instruction to an AI", TOO_LONG: "Too long",
-    PATH_REVIEW: "Local path: goes to review", EMPTY: "Empty",
+    NEW: "New", EXISTS: "Already there", CONFLICT: "Review: conflict", BATCH_DUPLICATE: "Repeated",
+    SECRET: "Blocked: secret", INSTRUCTION: "Blocked: instruction", TOO_LONG: "Too long",
+    PATH_REVIEW: "Review: local path", EMPTY: "Empty",
 }
 
 # 12.2: explanations an AI puts around the list. A line that starts with one of these is a source note, not a

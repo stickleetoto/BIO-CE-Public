@@ -25,6 +25,7 @@ from tkinter import ttk
 from bio_ce.ui.widgets import Button, ElideLabel, Pill, WrapLabel
 
 TOLERANCE = 1
+HEADING_PADDING = 16  # ttk's heading padding and divider; with 8, "DESTINATION" passed here but showed cut
 
 
 def _walk(widget: tk.Misc):
@@ -159,6 +160,17 @@ def audit(top: tk.Misc, where: str, *, vertical: bool = True) -> list[str]:
             if total > width + 2:
                 problems.append(f"{where}: table columns off the edge: {describe(widget)} columns={total} "
                                 f"table={width}")
+            try:
+                style = str(widget.cget("style")) or "Treeview"
+                heading_font = tkfont.nametofont(str(ttk.Style(widget).lookup(style + ".Heading", "font")))
+            except (tk.TclError, ValueError):
+                heading_font = tkfont.nametofont("TkHeadingFont")
+            for column in columns:
+                heading = str(widget.heading(column, "text"))
+                need = heading_font.measure(heading) + HEADING_PADDING if heading else 0
+                if need > int(widget.column(column, "width")) + TOLERANCE:
+                    problems.append(f"{where}: table heading cut: '{heading}' in {describe(widget)} "
+                                    f"width={widget.column(column, 'width')} needs={need}")
     return problems
 
 
