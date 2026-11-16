@@ -172,8 +172,9 @@ def forget_memory(store: SQLiteMemoryStore, control: ControlStore, scope: Memory
         originals = kept_originals(store, scope, [memory_id])
     except MemoryNotFoundError:
         # A retracted memory (owner decision 2026-11-16): its earlier revisions still say what it said. The kept
-        # originals come from its last revision before the retraction; a retraction made outside the app (an
-        # approved host request) did not discard them. A missing memory raises here before anything changes.
+        # originals come from its last revision before the retraction. Retracting in this version discards them
+        # (the app and an approved host request both do), but a memory retracted by an earlier build, or by a
+        # direct store write, may still have some. A missing memory raises here before anything changes.
         history = store.retracted_history(scope, memory_id)
         live = [revision for revision in history if revision.kind is not RevisionKind.RETRACTION]
         seeds = _kept_in(dict(live[-1].source.metadata)) if live else []

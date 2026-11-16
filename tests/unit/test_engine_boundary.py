@@ -34,6 +34,8 @@ ALLOWED_SERVICE_CALLS = {
     "kept_count",
     # v0.4.4 Forget completely, also for retracted memories, which only it lists (Community-only; gated by retract)
     "forget", "retracted", "retracted_count",
+    # v0.4.4 move table: undo "To memories"; a proposed change added as a new memory (Community-only)
+    "undo_move_inbox", "approve_review_as_new",
 }
 
 

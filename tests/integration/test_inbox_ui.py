@@ -83,6 +83,20 @@ class InboxUiTests(unittest.TestCase):
         titles = {revision.title for revision in self.service.list(limit=50)}
         self.assertIn("Weekly sync", titles)
 
+    def test_undo_on_the_notice_puts_the_item_back_and_takes_the_memory_back(self):
+        hub = self.inbox()
+        with patch.object(self.app, "edit_before_saving", return_value=("Weekly sync", "The team syncs every "
+                                                                         "Monday morning.")):
+            self.assertTrue(hub.do.to_memories(self.item(hub, self.second.memory_id)))
+        undo = self.app.infobar.action_button
+        self.assertIsNotNone(undo)
+        self.assertEqual(undo.text, "Undo")
+        undo.invoke()
+        self.root.update()
+        self.assertIn(self.second.memory_id, self.ids(self.inbox()))
+        self.assertNotIn("Weekly sync", {revision.title for revision in self.service.list(limit=50)})
+        self.assertEqual(self.app.infobar.title_label.cget("text"), "Move undone")
+
     def test_move_offers_to_update_a_similar_memory(self):
         existing = self.service.add(title="Dark themes", content="The user seems to like dark themes for long "
                                     "sessions.", source_ref="test")

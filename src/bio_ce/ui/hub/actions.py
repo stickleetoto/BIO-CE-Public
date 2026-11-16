@@ -210,13 +210,38 @@ class HubActions:
                 return False
         try:
             with in_space(self.app, item.space):
-                self.app.service.move_inbox(control, item.item_id, title=title, content=content, update=update)
+                result = self.app.service.move_inbox(control, item.item_id, title=title, content=content,
+                                                     update=update)
         except Exception as exc:  # noqa: BLE001 - shown to the user (a secret is refused with its reason)
             self.app.notify("error", str(exc) or t("hub.inbox.move_failed"), title=t("hub.inbox.move_failed_title"))
             return False
         self.hub.close_drawer_for([item.item_id])
         self.app.data_changed()
-        self.app.notify("success", t("hub.inbox.moved", title=preview(title, 50)), title=t("hub.inbox.moved_title"))
+        action = None
+        if hasattr(self.app.service, "undo_move_inbox"):
+            action = (t("common.undo"), lambda: self.undo_to_memories(item, result))
+        self.app.notify("success", t("hub.inbox.moved", title=preview(title, 50)), title=t("hub.inbox.moved_title"),
+                        action=action)
+        return True
+
+    def undo_to_memories(self, item: HubItem, result) -> bool:
+        """The item goes back to the inbox; a memory the move made is retracted, one it updated gets its earlier
+        text back. A memory changed since is left as it is."""
+        control = self.control
+        if control is None:
+            return False
+        try:
+            with in_space(self.app, item.space):
+                self.app.service.undo_move_inbox(control, item.item_id, result)
+        except (RevisionConflictError, MemoryNotFoundError):
+            self.app.notify("warning", t("hub.inbox.undo_changed"), title=t("hub.inbox.undo_failed_title"))
+            return False
+        except Exception as exc:  # noqa: BLE001 - shown to the user
+            self.app.notify("error", str(exc) or t("hub.inbox.undo_failed"), title=t("hub.inbox.undo_failed_title"))
+            return False
+        self.app.data_changed()
+        self.app.notify("success", t("hub.inbox.undone", title=preview(item.title, 50)),
+                        title=t("hub.inbox.undone_title"))
         return True
 
     # Clean-up proposals (Keep / Discard now) ----------------------------------------------------------------------

@@ -157,8 +157,8 @@ class ForgetCompletelyTests(unittest.TestCase):
         self.assertIn(other.encode(), file_bytes(control_database_for(self.database)))  # another review stays
 
     def test_a_memory_retracted_outside_the_app_takes_its_kept_originals_with_it(self):
-        """A retraction an AI host asked for (approved review) does not discard the kept originals; forgetting the
-        retracted memory finds them from its last revision before the retraction."""
+        """A retraction that left the kept originals (an earlier build's, or a direct store write, as here):
+        forgetting the retracted memory finds them from its last revision before the retraction."""
         memory, said, moved, _other, _target, _untouched = self.build()
         current = self.service.read(memory.memory_id)
         self.service._store.retract(GENERAL, memory.memory_id, expected_revision_id=current.revision_id,

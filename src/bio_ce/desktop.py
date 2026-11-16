@@ -243,6 +243,13 @@ class DesktopMemoryService:
         """Apply an AI host's queued proposal, optionally with the user's edits."""
         return ReviewService(self._store, control, self.scope).approve(review_id, title=title, content=content)
 
+    def approve_review_as_new(self, control: ControlStore, review_id: int, *, title: str | None = None,
+                              content: str | None = None) -> MemoryRevision:
+        """"Add as a new memory" for a proposed change (v0.4.4 Reviews tab): the proposal becomes a new memory,
+        the memory it would have changed stays as it is, and the review is recorded as approved."""
+        return ReviewService(self._store, control, self.scope).approve(review_id, title=title, content=content,
+                                                                       as_new=True)
+
     def reject_review(self, control: ControlStore, review_id: int) -> None:
         ReviewService(self._store, control, self.scope).reject(review_id)
 
@@ -291,6 +298,29 @@ class DesktopMemoryService:
         self._store.move(inbox_scope(self.scope), kept_scope(self.scope), [memory_id])
         control.record(host="bio-ce-desktop", connection_id=None, action="inbox-move", outcome="moved",
                        memory_id=revision.memory_id, revision_id=revision.revision_id, title=title,
+                       detail={"project": self.scope.project})
+        return revision
+
+    def undo_move_inbox(self, control: ControlStore, memory_id: str, result: MemoryRevision) -> MemoryRevision:
+        """Undo :meth:`move_inbox` (v0.4.4 move table): the inbox item goes back to the inbox, and the memory goes
+        back too, as long as it is still ``result``: one the move made is retracted (its kept item is not
+        discarded, because it is the item given back), one it updated gets its earlier text and kept list back
+        as a new revision. Nothing is deleted; a memory changed since raises RevisionConflictError and nothing
+        changes. Returns the memory's new revision."""
+        if result.previous_revision_id is None:
+            revision = self._store.retract(self.scope, result.memory_id, expected_revision_id=result.revision_id,
+                                           source=SourceProvenance("user-undo", "bio-ce-inbox",
+                                                                   {"undo_of": result.revision_id}))
+        else:
+            earlier = self._store.read(self.scope, result.memory_id, revision_id=result.previous_revision_id)
+            metadata = {"undo_of": result.revision_id,
+                        "kept": [kept for kept in earlier.source.metadata.get("kept") or () if kept != memory_id]}
+            revision = self._store.revise(self.scope, result.memory_id, expected_revision_id=result.revision_id,
+                                          title=earlier.title, content=earlier.content or "",
+                                          source=SourceProvenance("user-undo", "bio-ce-inbox", metadata))
+        self._store.move(kept_scope(self.scope), inbox_scope(self.scope), [memory_id])
+        control.record(host="bio-ce-desktop", connection_id=None, action="inbox-move", outcome="undone",
+                       memory_id=revision.memory_id, revision_id=revision.revision_id,
                        detail={"project": self.scope.project})
         return revision
 

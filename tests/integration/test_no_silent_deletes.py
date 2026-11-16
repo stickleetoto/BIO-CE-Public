@@ -111,7 +111,11 @@ class NoSilentDeletesTests(unittest.TestCase):
         check("approve all shown", lambda: self.curation().approve_many(rest[:1]))
         check("reject", lambda: self.curation().reject_many(rest[1:]))
         item = self.host_saves("Ramen", "The user likes miso ramen with extra corn.")
-        check("move an inbox item to memories",
+        moved = check("move an inbox item to memories",
+                      lambda: self.service.move_inbox(self.control, item, title="Ramen", content="The user likes "
+                                                      "miso ramen with extra corn."))
+        check("undo the move to memories", lambda: self.service.undo_move_inbox(self.control, item, moved))
+        check("move it to memories again",
               lambda: self.service.move_inbox(self.control, item, title="Ramen", content="The user likes miso ramen "
                                               "with extra corn."))
         target = self.service.add(title="Personal note", content="Something about the user.", source_ref="test")

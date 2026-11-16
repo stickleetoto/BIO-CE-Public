@@ -10,7 +10,8 @@ the tests of the changed modules, and they are never skipped before a candidate 
 
 - the invariant test (no action removes a row unless it is a delete),
 - byte-search tests (deleted or refused text is not in the database, its log, the control file, or a backup),
-- backup and restore tests.
+- backup and restore tests,
+- undo tests that must never overwrite a memory changed meanwhile.
 
 A module listed with ``None`` is in the bundle whole; otherwise only its tests whose name contains one of the
 words. ``tests/unit/test_test_bundles.py`` checks that every entry still matches a test, so a rename can't empty
@@ -37,6 +38,8 @@ DATA_SAFETY: dict[str, tuple[str, ...] | None] = {
     "tests/integration/test_stabilization_paths_and_reviews.py": ("backup_and_restore",),
     "tests/unit/test_desktop.py": ("backup", "restore"),
     "tests/integration/test_mcp_server_lifetime.py": ("restore",),
+    # Undo never overwrites a memory that changed meanwhile
+    "tests/integration/test_inbox_move_undo.py": None,
 }
 
 MARKERS = {

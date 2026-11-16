@@ -243,6 +243,12 @@ STRINGS: dict[str, object] = {
     "hub.inbox.move_failed_title": "Not moved",
     "hub.inbox.moved": "“{title}” is now in your memories. The inbox item is kept until you delete the memory.",
     "hub.inbox.moved_title": "Moved to memories",
+    "hub.inbox.undone": "“{title}” is back in the inbox, and the memory is as it was before.",
+    "hub.inbox.undone_title": "Move undone",
+    "hub.inbox.undo_changed": "The memory changed after the move, so it was left as it is. The inbox item stays kept "
+                              "for it.",
+    "hub.inbox.undo_failed": "The move could not be undone.",
+    "hub.inbox.undo_failed_title": "Not undone",
     "hub.inbox.saved": "Saved {when}",
     "hub.inbox.by_host": "by {host}",
     "hub.inbox.guess": "a guess the host made; you did not state it",

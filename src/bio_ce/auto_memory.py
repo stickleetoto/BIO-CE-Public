@@ -513,14 +513,20 @@ class ReviewService:
         self.control = control
         self.scope = scope
 
-    def approve(self, review_id: int, *, title: str | None = None, content: str | None = None) -> MemoryRevision:
+    def approve(self, review_id: int, *, title: str | None = None, content: str | None = None,
+                as_new: bool = False) -> MemoryRevision:
         """Apply a queued proposal, optionally with the user's edits.
 
         Only a pending item is applied. The memory write and the queue update live in two
         SQLite files, so the status is checked before anything is written: an item that was
         already approved, rejected, or failed must never change memories again.
+
+        ``as_new`` (a proposed change only): add it as a new memory instead; the memory it would have changed
+        stays as it is.
         """
         item = self._pending(review_id)
+        if as_new and item.kind != "update":
+            raise ValueError("Only a proposed change can be added as a new memory.")
         scope = review_scope(item, self.scope)
         final_title = title if title is not None else item.title
         final_content = content if content is not None else (item.content or "")
@@ -529,11 +535,11 @@ class ReviewService:
             raise ValueError("This text contains a password, token, or key, so BIO CE won't store it.")
         source = SourceProvenance(
             APPROVED_SOURCE_TYPE, f"{item.host}:review-{item.review_id}",
-            {"host": item.host, "review_id": item.review_id, "kind": item.kind,
+            {"host": item.host, "review_id": item.review_id, "kind": "update-as-new" if as_new else item.kind,
              "edited": final_title != item.title or final_content != (item.content or "")},
         )
         try:
-            if item.kind == "create":
+            if item.kind == "create" or as_new:
                 revision = self.store.add(scope, title=final_title, content=final_content, source=source)
             elif item.kind == "update":
                 revision = self.store.revise(scope, item.memory_id, expected_revision_id=item.expected_revision_id,
@@ -549,10 +555,11 @@ class ReviewService:
                                 outcome="failed", memory_id=item.memory_id, title=item.title)
             raise RevisionConflictError("The memory changed after this request was made. Nothing was changed.") \
                 from exc
-        self.control.resolve_review(review_id, REVIEW_APPROVED, "approved by the user")
+        self.control.resolve_review(review_id, REVIEW_APPROVED,
+                                    "approved by the user as a new memory" if as_new else "approved by the user")
         self.control.record(host=item.host, connection_id=item.connection_id, action=f"review-{item.kind}",
-                            outcome="approved", memory_id=revision.memory_id, revision_id=revision.revision_id,
-                            title=final_title)
+                            outcome="approved-as-new" if as_new else "approved", memory_id=revision.memory_id,
+                            revision_id=revision.revision_id, title=final_title)
         return revision
 
     def reject(self, review_id: int) -> ReviewItem:
