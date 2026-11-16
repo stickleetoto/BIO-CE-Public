@@ -18,6 +18,7 @@ from unittest.mock import patch
 from bio_ce.control_store import MODE_AUTO_MEMORY
 from bio_ce.desktop import AppDataPaths, BIOCEDesktop, DesktopMemoryService
 from bio_ce.spaces import PERSONAL_SPACE
+from bio_ce.ui.dialogs import EntryEditDialog
 from bio_ce.ui.pages.importing import GENERAL_NOTE, PERSONAL_CHOICE
 from bio_ce.ui.widgets import ScrollFrame
 from tests.ui_audit import HEADING_DIVIDER, style_padding_x
@@ -158,6 +159,38 @@ class ImportUiTests(unittest.TestCase):
         (item,) = self.page.preview.items
         self.assertEqual((item.claimed_date, item.said_at, item.date_text), (None, None, None))
         self.assertEqual(self.page.tree.set(str(item.key), "date"), "Unknown")
+
+    def test_edit_says_the_source_date_goes_and_the_table_shows_unknown(self):
+        """Owner rule (2026-11-16): changing the text clears the source date; the Edit window says so."""
+        self.control.set_personal_enabled(True)
+        self.page.refresh()
+        self.page.choose_destination("personal")
+        self.page.set_text("[2025-07-02] - 시험용: 사용자는 주말에 자전거를 탄다.\n[unknown] - Likes tea.")
+        self.preview()
+        bike, tea = self.page.preview.items
+        shown = []
+
+        class FakeEdit:
+            def __init__(self, parent, theme, **options):
+                shown.append(options)
+
+            def ask(self):
+                return "시험용: 사용자는 토요일마다 자전거를 탄다.", ""
+
+        with patch("bio_ce.ui.pages.importing.EntryEditDialog", FakeEdit):
+            self.page.tree.selection_set(str(bike.key))
+            self.page.edit_selected()
+            self.page.tree.selection_set(str(tea.key))
+            self.page.edit_selected()
+        self.assertEqual(shown[0]["source_date"], "2025-07-02")
+        self.assertEqual(shown[1]["source_date"], "")  # no date: no notice (positive control)
+        self.assertEqual(self.page.tree.set(str(bike.key), "date"), "Unknown")
+        dialog = EntryEditDialog(self.root, self.app.theme, content="x", source_date="2025-07-02")
+        try:
+            texts = " ".join(str(w.cget("text")) for w in dialog.content.winfo_children() if "text" in w.keys())
+        finally:
+            dialog.destroy()
+        self.assertIn("source date (2025-07-02) is cleared", texts)
 
     def test_the_review_list_follows_an_import_and_its_undo(self):
         """GUI check (2026-11-16): after Undo import closed its reviews, Connections still listed 3 while the

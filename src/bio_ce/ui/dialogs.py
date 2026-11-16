@@ -346,7 +346,8 @@ class NameDialog(Dialog):
 class EntryEditDialog(Dialog):
     """Edit one import entry before importing: its text and, optionally, the date the user said it."""
 
-    def __init__(self, parent: tk.Misc, theme: Theme, *, content: str, said_at: str = "", reasons: str = "") -> None:
+    def __init__(self, parent: tk.Misc, theme: Theme, *, content: str, said_at: str = "", reasons: str = "",
+                 source_date: str = "") -> None:
         super().__init__(parent, theme, "Edit entry", resizable=True)
         c = theme.colors
         tk.Label(self.content, text="Edit entry", font=theme.font("title"), background=c.surface,
@@ -354,6 +355,10 @@ class EntryEditDialog(Dialog):
         if reasons:
             WrapLabel(self.content, reasons, font=theme.font("caption"), foreground=c.text_secondary).pack(
                 fill="x", pady=(theme.px(SPACE_XS), 0))
+        if source_date:  # owner rule 2026-11-16: a changed text doesn't keep a date that was about the old one
+            WrapLabel(self.content, f"If you change the text, its source date ({source_date}) is cleared: that "
+                      "date was about the original text. If you know when you said it, enter it below.",
+                      font=theme.font("caption"), foreground=c.warning).pack(fill="x", pady=(theme.px(SPACE_XS), 0))
         WrapLabel(self.content, "An instruction to an AI (\"always answer in Korean\") can be rewritten as your "
                   "preference (\"I prefer answers in Korean\").", font=theme.font("caption"),
                   foreground=c.text_muted).pack(fill="x", pady=(theme.px(SPACE_XS), 0))

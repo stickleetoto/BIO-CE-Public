@@ -489,16 +489,20 @@ class ImportPage(Page):
             self.app.notify("info", "Select one entry to edit.")
             return
         item = self.preview.by_key(keys[0])
-        answer = EntryEditDialog(self.app.root, self.theme, content=item.content, said_at=item.said_at or "",
-                                 reasons="; ".join(item.reasons)).ask()
+        before_said, before_how = item.said_at or "", item.said_at_confirmed
+        answer = EntryEditDialog(self.app.root, self.theme, content=item.content, said_at=before_said,
+                                 reasons="; ".join(item.reasons), source_date=item.claimed_date or "").ask()
         if answer is None:
             return
         content, said_at = answer
         self.planner.edit(self.preview, item.key, content)
-        try:
-            self.planner.set_date(self.preview, item.key, said_at)
-        except ValueError as exc:
-            self.app.notify("warning", str(exc), title="Date not changed")
+        # The date field came filled in: unchanged, it isn't a date the user typed. If the edit cleared a "said" date
+        # that came from the source date, don't write it back as typed.
+        if not (said_at == before_said and before_how != "edited" and item.said_at is None):
+            try:
+                self.planner.set_date(self.preview, item.key, said_at)
+            except ValueError as exc:
+                self.app.notify("warning", str(exc), title="Date not changed")
         self.render_items()
 
     def entry_to_note(self) -> None:

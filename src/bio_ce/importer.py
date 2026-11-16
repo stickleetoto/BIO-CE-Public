@@ -512,8 +512,16 @@ class ImportPlanner:
                 item.checked = checked
 
     def edit(self, preview: ImportPreview, key: int, content: str) -> PreviewItem:
+        """Change an entry's text. A changed text (not only spacing) loses its source date: that date was a claim
+        about the original text (owner rule, 2026-11-16), and so does a "said" date taken from it. A date the user
+        typed (``edited``) stays."""
         item = preview.by_key(key)
-        item.content = " ".join(content.split())
+        new = " ".join(content.split())
+        if normalize(new) != normalize(item.content):
+            item.claimed_date = item.claimed_precision = item.date_text = None
+            if item.said_at_confirmed != "edited":
+                item.said_at = item.said_at_precision = item.said_at_confirmed = None
+        item.content = new
         self.recompute(preview, {key})
         return item
 

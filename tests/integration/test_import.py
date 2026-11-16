@@ -317,6 +317,27 @@ class PreviewTests(_Fixture):
         self.assertFalse(any(other in s.draft_content for s in curation.suggestions()))
         self.assertEqual(len(pairs), 4)
 
+    def test_changing_an_entrys_text_clears_its_source_date(self):
+        """Owner rule (2026-11-16): a source date is a claim about the original text, so Edit that changes the text
+        leaves it unknown; a date the user typed stays. Positive control: a spacing-only edit keeps the date."""
+        preview = self.preview("[2025-07-02] - 시험용: 사용자는 주말에 자전거를 탄다.\n[2025-07-03] - Likes tea.\n"
+                               "[2025-07-04] - Likes rain.")
+        bike, tea, rain = preview.items
+        self.planner.edit(preview, bike.key, "시험용:  사용자는 주말에   자전거를 탄다.")  # spacing only
+        self.assertEqual(bike.claimed_date, "2025-07-02")
+        self.planner.edit(preview, bike.key, "시험용: 사용자는 토요일마다 자전거를 탄다.")
+        self.assertEqual((bike.claimed_date, bike.claimed_precision, bike.date_text), (None, None, None))
+        self.planner.confirm_dates(preview, [tea.key])  # "said" taken from the source date ...
+        self.planner.edit(preview, tea.key, "Likes green tea.")
+        self.assertEqual((tea.claimed_date, tea.said_at), (None, None))  # ... goes with it
+        self.planner.set_date(preview, rain.key, "2024-12-24")  # typed by the user ...
+        self.planner.edit(preview, rain.key, "Likes summer rain.")
+        self.assertEqual((rain.claimed_date, rain.said_at), (None, "2024-12-24"))  # ... stays
+        result = self.service.commit(preview)
+        stored = {r.content: r.source.metadata for r in self.store.list_current(PERSONAL_SPACE.inbox, limit=10)}
+        self.assertNotIn("claimed_date", stored["시험용: 사용자는 토요일마다 자전거를 탄다."])
+        self.assertTrue(result.batch_id)
+
     def test_sensitive_labels_set_the_default_check_by_destination(self):
         text = "\n".join([
             "[2025-01-01] - 사용자는 2023년에 허리 디스크 진단을 받았다.",
