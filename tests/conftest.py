@@ -9,4 +9,4 @@ import os
 
 os.environ.setdefault("BIO_CE_UI_LANGUAGE", "en")
 
-pytest_plugins = ("tests.time_limit",)
+pytest_plugins = ("tests.time_limit", "tests.bundles")
