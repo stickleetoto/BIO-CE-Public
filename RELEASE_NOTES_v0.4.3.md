@@ -92,6 +92,36 @@ SmartScreen, Microsoft Defender, or any other protection.
 - Screens and dialogs fit the smallest window (860×560): buttons wrap, table columns fit their width, long lines
   end in "…", and titles stop at three lines (the full title shows on hover).
 
+## Verified for this candidate
+
+- On the GitHub-hosted runner, for this exact installer (run 43791297661): the automated test suite (424 passed;
+  7 skipped for tools the runner does not have or screens it can't show); the release payload check (every file
+  against the build manifest, no test code, no credentials, build-machine identity, or private identifiers, license
+  notices); an unattended clean install, first launch, installed MCP server and hook, and uninstall; an upgrade
+  from the published v0.4.2-rc1 that keeps every memory, connection, and backup; and a rollback to v0.4.2-rc1 and
+  back with v0.4.3 data (Personal memories, an import, suggestions).
+- Automated tests: deleted inbox items, the items kept for undo, and the text a suggestion copied are not found in
+  the bytes of the database, its log, the connection file, or a later backup (with a control that a plain delete
+  leaves text behind); no action but a delete removes a memory row (with a control action that deletes on
+  purpose); every screen at the smallest window, at 100% and on a 1024×768 screen at 150%, has nothing cut off
+  sideways (with controls that make text too long on purpose).
+- By hand with the candidates of this release, the last one being this installer: the upgrade and the version
+  shown; Personal (turning it on, a host's permission, searches that include or leave out Personal, moving
+  memories, the right-click menu); importing (preview, blocked secrets and instructions, sensitive labels, dates,
+  editing an entry, re-importing the same file without false reviews); sorting suggestions on a file made for it
+  (four merges, none for an unrelated line); Undo right after approving and Undo merge, which bring the original
+  items back; and connecting the Claude desktop app.
+
+## Not verified
+
+- **A Windows PC without Python or Git.**
+- Claude Code, Codex, and Claude desktop app registration from the installed app on the hosted runner (no CLI or
+  app there). The Claude desktop app's installer (non-Store) version.
+- By hand with this installer: exporting, and using BIO CE from a Claude desktop app chat (both were run with an
+  earlier candidate or by automated tests only).
+- Whether real AI models use Personal and the memory skill well over many sessions.
+- Windows 10, a real 125% display setting, and screen readers.
+
 ## Known limitations
 
 In short (details in `docs/known-limitations.md`, section v0.4.3-rc1):
