@@ -158,7 +158,8 @@ class HubUiTests(unittest.TestCase):
         self.assertTrue(card.buttons_shown())
         self.assertEqual([b.text for b in card.buttons.values()], ["Edit", "Move", "Delete"])
         card.show_buttons(False)
-        self.focus(card)
+        self.hub.focus_key = None
+        card.focus_set()  # no helper here: only the card's own FocusIn binding may show the buttons and mark it
         card.event_generate("<FocusIn>")
         self.settle()
         self.assertTrue(card.buttons_shown())
