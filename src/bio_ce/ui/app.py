@@ -32,6 +32,7 @@ from bio_ce.exporter import SOURCE_KINDS, SOURCE_LABELS, UNENCRYPTED_NOTICE, Exp
 from bio_ce.ui.dialogs import ChoiceDialog, ConfirmDialog, ExportDialog, NameDialog, ReviewEditDialog
 from bio_ce.ui.format import HOSTS, preview
 from bio_ce.ui.i18n import resolve, set_language, t
+from bio_ce.ui.pending import PendingDeletes
 from bio_ce.ui.pages import Page
 from bio_ce.ui.pages.connections import ConnectionsPage
 from bio_ce.ui.pages.dashboard import DashboardPage
@@ -112,6 +113,7 @@ class BIOCEDesktop:
             set_language(resolve(None))
         self.theme = theme or Theme(root)
         self.tasks = TaskRunner(root)
+        self.pending = PendingDeletes(self)  # v0.4.4: deletes wait a few seconds for Undo
         self._host_statuses: dict[str, HostStatus | None] = {}
         self._compact: bool | None = None
         self.current: Page | None = None
@@ -268,6 +270,7 @@ class BIOCEDesktop:
             return True
         if self.current is self.editor and not self.editor.confirm_leave():
             return False
+        self.pending.flush()  # leaving the page: a delete waiting for Undo runs now
         if self.current is not None:
             self.current.pack_forget()
             self.current.actions.pack_forget()
@@ -899,6 +902,10 @@ class BIOCEDesktop:
             return
         if self.current is self.editor and not self.editor.confirm_leave():
             return
+        try:
+            self.pending.flush()  # a delete waiting for Undo runs before the app closes
+        except Exception:  # noqa: BLE001 - closing must go on; the delete reports its own failure
+            pass
         for backend in self.engines.values():
             try:
                 backend.close()  # the Community adapter leaves the service to the line below
