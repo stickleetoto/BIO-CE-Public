@@ -23,6 +23,7 @@ from bio_ce.curation import (
     CurationService,
     kept_scope,
     merge_draft,
+    merge_extras,
 )
 from bio_ce.importer import ImportPlanner, ImportService, parse_text
 from bio_ce.spaces import PERSONAL_SPACE
@@ -72,9 +73,10 @@ class CurationTests(unittest.TestCase):
         self.assertEqual(suggestion.action, MERGE)
         self.assertEqual(set(suggestion.memory_ids), {old.memory_id, mid.memory_id, new.memory_id})
         self.assertNotIn(other.memory_id, suggestion.memory_ids)
-        self.assertEqual(suggestion.draft_content.count("The team deploys on Fridays."), 1)
-        self.assertIn("Releases need a tag.", suggestion.draft_content)
-        self.assertIn("Hotfixes can ship any day.", suggestion.draft_content)
+        # v0.4.4 §9.1: the draft is the most detailed item, not all sentences joined; the rest is offered apart.
+        self.assertEqual(suggestion.draft_content, "The team deploys on Fridays. Hotfixes can ship any day.")
+        self.assertEqual(merge_extras(self.service.originals(suggestion), suggestion.draft_content),
+                         ["Releases need a tag."])
         merged = self.service.approve(suggestion.proposal_id)
         self.assertEqual(merged.memory_id, suggestion.memory_ids[0])
         self.assertEqual(self.titles(INBOX), ["Deploys", "Editor"])
@@ -310,6 +312,17 @@ class CurationTests(unittest.TestCase):
                                  content="The user prefers tabs over spaces in Go code.")
         self.assertEqual(self.control.curation_proposal(suggestion.proposal_id)["status"], "stale")
         self.assertEqual(self.titles(INBOX), ["Plan"])  # nothing was removed
+
+    def test_the_merge_draft_is_the_more_detailed_item(self):
+        """GUI check K11 (2026-11-16): a merge joined both sentences. Now the one that says more is the draft, and
+        a sentence only the other has is offered apart (none here: the shorter says nothing the longer doesn't)."""
+        short = self.inbox("회의록", "시험용: 사용자는 회의록을 마크다운으로 쓴다.", recorded=day(1))
+        long = self.inbox("회의록", "시험용: 사용자는 회의록을 마크다운으로 쓰고 매주 금요일에 팀과 공유한다.", recorded=day(2))
+        title, content = merge_draft([short, long])
+        self.assertEqual(content, long.content)  # older but more detailed
+        self.assertEqual(merge_extras([short, long], content), [])
+        title, content = merge_draft([long, short])  # order doesn't matter
+        self.assertEqual(content, long.content)
 
     def test_merge_draft_and_group_limit(self):
         for n in range(10):

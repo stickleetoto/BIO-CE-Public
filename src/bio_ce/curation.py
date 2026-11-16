@@ -81,18 +81,33 @@ def signature(action: str, memory_ids: Iterable[str], target: str | None = None)
     return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
 
+EXTRA_SHARE = 0.8  # a sentence with less of its content in the draft than this is offered apart
+
+
 def merge_draft(revisions: list[MemoryRevision]) -> tuple[str, str]:
-    """The newest item's sentences, then sentences found only in the others; repeated sentences once."""
-    ordered = sorted(revisions, key=lambda revision: revision.recorded_at, reverse=True)
-    sentences: list[str] = []
-    seen: set[str] = set()
-    for revision in ordered:
+    """The most detailed item as the draft (v0.4.4 §9.1, owner GUI check K11): the one that covers most of the
+    others' content, then the longer, then the newer. Joining every sentence made drafts that said things twice."""
+    def detail(revision: MemoryRevision) -> tuple[int, int, str]:
+        mine = _marks(f"{revision.title}\n{revision.content or ''}", frozenset())
+        others = set().union(*(_marks(f"{other.title}\n{other.content or ''}", frozenset())
+                               for other in revisions if other is not revision))
+        return len(mine & others), len(revision.content or ""), revision.recorded_at
+
+    best = max(revisions, key=detail)
+    return best.title, best.content or ""
+
+
+def merge_extras(revisions: list[MemoryRevision], draft: str) -> list[str]:
+    """Sentences of the other items that the draft doesn't say, to add by choice ("Add" on the card); in order."""
+    extras: list[str] = []
+    for revision in sorted(revisions, key=lambda revision: revision.recorded_at, reverse=True):
         for sentence in _sentences(revision.content or ""):
-            key = normalize(sentence)
-            if key and key not in seen and not any(key in other or other in key for other in seen):
-                seen.add(key)
-                sentences.append(sentence)
-    return ordered[0].title, " ".join(sentences)
+            if sentence in extras or topic_overlap(sentence, draft) >= EXTRA_SHARE:
+                continue
+            if any(topic_overlap(sentence, kept) >= EXTRA_SHARE for kept in extras):
+                continue
+            extras.append(sentence)
+    return extras
 
 
 def _sentences(text: str) -> list[str]:
@@ -535,4 +550,4 @@ def _keywords(text: str, limit: int = 8) -> str:
 
 
 __all__ = ["ACTIONS", "ACTION_LABELS", "CurationError", "CurationService", "MERGE", "PROMOTE", "Suggestion",
-           "UPDATE_EXISTING", "kept_scope", "merge_draft", "signature", "topic_overlap"]
+           "UPDATE_EXISTING", "kept_scope", "merge_draft", "merge_extras", "signature", "topic_overlap"]
