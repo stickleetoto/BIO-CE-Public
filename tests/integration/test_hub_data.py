@@ -13,7 +13,7 @@ from bio_ce.core.models import SourceProvenance
 from bio_ce.desktop import AppDataPaths, BIOCEDesktop, DesktopMemoryService
 from bio_ce.spaces import PERSONAL_SPACE
 from bio_ce.storage.sqlite_store import SQLiteMemoryStore
-from bio_ce.ui.hub.data import ALL_SPACES, INBOX, MEMORIES, REVIEWS, SUGGESTIONS, HubData
+from bio_ce.ui.hub.data import ALL_SPACES, INBOX, MEMORIES, RETRACTED, REVIEWS, SUGGESTIONS, HubData
 from tests.integration.test_auto_memory_ui import FakeManagedConnections
 from tests.integration.test_desktop_ui_redesign import new_root
 
@@ -57,6 +57,7 @@ class HubDataTests(unittest.TestCase):
 
     def test_every_state_from_all_spaces_and_from_one(self):
         self.assertEqual(self.data.counts(ALL_SPACES), {MEMORIES: 2, INBOX: 2, SUGGESTIONS: 1, REVIEWS: 1})
+        self.assertEqual(self.data.items(RETRACTED, ALL_SPACES), [])  # nothing retracted yet
         self.assertEqual(self.data.counts("personal"), {MEMORIES: 1, INBOX: 0, SUGGESTIONS: 0, REVIEWS: 1})
         self.assertEqual(self.data.counts("general"), {MEMORIES: 1, INBOX: 2, SUGGESTIONS: 1, REVIEWS: 0})
         titles = {item.title: item.space.space_id for item in self.data.items(MEMORIES, ALL_SPACES)}
@@ -67,6 +68,26 @@ class HubDataTests(unittest.TestCase):
         self.assertEqual([i.title for i in self.data.items(MEMORIES, ALL_SPACES, "helix")], ["Editor"])
         self.assertEqual(self.data.items(MEMORIES, ALL_SPACES, "nothing like this"), [])
         self.assertEqual(len(self.data.items(INBOX, ALL_SPACES, "fridays")), 2)
+
+    def test_retracted_memories_are_listed_apart_and_forgetting_removes_them(self):
+        """Owner decision 2026-11-16: retracted memories can be forgotten completely, so the screen lists them."""
+        self.service.use_space(PERSONAL_SPACE.curated)
+        running = self.service.list()[0]
+        self.service.retract(running)
+        self.service.use_space(self.general.curated)
+        retracted = self.data.items(RETRACTED, ALL_SPACES)
+        self.assertEqual([(i.title, i.space.space_id, i.text) for i in retracted],
+                         [("Running", "personal", "The user runs every morning.")])  # what it said last
+        self.assertTrue(retracted[0].when)  # when it was retracted
+        self.assertEqual(self.data.retracted_count(ALL_SPACES), 1)
+        self.assertEqual(self.data.retracted_count("general"), 0)
+        self.assertNotIn("Running", {i.title for i in self.data.items(MEMORIES, ALL_SPACES)})
+        self.assertEqual(self.data.counts(ALL_SPACES)[MEMORIES], 1, "never counted among current memories")
+        self.service.use_space(PERSONAL_SPACE.curated)
+        self.service.forget(retracted[0].record.last, control=self.control)
+        self.service.use_space(self.general.curated)
+        self.assertEqual(self.data.items(RETRACTED, ALL_SPACES), [])
+        self.assertEqual(self.data.retracted_count(ALL_SPACES), 0)
 
     def test_items_waiting_for_their_delete_are_left_out(self):
         editor = next(i for i in self.data.items(MEMORIES, ALL_SPACES) if i.title == "Editor")
