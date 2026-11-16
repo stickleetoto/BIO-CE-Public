@@ -60,3 +60,12 @@ def pytest_runtest_protocol(item, nextitem):
         yield
     finally:
         faulthandler.cancel_dump_traceback_later()
+
+
+def pytest_unconfigure(config) -> None:
+    """Close the log, so the test sandbox folder that holds it can be removed (tests/sandbox.py)."""
+    global _log
+    if _log is not None:
+        faulthandler.cancel_dump_traceback_later()
+        _log.close()
+        _log = None
