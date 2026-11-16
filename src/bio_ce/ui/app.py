@@ -43,6 +43,8 @@ from bio_ce.ui.pages.importing import ImportPage
 from bio_ce.ui.pages.settings import SettingsPage
 from bio_ce.ui.tasks import TaskRunner
 from bio_ce.ui.theme import (
+    CENTER_FROM,
+    CONTENT_MAX_WIDTH,
     SIDEBAR_COMPACT_BELOW,
     SIDEBAR_COMPACT_WIDTH,
     SIDEBAR_WIDTH,
@@ -155,6 +157,8 @@ class BIOCEDesktop:
         self.page_host.pack(fill="both", expand=True, padx=gutter, pady=(0, self.theme.px(SPACE_XL)))
         self.infobar = InfoBar(self.main, self.theme, before=self.page_host,
                                pack_options={"fill": "x", "padx": gutter, "pady": (0, self.theme.px(SPACE_L))})
+        self._header, self._gutter, self._side_pad = header, gutter, gutter
+        self.main.bind("<Configure>", self._center_content, add="+")
 
         self.dashboard = DashboardPage(self, self.page_host)
         self._space_id = "general"
@@ -240,6 +244,24 @@ class BIOCEDesktop:
     def _on_resize(self, event) -> None:
         if event.widget is self.root:
             self._apply_compact(int(event.width) < self.theme.px(SIDEBAR_COMPACT_BELOW))
+
+    def content_side_pad(self, main_width: int, window_width: int) -> int:
+        """The space left and right of the pages: the gutter, or more on a big window (§3.3), so the content is at
+        most CONTENT_MAX_WIDTH wide and centred."""
+        if window_width < self.theme.px(CENTER_FROM):
+            return self._gutter
+        return max(self._gutter, (main_width - self.theme.px(CONTENT_MAX_WIDTH) + 1) // 2)  # rounded up: never wider
+
+    def _center_content(self, event) -> None:
+        if event.widget is not self.main:
+            return
+        pad = self.content_side_pad(int(event.width), self.root.winfo_width())
+        if pad == self._side_pad:
+            return
+        self._side_pad = pad
+        self._header.pack_configure(padx=pad)
+        self.page_host.pack_configure(padx=pad)
+        self.infobar.set_pack_padx(pad)
 
     def _apply_compact(self, compact: bool) -> None:
         if compact == self._compact:

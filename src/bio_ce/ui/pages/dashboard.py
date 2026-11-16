@@ -13,7 +13,7 @@ from bio_ce.ui.format import HOSTS, host_name, plural, preview, relative_time
 from bio_ce.ui.hub.data import REVIEWS
 from bio_ce.ui.i18n import t
 from bio_ce.ui.pages import Page
-from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS
+from bio_ce.ui.theme import RECENT_TWO_COLUMNS_FROM, SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS
 from bio_ce.ui.widgets import (
     Button,
     Card,
@@ -173,6 +173,8 @@ class DashboardPage(Page):
                   foreground=c.text_muted).pack(side="left", fill="x", expand=True)
 
         self._layout_mode: str | None = None
+        self._recent_rows: list = []
+        self.recent_columns = 1
         self.bind("<Configure>", self._relayout, add="+")
         self._apply_layout("wide", 4)
 
@@ -211,6 +213,22 @@ class DashboardPage(Page):
         mode = "wide" if width >= self.theme.px(820) else "narrow"
         if (mode, columns) != self._layout_mode:
             self._apply_layout(mode, columns)
+        recent = 2 if self.app.root.winfo_width() >= self.theme.px(RECENT_TWO_COLUMNS_FROM) else 1
+        if recent != self.recent_columns:
+            self.recent_columns = recent
+            self._place_recent()
+
+    def _place_recent(self) -> None:
+        """Recent memories in one column, or two on a big window (§3.3), filled row by row."""
+        gap = self.theme.px(SPACE_S)
+        for index in range(2):
+            self.recent_list.columnconfigure(index, weight=0, uniform="")
+        for index, row in enumerate(self._recent_rows):
+            line, column = divmod(index, self.recent_columns)
+            row.grid(row=line, column=column, sticky="ew", pady=self.theme.px(1),
+                     padx=(0 if column == 0 else gap, 0))
+        for column in range(self.recent_columns):
+            self.recent_list.columnconfigure(column, weight=1, uniform="recent")
 
     def _apply_layout(self, mode: str, columns: int) -> None:
         self._layout_mode = (mode, columns)
@@ -264,12 +282,13 @@ class DashboardPage(Page):
 
         for child in self.recent_list.winfo_children():
             child.destroy()
+        self._recent_rows = []
         if recent:
             self.recent_empty.pack_forget()
             self.recent_list.pack(fill="both", expand=True)
             for record in recent:
                 row = RowButton(self.recent_list, theme, lambda memory_id=record.memory_id: self.app.open_memory(memory_id))
-                row.pack(fill="x", pady=theme.px(1))
+                self._recent_rows.append(row)
                 row.track(tk.Label(row.body, text=relative_time(record.recorded_at), font=theme.font("caption"),
                                    background=c.surface, foreground=c.text_muted)).pack(
                     side="right", anchor="n", padx=theme.px(SPACE_S), pady=theme.px(SPACE_S))
@@ -280,6 +299,7 @@ class DashboardPage(Page):
                 snippet = preview(record.content, 110) or "No memory text"
                 row.track(ElideLabel(text_column, text=snippet, font=theme.font("caption"), background=c.surface,
                                      foreground=c.text_secondary, width=1)).pack(fill="x")
+            self._place_recent()
         else:
             self.recent_list.pack_forget()
             if count is not None:

@@ -65,6 +65,12 @@ SIDEBAR_WIDTH = 232
 SIDEBAR_COMPACT_WIDTH = 60
 SIDEBAR_COMPACT_BELOW = 1000
 READING_MAX_WIDTH = 760
+# v0.4.4 §3.3 (100% scale): from CENTER_FROM window width the pages keep to CONTENT_MAX_WIDTH, centred, so a big
+# screen has no long lines or one-sided empty space; from RECENT_TWO_COLUMNS_FROM the dashboard's recent memories
+# use two columns.
+CONTENT_MAX_WIDTH = 1960
+CENTER_FROM = 2200
+RECENT_TWO_COLUMNS_FROM = 1600
 
 _FONT_CHOICES = {
     "body": (("Segoe UI Variable Text", "Segoe UI"), 10, "normal"),

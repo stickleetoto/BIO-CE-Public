@@ -1146,6 +1146,12 @@ class InfoBar(tk.Frame):
         self.close_button.pack(side="right", anchor="n", padx=theme.px(6), pady=theme.px(5))
         self.action_button: Button | None = None
 
+    def set_pack_padx(self, padx: int) -> None:
+        """The side space the bar is shown with (the app centres the pages on a big window)."""
+        self._pack_options = {**self._pack_options, "padx": padx}
+        if self.winfo_manager() == "pack":
+            self.pack_configure(padx=padx)
+
     def show(self, kind: str, message: str, *, title: str = "",
              action: tuple[str, Callable[[], object]] | None = None) -> None:
         c = self.theme.colors

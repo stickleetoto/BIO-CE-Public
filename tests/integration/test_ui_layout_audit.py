@@ -27,7 +27,9 @@ from bio_ce.storage.sqlite_store import SQLiteMemoryStore
 from bio_ce.ui import i18n
 from bio_ce.ui.app import MINIMUM_SIZE
 from bio_ce.ui.dialogs import ExportDialog
+from bio_ce.ui.hub.common import READING_WIDTH, columns_for, pushes
 from bio_ce.ui.hub.data import INBOX as INBOX_TAB, MEMORIES, RETRACTED, REVIEWS, SUGGESTIONS
+from bio_ce.ui.theme import CONTENT_MAX_WIDTH, RECENT_TWO_COLUMNS_FROM
 from bio_ce.ui.widgets import ClampLabel
 from tests.integration.test_auto_memory_ui import FakeManagedConnections
 from tests.integration.test_desktop_ui_redesign import new_root
@@ -52,6 +54,7 @@ class LayoutAuditTests(unittest.TestCase):
     SCREEN: tuple[int, int] | None = None  # None: this PC's screen
     DPI = 96.0  # 96 = 100% scaling
     LANGUAGE = "en"
+    WINDOW: tuple[int, int] | None = None  # None: the minimum window; else this size (a maximized window)
 
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory(prefix="bio-ce-layout-audit-")
@@ -98,8 +101,12 @@ class LayoutAuditTests(unittest.TestCase):
             self.app = BIOCEDesktop(self.root, self.service, self.paths, self.connections)
         self.root.after_cancel(self.app._maintenance_after)
         theme = self.app.theme
-        width = min(width or 10**6, theme.px(MINIMUM_SIZE[0]))
-        height = min(height or 10**6, theme.px(MINIMUM_SIZE[1]))
+        if self.WINDOW is not None:
+            width, height = self.WINDOW
+            self.root.wm_maxsize(10**4, 10**4)  # Tk's own limit is this PC's real screen
+        else:
+            width = min(width or 10**6, theme.px(MINIMUM_SIZE[0]))
+            height = min(height or 10**6, theme.px(MINIMUM_SIZE[1]))
         self.root.geometry(f"{width}x{height}+0+0")
         self.settle()
         # The app's minimum window is 860x560 at 100%; a smaller screen (the CI runner's 1024x768 at 150% is 683x512
@@ -202,7 +209,8 @@ class LayoutAuditTests(unittest.TestCase):
         self.app.open_memory(self.first.memory_id)
         self.settle()
         self.assertEqual([p for p in audit(self.root, "memories") if "deliberately" in p], [])
-        self.hub.drawer.move_button.set_text("Move to a space with a deliberately very long name " * 3)
+        # Long enough for any window, the 2560 px one included (the positive control must not depend on the size).
+        self.hub.drawer.move_button.set_text("Move to a space with a deliberately very long name " * 12)
         self.hub.drawer.action_row.relayout()
         self.settle()
         found = audit(self.root, "memories")
@@ -212,7 +220,7 @@ class LayoutAuditTests(unittest.TestCase):
         self.settle()
         pills = [w for w in _walk(self.hub.reviews) if w.winfo_class() == "Label" and hasattr(w, "kind")]
         self.assertTrue(pills)
-        pills[0].configure(text="Change: " + "a very long note " * 12)
+        pills[0].configure(text="Change: " + "a very long note " * 40)
         self.settle()
         found = audit(self.root, "memories")
         self.assertTrue(any("badge" in p and "a very long note" in p for p in found), found)
@@ -234,7 +242,7 @@ class LayoutAuditTests(unittest.TestCase):
         self.hub.close_drawer(force=True)
         pusher = ClampLabel(self.hub, self.app.theme, max_lines=200)
         pusher.pack(fill="x", before=self.hub.body)
-        pusher.set_text("시험용 긴 제목 " * 600)
+        pusher.set_text("시험용 긴 제목 " * 3000)  # enough lines to push the cards out of any window's height
         self.settle()
         found = audit(self.root, "memories")
         self.assertTrue(any("squeezed out" in p or ("cut" in p and "clamplabel" in p) for p in found), found)
@@ -270,6 +278,72 @@ class CiScreenLayoutAuditTests(LayoutAuditTests):
     DPI = 144.0
 
 
+class BigScreenLayoutAuditTests(LayoutAuditTests):
+    """§3.4: a maximized window on a 1920x1080 screen at 100%. Every screen is audited as above (the inherited
+    tests), and the size table of §3.3 holds: card columns, the drawer's reading width, the list getting its whole
+    width back when the drawer closes, and no big empty area beside the content."""
+
+    SCREEN = (1920, 1080)
+    WINDOW = (1920, 1000)  # the screen less the taskbar and the title bar
+
+    def memories(self) -> None:
+        self.app.open_state(MEMORIES)
+        self.settle()
+
+    def test_the_cards_use_the_columns_of_the_size_table(self):
+        self.memories()
+        self.assertEqual(self.hub.grid.columns, columns_for(self.root.winfo_width(), self.app.theme))
+        self.assertGreater(self.hub.grid.columns, 1)  # positive control: not the one-column list of a small window
+
+    def test_the_drawer_keeps_to_the_reading_width_and_closing_it_gives_the_width_back(self):
+        self.memories()
+        before = self.hub.content.winfo_width()
+        self.app.open_memory(self.first.memory_id)
+        self.settle()
+        self.assertTrue(self.hub.drawer_open)
+        self.assertLessEqual(self.hub.drawer.column.winfo_width(), self.app.theme.px(READING_WIDTH) + 2)
+        self.assertEqual(self.hub.drawer_overlaps(), not pushes(self.root.winfo_width(), self.app.theme))
+        self.hub.close_drawer(force=True)
+        self.settle()
+        self.assertEqual(self.hub.content.winfo_width(), before)
+
+    def test_the_content_fills_the_window_or_is_centred_with_no_big_empty_area(self):
+        theme = self.app.theme
+        for page in ("dashboard", "memories"):
+            with self.subTest(page):
+                self.app.show_page(page)
+                self.settle()
+                host, main = self.app.page_host, self.app.main
+                left = host.winfo_rootx() - main.winfo_rootx()
+                right = main.winfo_rootx() + main.winfo_width() - host.winfo_rootx() - host.winfo_width()
+                self.assertLessEqual(abs(left - right), 2)  # centred (or the same gutter on both sides)
+                self.assertLessEqual(host.winfo_width(), theme.px(CONTENT_MAX_WIDTH))
+                page_frame = self.app.pages.get(page) or self.hub
+                self.assertGreaterEqual(page_frame.winfo_width() / host.winfo_width(), 0.95)
+        self.memories()
+        self.assertGreaterEqual(self.hub.grid.winfo_width() / self.hub.content.winfo_width(), 0.9)
+
+    def test_the_dashboard_shows_recent_memories_in_the_columns_of_the_size_table(self):
+        self.app.show_page("dashboard")
+        self.settle()
+        wanted = 2 if self.root.winfo_width() >= self.app.theme.px(RECENT_TWO_COLUMNS_FROM) else 1
+        self.assertEqual(self.app.dashboard.recent_columns, wanted)
+
+
+class HugeScreenLayoutAuditTests(BigScreenLayoutAuditTests):
+    """The same on a 2560x1440 screen: four card columns, and the content centred at its maximum width."""
+
+    SCREEN = (2560, 1440)
+    WINDOW = (2560, 1360)
+
+    def test_the_content_is_centred_at_its_maximum_width(self):
+        self.memories()
+        theme = self.app.theme
+        self.assertGreater(self.app.main.winfo_width(), theme.px(CONTENT_MAX_WIDTH))  # positive: room to centre
+        self.assertLessEqual(self.app.page_host.winfo_width(), theme.px(CONTENT_MAX_WIDTH))
+        self.assertGreater(self.app.page_host.winfo_rootx() - self.app.main.winfo_rootx(), self.app._gutter)
+
+
 class KoreanLayoutAuditTests(unittest.TestCase):
     """§6.3: the memory screen in Korean at the minimum window and at the CI screen, with a positive control."""
 
@@ -302,6 +376,9 @@ class KoreanLayoutAuditTests(unittest.TestCase):
 
     def test_the_memory_screen_in_korean_at_the_ci_screen(self):
         self.run_screens(CiScreenLayoutAuditTests)
+
+    def test_the_memory_screen_in_korean_on_a_big_screen(self):
+        self.run_screens(HugeScreenLayoutAuditTests)
 
 
 if __name__ == "__main__":
