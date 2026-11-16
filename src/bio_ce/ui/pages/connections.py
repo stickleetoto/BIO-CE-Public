@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from tkinter import ttk
+import os
 from pathlib import Path
 import tkinter as tk
 
@@ -27,8 +28,10 @@ from bio_ce.control_store import (
     MODE_READ_ONLY,
     AuditEntry,
 )
+from bio_ce.server_registry import ServerRecord, end_idle, running
 from bio_ce.ui.dialogs import TextViewerDialog
 from bio_ce.ui.format import HOST_COMMANDS, HOSTS, host_name, preview, relative_time
+from bio_ce.ui.hub.common import when
 from bio_ce.ui.hub.data import REVIEWS
 from bio_ce.ui.i18n import t
 from bio_ce.ui.pages import Page
@@ -72,6 +75,10 @@ PROVIDER_EXAMPLES = {
     "claude": "usually Anthropic, or the cloud provider you configured in Claude Code",
     "claude_desktop": "Anthropic",
 }
+# v0.4.4 §9.2: "End idle servers…" ends only servers with no request for this long. It runs only when the user
+# asks: whether a host starts a new server after one is ended (spike S-MCP) is not known yet, so nothing ends
+# servers on its own.
+IDLE_SERVER_SECONDS = 12 * 3600
 _OUTCOME_STYLE = {
     "pass": ("success", "success"),
     "fail": ("error", "danger"),
@@ -254,6 +261,13 @@ class HostCard(Card):
         self.skill_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
         Button(skill, theme, "Preview", variant="link", command=lambda: page.preview_skill(host)).pack(
             side="left", padx=(theme.px(SPACE_XS), 0))
+        # v0.4.4 §9.2: the BIO CE MCP servers this connection's host keeps running (one per conversation or session).
+        self.servers_row = tk.Frame(self.access, background=c.surface)
+        tk.Label(self.servers_row, text=t("connections.servers.label"), font=theme.font("body_strong"),
+                 background=c.surface, foreground=c.text, width=12, anchor="w").pack(side="left")
+        self.servers_label = tk.Label(self.servers_row, text="", font=theme.font("body"), background=c.surface,
+                                      foreground=c.text_secondary, anchor="w")
+        self.servers_label.pack(side="left")
         self.progress = ttk.Progressbar(body, mode="indeterminate", style="BIO.Horizontal.TProgressbar")
 
         actions = tk.Frame(body, background=c.surface)
@@ -330,6 +344,22 @@ class HostCard(Card):
             self.primary.set_command(lambda: self.page.connect_host(self.host))
             self.primary.set_enabled(status is not None and status.installed and not status.configuration_conflict)
         self.diagnose_button.set_enabled(True)
+
+    def show_servers(self, records: list[ServerRecord]) -> None:
+        """How many BIO CE servers run for this card's connection, and when the latest request came."""
+        status = self.status
+        if status is None or not status.connected or status.legacy or not status.connection_id:
+            self.servers_row.pack_forget()
+            return
+        if records:
+            servers = t("connections.servers.count", count=len(records))
+            latest = max(record.last_request_at for record in records)
+            text = t("connections.servers.last_request", servers=servers, when=when(latest)) if when(latest) \
+                else servers
+        else:
+            text = t("connections.servers.none")
+        self.servers_label.configure(text=text)
+        self.servers_row.pack(fill="x", pady=(self.page.theme.px(SPACE_S), 0))
 
     def set_busy(self, label: str | None) -> None:
         self.busy = label is not None
@@ -429,6 +459,23 @@ class ConnectionsPage(Page):
         self.activity_list = tk.Frame(self.activity_card.body, background=c.surface)
         self.activity_list.pack(fill="x")
 
+        # v0.4.4 §9.2: the running BIO CE MCP servers of all connections, and ending the long-idle ones on request.
+        servers = Card(body, theme, padding=SPACE_L + 4)
+        servers.pack(fill="x", pady=(theme.px(SPACE_M), 0))
+        servers_row = tk.Frame(servers.body, background=c.surface)
+        servers_row.pack(fill="x")
+        servers_column = tk.Frame(servers_row, background=c.surface)
+        servers_column.pack(side="left", fill="x", expand=True)
+        section_label(servers_column, theme, t("connections.servers.title")).pack(fill="x")
+        WrapLabel(servers_column, t("connections.servers.note"), font=theme.font("body"),
+                  foreground=c.text_secondary).pack(fill="x", pady=(theme.px(SPACE_XS), 0))
+        self.servers_total = tk.Label(servers_column, text="", font=theme.font("body_strong"), background=c.surface,
+                                      foreground=c.text, anchor="w")
+        self.servers_total.pack(fill="x", pady=(theme.px(SPACE_S), 0))
+        self.end_idle_button = Button(servers_row, theme, t("connections.servers.end_idle"),
+                                      command=self.end_idle_servers)
+        self.end_idle_button.pack(side="right", anchor="n", padx=(theme.px(SPACE_L), 0))
+
         backups = Card(body, theme, padding=SPACE_L + 4)
         backups.pack(fill="x", pady=(theme.px(SPACE_M), theme.px(SPACE_S)))
         row = tk.Frame(backups.body, background=c.surface)
@@ -450,10 +497,74 @@ class ConnectionsPage(Page):
             if not card.busy:
                 card.apply(statuses.get(host))
         self.refresh_activity()
+        self.refresh_servers()
+
+    def on_show(self) -> None:
+        was_stale = self.stale
+        super().on_show()
+        if not was_stale:
+            self.refresh_servers()  # the count changes without the page knowing; reading it doesn't ask the hosts
 
     @property
     def control(self):
         return getattr(self.app.connection_manager, "control", None)
+
+    # BIO CE servers (v0.4.4 §9.2) -----------------------------------------
+
+    def data_folder(self) -> Path:
+        """Where the servers keep their records: the folder of the user database, as the MCP server sees it."""
+        return Path(self.app.paths.user_database).parent
+
+    def _servers(self) -> list[ServerRecord]:
+        try:
+            return running(self.data_folder())
+        except OSError:
+            return []
+
+    def server_counts(self) -> tuple[dict[str | None, int], int]:
+        """Running BIO CE servers per connection ID, and in total."""
+        counts: dict[str | None, int] = {}
+        records = self._servers()
+        for record in records:
+            counts[record.connection_id] = counts.get(record.connection_id, 0) + 1
+        return counts, len(records)
+
+    def refresh_servers(self) -> None:
+        records = self._servers()
+        for card in self.cards.values():
+            connection = card.status.connection_id if card.status is not None else None
+            card.show_servers([record for record in records if connection and record.connection_id == connection])
+        self.servers_total.configure(text=t("connections.servers.total", count=len(records)) if records
+                                     else t("connections.servers.none"))
+
+    def end_idle_servers(self) -> list[int]:
+        """End the BIO CE servers with no request for IDLE_SERVER_SECONDS, after the user confirms. Returns their
+        process IDs. Only on the user's request: nothing calls this on its own (v0.4.4)."""
+        hours = IDLE_SERVER_SECONDS // 3600
+        idle = [record for record in self._servers()
+                if record.pid != os.getpid() and record.idle_seconds() >= IDLE_SERVER_SECONDS]
+        if not idle:
+            self.refresh_servers()
+            self.app.notify("info", t("connections.servers.none_idle", hours=hours))
+            return []
+        if not self.app.confirm(
+            title=t("connections.servers.end_title", count=len(idle)),
+            message=t("connections.servers.end_message", hours=hours),
+            points=(t("connections.servers.end_point_fail"), t("connections.servers.end_point_keep", hours=hours)),
+            confirm_text=t("connections.servers.end_confirm"),
+            danger=True,
+        ):
+            return []
+        try:
+            ended = end_idle(self.data_folder(), IDLE_SERVER_SECONDS)
+        except OSError:
+            self.refresh_servers()
+            self.app.notify("error", t("connections.servers.end_failed"), title=t("connections.servers.ended_title"))
+            return []
+        self.refresh_servers()
+        self.app.notify("success", t("connections.servers.ended", count=len(ended)),
+                        title=t("connections.servers.ended_title"))
+        return ended
 
     def refresh_activity(self) -> None:
         theme, c = self.theme, self.colors

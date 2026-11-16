@@ -328,6 +328,137 @@ class ImportUiTests(unittest.TestCase):
         self.assertIs(self.app.current, self.app.memories)
         self.assertEqual(self.app.memories.state, INBOX)
 
+    def test_a_cut_text_cell_ends_in_an_ellipsis_and_the_row_tooltip_shows_it_all(self):
+        """v0.4.4 K3: in a narrow window the TEXT column was cut off at its edge, with no "…" and no way to read the
+        rest without Edit."""
+        self.control.set_personal_enabled(True)
+        self.page.refresh()
+        self.page.choose_destination("personal")
+        long_text = ("The user keeps a running list of every bicycle route they have tried around the river, with "
+                     "notes on the surface, the traffic on weekdays, where to stop for water, and which hills are "
+                     "too steep after rain.")
+        self.page.set_text(f"[2025-04-01] - {long_text}\n[2025-04-02] - Likes tea.")
+        self.root.geometry(f"{self.app.theme.px(860)}x{self.app.theme.px(700)}+0+0")
+        self.preview()
+        for _ in range(4):
+            self.root.update()
+        tree = self.page.tree
+        body_font = tkfont.nametofont(str(ttk.Style(tree).lookup(str(tree.cget("style")), "font")))
+        cell_pad = style_padding_x(tree, ".Item") or self.app.theme.px(20)
+        long_item, tea = self.page.preview.items
+        width = int(tree.column("text", "width"))
+        shown = str(tree.set(str(long_item.key), "text"))
+        self.assertTrue(shown.endswith("…"), shown)
+        self.assertLessEqual(body_font.measure(shown) + cell_pad, width, "the shortened text fits its column")
+        self.assertTrue(long_text.startswith(shown[:-1].rstrip()))
+        self.assertEqual(tree.set(str(tea.key), "text"), "Likes tea.")  # positive control: short text is whole
+        tip = self.page.text_tip
+        y = tree.bbox(str(long_item.key))[1] + 2
+        tree.event_generate("<Motion>", x=self.app.theme.px(200), y=y)
+        self.root.update()
+        self.assertEqual(tip.text, long_text)  # the whole sentence, not the 140-character preview
+        tip._show()
+        try:
+            labels = [w for w in tip._window.winfo_children() if "text" in w.keys()]
+            self.assertEqual([str(w.cget("text")) for w in labels], [long_text])
+        finally:
+            tip._hide()
+        tree.event_generate("<Motion>", x=self.app.theme.px(200), y=tree.bbox(str(tea.key))[1] + 2)
+        self.root.update()
+        self.assertEqual(tip.text, "Likes tea.")  # it follows the row under the pointer
+        self.root.geometry(f"{self.app.theme.px(600)}x{self.app.theme.px(700)}+0+0")  # narrower still
+        for _ in range(4):
+            self.root.update()
+        shown = str(tree.set(str(long_item.key), "text"))
+        self.assertLessEqual(body_font.measure(shown) + cell_pad, int(tree.column("text", "width")))
+
+    def test_set_date_puts_a_date_on_the_selected_rows_after_edit_cleared_it(self):
+        """v0.4.4 K5: Edit clears the source date when the text changes, and "Confirm dates" then had nothing to
+        confirm; the user had to open Edit again to type the date."""
+        self.control.set_personal_enabled(True)
+        self.page.refresh()
+        self.page.choose_destination("personal")
+        self.page.set_text("[2025-07-02] - 시험용: 사용자는 주말에 자전거를 탄다.\n[unknown] - Likes tea.\n"
+                           "[2025-01-05] - Uses Neovim.")
+        self.preview()
+        bike, tea, neovim = self.page.preview.items
+
+        class FakeEdit:
+            def __init__(self, parent, theme, **options):
+                pass
+
+            def ask(self):
+                return "시험용: 사용자는 토요일마다 자전거를 탄다.", ""
+
+        with patch("bio_ce.ui.pages.importing.EntryEditDialog", FakeEdit):
+            self.page.tree.selection_set(str(bike.key))
+            self.page.edit_selected()
+        self.assertEqual(self.page.tree.set(str(bike.key), "date"), "Unknown")  # Edit cleared it
+        asked = []
+
+        class FakeSetDate:
+            def __init__(self, parent, theme, **options):
+                asked.append(options)
+
+            def ask(self):
+                return "2025-07"
+
+        self.assertTrue(self.page.set_date_button.winfo_exists())
+        with patch("bio_ce.ui.pages.importing.SetDateDialog", FakeSetDate):
+            self.page.tree.selection_set(str(bike.key), str(tea.key))
+            self.assertEqual(self.page.set_date_selected(), 2)
+            self.page.tree.selection_set(())
+            with patch.object(self.app, "notify") as notice:
+                self.assertEqual(self.page.set_date_selected(), 0)  # nothing selected: nothing changed
+            notice.assert_called_once()
+        self.assertEqual((asked[0]["count"], asked[0]["value"]), (2, ""))  # no date on either yet
+        for item in (bike, tea):
+            self.assertEqual((item.said_at, item.said_at_precision, item.said_at_confirmed),
+                             ("2025-07", "month", "edited"))
+            self.assertEqual(self.page.tree.set(str(item.key), "date"), "Said 2025-07")
+        self.assertIsNone(neovim.said_at)  # not selected: unchanged
+        with patch.object(self.app, "confirm", return_value=True):
+            self.page.do_import()
+            self.app.tasks.wait(30)
+        self.service.use_space(PERSONAL_SPACE.curated)
+        stored = {revision.content: revision.source.metadata for revision in self.service.inbox()}
+        self.assertEqual(stored["Likes tea."]["said_at"], "2025-07")
+
+    def test_set_date_accepts_exactly_the_dates_edit_accepts(self):
+        """K5: the same rules as the Edit window, whose date goes through the planner's set_date."""
+        from bio_ce.ui.pages.importing import SetDateDialog
+        self.control.set_personal_enabled(True)
+        self.page.refresh()
+        self.page.choose_destination("personal")
+        self.page.set_text("[unknown] - Likes tea.")
+        self.preview()
+        (item,) = self.page.preview.items
+        values = ("2025-03-14", "2025-3-4", "2025-03", "March 2025", "14 March 2025", "2025년 3월 14일",
+                  " 2025/03/14. ", "2025-02-30", "2025-13", "1899-12-31", "2101-01-01", "unknown", "yesterday",
+                  "14/03/2025", "next week", "")
+        outcomes = []
+        for value in values:
+            try:
+                self.page.planner.set_date(self.page.preview, item.key, value)
+                edit_takes = bool(value.strip())  # an empty value only clears the date in Edit
+            except ValueError:
+                edit_takes = False
+            dialog = SetDateDialog(self.root, self.app.theme, count=1)
+            try:
+                dialog.date.set(value)
+                dialog._save()
+                takes = not dialog.winfo_exists() and dialog.result is not None
+                outcomes.append(takes)
+                with self.subTest(value=value):
+                    self.assertEqual(takes, edit_takes)
+                    if not takes:
+                        self.assertTrue(dialog.error.winfo_manager())  # says why it stayed open
+            finally:
+                if dialog.winfo_exists():
+                    dialog.destroy()
+        self.assertGreater(outcomes.count(True), 3)  # positive control: both kinds were tried
+        self.assertGreater(outcomes.count(False), 3)
+
     def test_a_partial_import_says_what_to_do_without_a_missing_retry_button(self):
         """Inventory §13 item 2: the notice pointed at a "Retry" button that doesn't exist."""
         from types import SimpleNamespace

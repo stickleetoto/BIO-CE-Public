@@ -437,4 +437,34 @@ STRINGS: dict[str, object] = {
                                 "취소할 수도 있습니다."},
     "import.partial_title": "가져오기 중단됨",
     "import.suggested": {"other": "제안 탭에 이 항목들의 정리 제안이 {count}개 있습니다."},
+    # v0.4.4 K3/K5 import preview and MCP servers
+    "import.set_date.button": "날짜 넣기…",
+    "import.set_date.title": {"other": "항목 {count}개의 날짜 넣기"},
+    "import.set_date.note": "언제 말했는지 안다면 넣으세요. 여기서 넣은 날짜는 편집에서처럼 확인된 날짜로 보고 "
+                            "“말한 날”로 보여 줍니다.",
+    "import.set_date.label": "말한 날(예: 2025-03-14 또는 2025-03)",
+    "import.set_date.invalid": "2025-03-14나 2025-03 같은 날짜를 쓰세요.",
+    "import.set_date.not_changed": "날짜를 바꾸지 않음",
+    "import.set_date.select_first": "먼저 항목을 하나 이상 고르세요.",
+    "import.set_date.save": "날짜 넣기",
+    "connections.servers.label": "서버",
+    "connections.servers.count": {"other": "BIO CE 서버 {count}개 실행 중"},
+    "connections.servers.none": "실행 중인 BIO CE 서버 없음",
+    "connections.servers.last_request": "{servers} · 마지막 요청 {when}",
+    "connections.servers.title": "BIO CE 서버",
+    "connections.servers.note": "연결된 AI 도구는 대화나 세션마다 BIO CE 서버를 하나씩 띄우고, 그것이 열려 있는 동안 "
+                                "유지합니다. 서버는 호스트가 닫을 때 끝나며, BIO CE가 스스로 끝내지는 않습니다.",
+    "connections.servers.total": {"other": "모두 {count}개 실행 중"},
+    "connections.servers.end_idle": "쉬는 서버 끝내기…",
+    "connections.servers.none_idle": "{hours}시간 이상 요청이 없던 BIO CE 서버가 없습니다. 아무것도 끝내지 않았습니다.",
+    "connections.servers.end_title": {"other": "쉬는 서버 {count}개를 끝낼까요?"},
+    "connections.servers.end_message": "이 BIO CE 서버들은 {hours}시간 이상 요청이 없었습니다.",
+    "connections.servers.end_point_fail": "이 서버를 쓰던 대화는 호스트가 새 서버를 띄울 때까지 다음 기억 호출이 "
+                                          "실패할 수 있습니다.",
+    "connections.servers.end_point_keep": "최근 {hours}시간 안에 요청이 있던 서버는 계속 실행됩니다. 기억은 바뀌지 "
+                                          "않습니다.",
+    "connections.servers.end_confirm": "서버 끝내기",
+    "connections.servers.ended": {"other": "쉬는 서버 {count}개를 끝냈습니다."},
+    "connections.servers.ended_title": "서버 끝냄",
+    "connections.servers.end_failed": "쉬는 서버를 모두 끝내지는 못했습니다. 개수는 아직 실행 중인 서버입니다.",
 }

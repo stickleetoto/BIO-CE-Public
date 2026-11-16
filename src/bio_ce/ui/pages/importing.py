@@ -24,19 +24,22 @@ from bio_ce.importer import (
     STATE_LABELS,
     ImportCancelled,
     ImportRejected,
+    parse_date,
     parse_text,
     read_import_file,
 )
-from bio_ce.ui.dialogs import EntryEditDialog
+from bio_ce.ui.dialogs import Dialog, EntryEditDialog
 from bio_ce.ui.format import format_timestamp, plural, preview as short
 from bio_ce.ui.hub.data import INBOX, SUGGESTIONS
 from bio_ce.ui.i18n import t
 from bio_ce.ui.pages import Page
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS
+from bio_ce.ui.tree_text import ElidedColumn, RowTooltip
 from bio_ce.ui.widgets import (
     AutoScrollbar,
     Button,
     Card,
+    Field,
     FlowFrame,
     Pill,
     fit_tree_columns,
@@ -157,9 +160,13 @@ class ImportPage(Page):
                               ("Uncheck visible", lambda: self.check_visible(False)),
                               ("Destination…", self.destination_for_selected),
                               ("Confirm dates…", self.confirm_dates_selected),
+                              (t("import.set_date.button"), self.set_date_selected),
                               ("Edit…", self.edit_selected),
                               ("Not a memory", self.entry_to_note)):
-            tools.add(Button(tools, theme, text, variant="link", command=command))
+            button = Button(tools, theme, text, variant="link", command=command)
+            tools.add(button)
+            if command == self.set_date_selected:
+                self.set_date_button = button
         area = tk.Frame(self.result.body, background=c.surface)
         area.pack(fill="both", expand=True)
         self.tree = ttk.Treeview(area, columns=("check", "state", "date", "text", "space", "sensitive"),
@@ -181,6 +188,9 @@ class ImportPage(Page):
         across.grid(row=1, column=0, sticky="ew")
         area.columnconfigure(0, weight=1)
         self.fit_contents = fit_tree_columns(self.tree, theme, "text", floor=120)
+        # K3: TEXT ends in "…" when it doesn't fit, and the row's tooltip has the whole entry.
+        self.text_cells = ElidedColumn(self.tree, theme, "text")
+        self.text_tip = RowTooltip(self.tree, theme, self._row_text)
         self.tree.bind("<ButtonRelease-1>", self._clicked)
         self.tree.bind("<space>", lambda _e: self.toggle_selected())
         self.tree.bind("<<TreeviewSelect>>", lambda _e: self._show_detail())
@@ -369,6 +379,7 @@ class ImportPage(Page):
         names = self._names()
         selection = set(self.tree.selection())
         self.tree.delete(*self.tree.get_children())
+        self.text_cells.clear()
         for item in self.visible_items():
             if item.said_at:
                 when = f"Said {item.said_at}"
@@ -377,13 +388,15 @@ class ImportPage(Page):
             else:
                 when = "Unknown"
             iid = str(item.key)
+            self.text_cells.set(iid, item.display_content)
             self.tree.insert("", "end", iid=iid, values=(
-                "☑" if item.checked else "☐", STATE_LABELS[item.state], when, short(item.display_content, 140),
+                "☑" if item.checked else "☐", STATE_LABELS[item.state], when, self.text_cells.text(iid),
                 names.get(item.destination or "", "Choose…"),
                 ", ".join(SENSITIVE_LABELS[key] for key in item.sensitive)))
             if iid in selection:
                 self.tree.selection_add(iid)
         self.fit_contents(("state", "date", "space", "sensitive"))
+        self.text_cells.fit()
         summary = preview.summary()
         self.summary.configure(text=(
             f"New {summary['new']} · Already there {summary['exists']} · To review "
@@ -414,6 +427,15 @@ class ImportPage(Page):
             self.unreadable_toggle.pack_forget()
             self.unreadable_list.pack_forget()
         self._sync_buttons()
+
+    def _row_text(self, iid: str) -> str:
+        """The whole entry of a preview row, for its tooltip."""
+        if self.preview is None or not iid.isdigit():
+            return ""
+        try:
+            return self.preview.by_key(int(iid)).display_content
+        except (KeyError, LookupError, ValueError):
+            return ""
 
     def toggle_unreadable(self) -> None:
         if self.unreadable_list.winfo_manager():
@@ -484,6 +506,29 @@ class ImportPage(Page):
                                            how="preview-item" if len(dated) == 1 else "preview-bulk")
         self.render_items()
         return count
+
+    def set_date_selected(self) -> int:
+        """K5: put a date the user knows on the selected entries, e.g. after Edit cleared the source date. The same
+        rules as the date in Edit: a date typed here counts as confirmed ("said on")."""
+        keys = self.selected_keys()
+        if self.preview is None or not keys:
+            self.app.notify("info", t("import.set_date.select_first"))
+            return 0
+        dates = {self.preview.by_key(key).said_at or "" for key in keys}
+        answer = SetDateDialog(self.app.root, self.theme, count=len(keys),
+                               value=dates.pop() if len(dates) == 1 else "").ask()
+        if answer is None:
+            return 0
+        changed = 0
+        for key in keys:
+            try:
+                self.planner.set_date(self.preview, key, answer)
+            except ValueError:
+                self.app.notify("warning", t("import.set_date.invalid"), title=t("import.set_date.not_changed"))
+                break
+            changed += 1
+        self.render_items()
+        return changed
 
     def edit_selected(self) -> None:
         keys = self.selected_keys()
@@ -689,6 +734,43 @@ class ImportPage(Page):
                         + (f"; closed {plural(outcome['reviews_closed'], 'review')}" if outcome["reviews_closed"]
                            else "") + ".", title="Import undone")
         return outcome
+
+
+class SetDateDialog(Dialog):
+    """K5: one date for the selected preview entries. It accepts what the Edit window's date accepts (the importer's
+    ``parse_date``, which the planner's ``set_date`` uses); empty is refused here, since clearing is not the point."""
+
+    def __init__(self, parent: tk.Misc, theme, *, count: int, value: str = "") -> None:
+        super().__init__(parent, theme, t("import.set_date.title", count=count))
+        c = theme.colors
+        tk.Label(self.content, text=t("import.set_date.title", count=count), font=theme.font("title"),
+                 background=c.surface, foreground=c.text, anchor="w").pack(fill="x")
+        WrapLabel(self.content, t("import.set_date.note"), font=theme.font("caption"), wraplength=theme.px(380),
+                  foreground=c.text_secondary).pack(fill="x", pady=(theme.px(SPACE_XS), 0))
+        tk.Label(self.content, text=t("import.set_date.label"), font=theme.font("body_strong"), background=c.surface,
+                 foreground=c.text, anchor="w").pack(fill="x", pady=(theme.px(SPACE_M), 0))
+        self.date = tk.StringVar(master=self, value=value)
+        self.field = Field(self.content, theme, textvariable=self.date)
+        self.field.pack(fill="x", pady=(theme.px(SPACE_XS), 0))
+        self.error = WrapLabel(self.content, t("import.set_date.invalid"), font=theme.font("caption"),
+                               wraplength=theme.px(380), foreground=c.danger)
+        self.field.entry.bind("<Return>", lambda _event: self._save())
+        self.add_button(t("import.set_date.save"), self._save, variant="primary")
+        self.add_button(t("common.cancel"), lambda: self.finish(None))
+        self.result = None
+
+    def _save(self) -> None:
+        value = self.date.get().strip()
+        parsed, _precision = parse_date(value) if value else (None, None)
+        if parsed is None:
+            self.field.set_error(True)
+            self.error.pack(fill="x", pady=(self.theme.px(SPACE_XS), 0))
+            return
+        self.finish(value)
+
+    def ask(self) -> str | None:
+        self.present(focus=self.field)
+        return self.result  # type: ignore[return-value]
 
 
 def theme_px(page: Page, value: int) -> int:

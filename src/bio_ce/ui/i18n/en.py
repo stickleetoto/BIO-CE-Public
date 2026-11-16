@@ -475,4 +475,35 @@ STRINGS: dict[str, object] = {
     "import.partial_title": "Import interrupted",
     "import.suggested": {"one": "BIO CE has {count} sorting suggestion for them on the Suggestions tab.",
                          "other": "BIO CE has {count} sorting suggestions for them on the Suggestions tab."},
+    # v0.4.4 K3/K5 import preview and MCP servers
+    "import.set_date.button": "Set date…",
+    "import.set_date.title": {"one": "Set the date of {count} entry", "other": "Set the date of {count} entries"},
+    "import.set_date.note": "When you said it, if you know. A date entered here counts as confirmed, as in Edit, "
+                            "and is shown as “said on”.",
+    "import.set_date.label": "Said on (for example 2025-03-14 or 2025-03)",
+    "import.set_date.invalid": "Use a date such as 2025-03-14 or 2025-03.",
+    "import.set_date.not_changed": "Date not changed",
+    "import.set_date.select_first": "Select one or more entries first.",
+    "import.set_date.save": "Set date",
+    "connections.servers.label": "Servers",
+    "connections.servers.count": {"one": "{count} BIO CE server running", "other": "{count} BIO CE servers running"},
+    "connections.servers.none": "No BIO CE server running",
+    "connections.servers.last_request": "{servers} · last request {when}",
+    "connections.servers.title": "BIO CE servers",
+    "connections.servers.note": "Each conversation or session of a connected AI tool starts its own BIO CE server "
+                                "and keeps it while that stays open. A server ends when its host closes it; BIO CE "
+                                "never ends one on its own.",
+    "connections.servers.total": {"one": "{count} running in total", "other": "{count} running in total"},
+    "connections.servers.end_idle": "End idle servers…",
+    "connections.servers.none_idle": "No BIO CE server has been idle for {hours} hours or more. Nothing was ended.",
+    "connections.servers.end_title": {"one": "End {count} idle server?", "other": "End {count} idle servers?"},
+    "connections.servers.end_message": "These BIO CE servers have had no request for {hours} hours or more.",
+    "connections.servers.end_point_fail": "A conversation that used one of them may fail its next memory call until "
+                                          "its host starts a new server.",
+    "connections.servers.end_point_keep": "Servers with a request in the last {hours} hours keep running. Your "
+                                          "memories are not changed.",
+    "connections.servers.end_confirm": "End servers",
+    "connections.servers.ended": {"one": "Ended {count} idle server.", "other": "Ended {count} idle servers."},
+    "connections.servers.ended_title": "Servers ended",
+    "connections.servers.end_failed": "BIO CE couldn't end every idle server. The count shows what still runs.",
 }
