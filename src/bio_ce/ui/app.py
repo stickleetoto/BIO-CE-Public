@@ -31,6 +31,7 @@ from bio_ce.spaces import PERSONAL_SPACE
 from bio_ce.exporter import SOURCE_KINDS, SOURCE_LABELS, UNENCRYPTED_NOTICE, ExportOptions, ExportRefused, write_export
 from bio_ce.ui.dialogs import ChoiceDialog, ConfirmDialog, ExportDialog, NameDialog, ReviewEditDialog
 from bio_ce.ui.format import HOSTS, preview
+from bio_ce.ui.i18n import resolve, set_language, t
 from bio_ce.ui.pages import Page
 from bio_ce.ui.pages.connections import ConnectionsPage
 from bio_ce.ui.pages.dashboard import DashboardPage
@@ -60,11 +61,11 @@ if TYPE_CHECKING:
     from bio_ce.desktop import AppDataPaths, DesktopMemoryService
 
 
-NAVIGATION = (
-    ("dashboard", "Dashboard", "dashboard", "Ctrl+1"),
-    ("memories", "Memories", "memories", "Ctrl+2"),
-    ("connections", "Connections", "connections", "Ctrl+3"),
-    ("settings", "Settings", "settings", "Ctrl+4"),
+NAVIGATION = (  # (page, text key, icon, shortcut)
+    ("dashboard", "nav.dashboard", "dashboard", "Ctrl+1"),
+    ("memories", "nav.memories", "memories", "Ctrl+2"),
+    ("connections", "nav.connections", "connections", "Ctrl+3"),
+    ("settings", "nav.settings", "settings", "Ctrl+4"),
 )
 DEFAULT_SIZE = (1200, 780)
 MINIMUM_SIZE = (860, 560)
@@ -104,6 +105,11 @@ class BIOCEDesktop:
         self._actions: dict[str, ActionState] = {}
         self.paths = paths
         self.connection_manager = connection_manager or MCPConnectionManager(service.database, paths.root)
+        control = getattr(self.connection_manager, "control", None)
+        try:  # before any screen is built: the app's text language (v0.4.4)
+            set_language(resolve(control.ui_language() if control is not None else None))
+        except Exception:  # noqa: BLE001 - an unreadable setting: same as Windows
+            set_language(resolve(None))
         self.theme = theme or Theme(root)
         self.tasks = TaskRunner(root)
         self._host_statuses: dict[str, HostStatus | None] = {}
@@ -207,7 +213,7 @@ class BIOCEDesktop:
 
         self.nav: dict[str, NavItem] = {}
         for key, label, icon, shortcut in NAVIGATION:
-            item = NavItem(self.sidebar, theme, label, icon, lambda target=key: self.show_page(target),
+            item = NavItem(self.sidebar, theme, t(label), icon, lambda target=key: self.show_page(target),
                            shortcut=shortcut)
             item.pack(fill="x", padx=theme.px(SPACE_S), pady=theme.px(1))
             self.nav[key] = item

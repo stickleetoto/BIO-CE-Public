@@ -212,6 +212,8 @@ CURATION_DISCARDED = "discarded"
 CURATION_FAILED = "failed"
 RESTORE_KEEP_DAYS = 7
 PERSONAL_ENABLED_KEY = "personal_enabled"
+UI_LANGUAGE_KEY = "ui_language"  # v0.4.4: app_settings row, no schema change
+UI_LANGUAGES = ("auto", "en", "ko")
 # The only control tables a restore reads from the backup's pair file. Everything else (connections, their space
 # permissions and settings, the audit log, the review queue, app_settings) keeps its current rows.
 RESTORED_FROM_BACKUP = ("spaces", "space_folders", "inbox_usage", "curation_items")
@@ -769,6 +771,24 @@ class ControlStore:
     def personal_space(self) -> Space | None:
         """The built-in Personal space while it is on, else None."""
         return PERSONAL_SPACE if self.personal_enabled() else None
+
+    # App language (v0.4.4) ----------------------------------------------------
+
+    def ui_language(self) -> str:
+        """The app language the user chose: "auto" (the default: same as Windows), "en", or "ko"."""
+        with self._lock:
+            row = self._connection.execute("SELECT value FROM app_settings WHERE key = ?",
+                                           (UI_LANGUAGE_KEY,)).fetchone()
+        return row[0] if row is not None and row[0] in UI_LANGUAGES else "auto"
+
+    def set_ui_language(self, choice: str) -> None:
+        if choice not in UI_LANGUAGES:
+            raise ValueError("the app language is auto, en, or ko")
+        with self._write():
+            self._connection.execute(
+                "INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+                (UI_LANGUAGE_KEY, choice, _now()))
 
     def personal_access(self, connection_id: str) -> tuple[bool, bool]:
         """The stored Personal permission for one connection (before its mode): (can_read, can_write)."""
