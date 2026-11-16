@@ -31,7 +31,7 @@ from bio_ce.control_store import (
     CURATION_DISCARDED,
     ControlStore,
 )
-from bio_ce.core.models import MemoryNotFoundError, MemoryScope
+from bio_ce.core.models import MemoryNotFoundError, MemoryScope, RevisionKind
 from bio_ce.storage.sqlite_store import INBOX_SUFFIX, KEPT_SUFFIX, SQLiteMemoryStore, is_inbox_namespace
 
 
@@ -79,9 +79,15 @@ def kept_originals(store: SQLiteMemoryStore, scope: MemoryScope, memory_ids: lis
     From the current revision: the store carries ``kept`` over to every later revision unless a write sets it (an
     undo sets the earlier list), so an item an undo gave back is never claimed by its old result. Read before a
     retraction: a retracted memory can't be read any more."""
+    return _kept_chain(store, scope, [(scope, memory_id) for memory_id in memory_ids])
+
+
+def _kept_chain(store: SQLiteMemoryStore, scope: MemoryScope, queue: list[tuple[MemoryScope, str]], *,
+                found: list[str] | None = None) -> list[str]:
     aside = kept_scope(scope)
-    found: list[str] = []
-    queue = [(scope, memory_id) for memory_id in memory_ids]
+    found = [] if found is None else found
+    for kept_id in found:
+        queue.append((aside, kept_id))
     while queue:
         where, memory_id = queue.pop()
         try:
@@ -150,7 +156,8 @@ class ForgetResult:
 
 def forget_memory(store: SQLiteMemoryStore, control: ControlStore, scope: MemoryScope, memory_id: str, *,
                   host: str = DESKTOP_HOST) -> ForgetResult:
-    """Forget a curated memory completely (v0.4.4 §7.1): no undo, and only a person asks for it.
+    """Forget a curated memory completely (v0.4.4 §7.1): no undo, and only a person asks for it. A retracted memory
+    can be forgotten too: its earlier revisions still hold what it said.
 
     In this order: the inbox items kept for it are discarded first (as a retraction does); the review items about
     it are closed and lose their text; the control file's other text about it goes (:meth:`forget_memories`); the
@@ -160,10 +167,20 @@ def forget_memory(store: SQLiteMemoryStore, control: ControlStore, scope: Memory
     """
     if is_inbox_namespace(scope.namespace):
         raise PermissionError("inbox items are discarded, not forgotten")
-    history = store.history(scope, memory_id)  # a missing or retracted memory raises before anything changes
+    try:
+        history = store.history(scope, memory_id)
+        originals = kept_originals(store, scope, [memory_id])
+    except MemoryNotFoundError:
+        # A retracted memory (owner decision 2026-11-16): its earlier revisions still say what it said. The kept
+        # originals come from its last revision before the retraction; a retraction made outside the app (an
+        # approved host request) did not discard them. A missing memory raises here before anything changes.
+        history = store.retracted_history(scope, memory_id)
+        live = [revision for revision in history if revision.kind is not RevisionKind.RETRACTION]
+        seeds = _kept_in(dict(live[-1].source.metadata)) if live else []
+        originals = _kept_chain(store, scope, [], found=list(dict.fromkeys(seeds)))
     review_ids = sorted({int(revision.source.metadata["review_id"]) for revision in history
                          if type(revision.source.metadata.get("review_id")) is int})
-    kept = erase_kept_for(store, control, scope, kept_originals(store, scope, [memory_id]), host=host)
+    kept = erase_kept_for(store, control, scope, originals, host=host)
     reviews = control.forget_reviews([memory_id], review_ids=review_ids)
     control.forget_memories([memory_id])
     item_id = control.open_discard([memory_id], status=CURATION_CLEANUP_PENDING)

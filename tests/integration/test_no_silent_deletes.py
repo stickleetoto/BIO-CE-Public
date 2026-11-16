@@ -143,6 +143,10 @@ class NoSilentDeletesTests(unittest.TestCase):
                                   source_ref="test")
         check("forget completely", lambda: self.service.forget(doomed, control=self.control), deletes=True)
         self.assertNotIn(doomed.memory_id, rows(self.database)["memories"])  # positive: forgetting removes the row
+        (retracted,) = [r for r in self.service.retracted() if r.last.memory_id == note.memory_id]
+        check("forget a retracted memory", lambda: self.service.forget(retracted.last, control=self.control),
+              deletes=True)
+        self.assertNotIn(note.memory_id, rows(self.database)["memories"])
 
     def test_no_action_removes_a_row_unless_it_is_a_delete(self):
         self.every_action()

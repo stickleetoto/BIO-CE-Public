@@ -51,7 +51,7 @@ from bio_ce.inbox import (
     run_expiry,
 )
 from bio_ce.memory_policy import DUPLICATE_THRESHOLD, detect_secrets, normalize, similarity
-from bio_ce.storage.sqlite_store import SQLiteMemoryStore
+from bio_ce.storage.sqlite_store import RetractedMemory, SQLiteMemoryStore
 from bio_ce.ui.app import BIOCEDesktop
 from bio_ce.ui.dialogs import ask_privacy_consent
 from bio_ce.ui.theme import Theme, app_icon, apply_window_chrome, enable_windows_dpi_awareness
@@ -215,7 +215,8 @@ class DesktopMemoryService:
         review items about it from BIO CE's files. No undo. Backups and exports made earlier still contain it.
 
         ``completed`` is False while another process (a connected MCP server) holds an older snapshot; the clean-up
-        then finishes later through :meth:`finish_cleanups`."""
+        then finishes later through :meth:`finish_cleanups`. ``current`` may be a retracted memory's last revision
+        (from :meth:`retracted`): its earlier revisions are erased the same way."""
         owned = control is None
         control = control or ControlStore(control_database_for(self.database))
         try:
@@ -223,6 +224,13 @@ class DesktopMemoryService:
         finally:
             if owned:
                 control.close()
+
+    def retracted(self, *, limit: int = 500, offset: int = 0) -> tuple[RetractedMemory, ...]:
+        """Retracted memories in this space, the latest first, so the user can find one and forget it completely."""
+        return self._store.list_retracted(self.scope, limit=limit, offset=offset)
+
+    def retracted_count(self) -> int:
+        return self._store.count_retracted(self.scope)
 
     def kept_count(self, memory_id: str, *, inbox: bool = False) -> int:
         """How many inbox items are kept for this memory (shown before it is deleted)."""

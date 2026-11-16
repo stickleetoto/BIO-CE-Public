@@ -50,6 +50,13 @@ class PurgeResult:
     checkpointed: bool
 
 
+@dataclass(frozen=True, slots=True)
+class RetractedMemory:
+    """A retracted memory: ``last`` is its revision before the retraction (what it said), ``retracted_at`` when."""
+    last: MemoryRevision
+    retracted_at: str
+
+
 class SQLiteMemoryStore:
     """An exact-scope, append-only revision store backed by SQLite FTS5.
 
@@ -394,6 +401,59 @@ class SQLiteMemoryStore:
             history = tuple(_row_to_revision(row, scope) for row in rows)
         self._verify_active_snapshot(scope, ((memory_id, current_revision_id),))
         return history
+
+    def retracted_history(self, scope: MemoryScope, memory_id: str) -> tuple[MemoryRevision, ...]:
+        """Every revision of a retracted memory, the retraction last; only for forgetting it completely (v0.4.4).
+
+        A retraction hides a memory but keeps what it said in its earlier revisions. Raises
+        :class:`MemoryNotFoundError` unless the memory is in ``scope`` and retracted."""
+        memory_id = validate_memory_id(memory_id)
+        _validate_scope(scope)
+        with self._read_transaction():
+            current = self._current_row(scope, memory_id)
+            if current["kind"] != RevisionKind.RETRACTION.value:
+                raise MemoryNotFoundError("memory is not retracted")
+            rows = self._connection.execute(
+                "SELECT * FROM revisions WHERE memory_id = ? ORDER BY revision_number ASC",
+                (memory_id,),
+            ).fetchall()
+            return tuple(_row_to_revision(row, scope) for row in rows)
+
+    def list_retracted(self, scope: MemoryScope, *, limit: int = 100,
+                       offset: int = 0) -> tuple[RetractedMemory, ...]:
+        """Retracted memories in one exact scope, the latest retraction first, each with what it said last.
+
+        Only so that the user can find a retracted memory and forget it completely (v0.4.4); search and every host
+        tool keep ignoring retracted memories."""
+        _validate_scope(scope)
+        if type(limit) is not int or not 1 <= limit <= 500:
+            raise ValidationError("limit must be an integer from 1 to 500")
+        if type(offset) is not int or offset < 0:
+            raise ValidationError("offset must be a non-negative integer")
+        with self._read_transaction():
+            rows = self._connection.execute(
+                """SELECT last.*, retraction.recorded_at AS retracted_at
+                   FROM memories AS m
+                   JOIN revisions AS retraction ON retraction.revision_id = m.current_revision_id
+                   JOIN revisions AS last ON last.revision_id = retraction.previous_revision_id
+                   WHERE m.project = ? AND m.namespace = ? AND retraction.kind = 'retraction'
+                   ORDER BY retraction.recorded_at DESC, m.memory_id ASC
+                   LIMIT ? OFFSET ?""",
+                (scope.project, scope.namespace, limit, offset),
+            ).fetchall()
+            return tuple(RetractedMemory(_row_to_revision(row, scope), str(row["retracted_at"])) for row in rows)
+
+    def count_retracted(self, scope: MemoryScope) -> int:
+        """How many memories in one exact scope are retracted (they can be forgotten completely)."""
+        _validate_scope(scope)
+        with self._read_transaction():
+            row = self._connection.execute(
+                """SELECT COUNT(*) FROM memories AS m
+                   JOIN revisions AS r ON r.revision_id = m.current_revision_id
+                   WHERE m.project = ? AND m.namespace = ? AND r.kind = 'retraction'""",
+                (scope.project, scope.namespace),
+            ).fetchone()
+        return int(row[0])
 
     def list_current(
         self,
@@ -806,4 +866,4 @@ def _row_to_revision(row: sqlite3.Row, scope: MemoryScope) -> MemoryRevision:
     )
 
 
-__all__ = ["INBOX_SUFFIX", "KEPT_SUFFIX", "PurgeResult", "SQLiteMemoryStore", "is_inbox_namespace"]
+__all__ = ["INBOX_SUFFIX", "KEPT_SUFFIX", "PurgeResult", "RetractedMemory", "SQLiteMemoryStore", "is_inbox_namespace"]

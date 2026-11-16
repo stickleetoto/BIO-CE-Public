@@ -13,6 +13,7 @@ positive control retracts the same setup instead and finds the text still there.
 from __future__ import annotations
 
 from contextlib import closing
+from dataclasses import replace
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -135,6 +136,60 @@ class ForgetCompletelyTests(unittest.TestCase):
         self.service._store.checkpoint()
         self.assertIn(said.encode(), file_bytes(self.database))
         self.assertIn(said.encode(), file_bytes(control_database_for(self.database)))  # the review still has it
+
+    def test_a_retracted_memory_can_be_forgotten_and_leaves_no_text(self):
+        """Owner decision 2026-11-16: a memory retracted earlier is forgotten the same way, from its listing."""
+        memory, said, moved, other, target, _untouched = self.build()
+        self.service.retract(self.service.read(memory.memory_id), control=self.control)
+        self.service._store.checkpoint()
+        self.assertIn(said.encode(), file_bytes(self.database))  # positive control: retraction kept the text
+        (listed,) = self.service.retracted()
+        self.assertEqual(listed.last.memory_id, memory.memory_id)
+        self.assertIn(said, listed.last.content)
+        self.assertEqual(self.service.retracted_count(), 1)
+        result = self.service.forget(listed.last, control=self.control)
+        self.assertTrue(result.completed)
+        self.assertEqual((result.deleted, result.kept, result.reviews), (1, 0, 1))  # the retraction took the kept
+        self.assertEqual((self.service.retracted(), self.service.retracted_count()), ((), 0))
+        self.assertNotIn(memory.memory_id, [row[0] for row in self.service._store.inventory()])
+        self.assertEqual(self.control.review(target).status, REVIEW_FAILED)
+        self.assert_gone(said, moved)
+        self.assertIn(other.encode(), file_bytes(control_database_for(self.database)))  # another review stays
+
+    def test_a_memory_retracted_outside_the_app_takes_its_kept_originals_with_it(self):
+        """A retraction an AI host asked for (approved review) does not discard the kept originals; forgetting the
+        retracted memory finds them from its last revision before the retraction."""
+        memory, said, moved, _other, _target, _untouched = self.build()
+        current = self.service.read(memory.memory_id)
+        self.service._store.retract(GENERAL, memory.memory_id, expected_revision_id=current.revision_id,
+                                    source=SourceProvenance("ai-host-retraction", "codex:test"))
+        self.assertEqual(len(self.kept()), 3)
+        self.service._store.checkpoint()
+        self.assertIn(moved.encode(), file_bytes(self.database))  # positive control: the kept item has it
+        (listed,) = self.service.retracted()
+        result = self.service.forget(listed.last, control=self.control)
+        self.assertEqual((result.deleted, result.kept, result.completed), (1, 3, True))
+        self.assertEqual(self.kept(), [])
+        self.assert_gone(said, moved)
+
+    def test_retracted_memories_are_listed_only_for_forgetting(self):
+        live = self.service.add(title="Shell", content="The user uses PowerShell.", source_ref="test")
+        hidden = self.service.add(title="Editor", content="The user edits in helix.", source_ref="test")
+        self.service.retract(hidden, control=self.control)
+        store = self.service._store
+        self.assertEqual([r.last.memory_id for r in self.service.retracted()], [hidden.memory_id])
+        self.assertEqual(self.service.retracted()[0].last.content, "The user edits in helix.")
+        self.assertEqual([r.memory_id for r in store.list_current(GENERAL)], [live.memory_id])
+        self.assertEqual([hit.memory_id for hit in store.search(GENERAL, "helix")], [])  # still hidden from search
+        with self.assertRaises(MemoryNotFoundError):
+            store.retracted_history(GENERAL, live.memory_id)  # only retracted memories
+        self.assertEqual([r.kind.value for r in store.retracted_history(GENERAL, hidden.memory_id)],
+                         ["assertion", "retraction"])
+        before = store.inventory()
+        with self.assertRaises(MemoryNotFoundError):
+            self.service.forget(replace(live, memory_id=f"mem_{uuid.uuid4().hex}"), control=self.control)
+        self.assertEqual(store.inventory(), before)  # a missing memory changes nothing
+        self.assertEqual(store.count_retracted(inbox_scope(GENERAL)), 0)
 
     def test_reviews_that_target_the_memory_fail_with_blank_text_and_others_stay(self):
         memory, said, _moved, other, target, untouched = self.build()
