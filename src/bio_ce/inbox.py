@@ -13,6 +13,11 @@ connected MCP server, which lets go after a minute without calls), the discard w
 This removes the items from BIO CE's files as far as the app can. It cannot guarantee erasure from the drive
 itself (SSD wear leveling, the Windows page file, file system journals), and backups made earlier still contain
 the items.
+
+Kept items: approving a suggestion or moving an inbox item to the memories keeps the inbox items it used aside
+("<space>.inbox.kept") so it can be undone, instead of deleting them. Their result names them (source metadata
+``kept``). When the result is deleted (a discard, or retracting the memory: :func:`erase_kept_for`), they are
+discarded the same way, first, so an interruption never leaves them behind a deleted result.
 """
 
 from __future__ import annotations
@@ -25,8 +30,8 @@ from bio_ce.control_store import (
     CURATION_DISCARDED,
     ControlStore,
 )
-from bio_ce.core.models import MemoryScope
-from bio_ce.storage.sqlite_store import INBOX_SUFFIX, SQLiteMemoryStore
+from bio_ce.core.models import MemoryNotFoundError, MemoryScope
+from bio_ce.storage.sqlite_store import INBOX_SUFFIX, KEPT_SUFFIX, SQLiteMemoryStore
 
 
 DESKTOP_HOST = "bio-ce-desktop"
@@ -53,11 +58,68 @@ def inbox_scope(curated: MemoryScope) -> MemoryScope:
     return MemoryScope(curated.project, curated.namespace + INBOX_SUFFIX)
 
 
+def kept_scope(inbox: MemoryScope) -> MemoryScope:
+    """Where the inbox items of a suggestion or a move are kept, so it can be undone (never a space or an inbox)."""
+    return MemoryScope(inbox.project, inbox_scope(inbox).namespace + KEPT_SUFFIX)
+
+
+def _kept_in(metadata: dict) -> list[str]:
+    ids = list(metadata.get("kept") or ())
+    if "suggestion" in metadata:  # results approved before "kept" was recorded (0.4.3-rc1 fourth candidate)
+        for key in ("merged_from", "from_inbox"):
+            value = metadata.get(key)
+            ids += list(value) if isinstance(value, (list, tuple)) else []
+    return [str(memory_id) for memory_id in ids]
+
+
+def kept_originals(store: SQLiteMemoryStore, scope: MemoryScope, memory_ids: list[str] | tuple[str, ...]) -> list[str]:
+    """The kept items that ``memory_ids`` (in ``scope``) were made from, and in turn what those were made from.
+
+    From the current revision: the store carries ``kept`` over to every later revision unless a write sets it (an
+    undo sets the earlier list), so an item an undo gave back is never claimed by its old result. Read before a
+    retraction: a retracted memory can't be read any more."""
+    aside = kept_scope(scope)
+    found: list[str] = []
+    queue = [(scope, memory_id) for memory_id in memory_ids]
+    while queue:
+        where, memory_id = queue.pop()
+        try:
+            current = store.read(where, memory_id)
+        except MemoryNotFoundError:
+            continue
+        for kept_id in _kept_in(dict(current.source.metadata)):
+            if kept_id not in found:
+                found.append(kept_id)
+                queue.append((aside, kept_id))
+    present = []
+    for memory_id in found:
+        try:
+            store.read(aside, memory_id)
+            present.append(memory_id)
+        except MemoryNotFoundError:
+            continue  # already gone (an undone import, or an earlier delete)
+    return sorted(present)
+
+
+def erase_kept_for(store: SQLiteMemoryStore, control: ControlStore, scope: MemoryScope, kept: list[str], *,
+                   host: str = DESKTOP_HOST, connection_id: str | None = None) -> int:
+    """Discard ``kept`` (from :func:`kept_originals`) after their result was deleted; returns how many."""
+    if not kept:
+        return 0
+    return discard_inbox_items(store, control, kept_scope(scope), kept, host=host,
+                               connection_id=connection_id).deleted
+
+
 def discard_inbox_items(store: SQLiteMemoryStore, control: ControlStore, scope: MemoryScope,
                         memory_ids: list[str] | tuple[str, ...], *, host: str = DESKTOP_HOST,
                         connection_id: str | None = None, item_id: int | None = None) -> DiscardResult:
-    """Discard now. ``item_id`` carries out an existing proposal instead of recording a new one."""
+    """Discard now. ``item_id`` carries out an existing proposal instead of recording a new one.
+
+    The items kept for what is discarded go first (see the module notes)."""
     ids = sorted(set(memory_ids))
+    if not scope.namespace.endswith(KEPT_SUFFIX):
+        erase_kept_for(store, control, scope, kept_originals(store, scope, ids), host=host,
+                       connection_id=connection_id)
     if item_id is None:
         item_id = control.open_discard(ids, status=CURATION_CLEANUP_PENDING)
     else:
@@ -83,7 +145,7 @@ def finish_pending_cleanups(store: SQLiteMemoryStore, control: ControlStore) -> 
         return 0
     # A discard interrupted before its delete (for example the app was closed) is carried out first.
     present = {memory_id: MemoryScope(project, namespace) for memory_id, project, namespace in store.inventory()
-               if namespace.endswith(INBOX_SUFFIX)}
+               if namespace.endswith(INBOX_SUFFIX) or namespace.endswith(INBOX_SUFFIX + KEPT_SUFFIX)}
     for item in waiting:
         by_scope: dict[MemoryScope, list[str]] = {}
         for memory_id in item["memory_ids"]:

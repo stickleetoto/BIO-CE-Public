@@ -141,6 +141,34 @@ class SuggestionsUiTests(unittest.TestCase):
             dialog._undo_clicked()
         self.assertEqual(self.service.read(coffee.memory_id).content, coffee.content)
 
+    def test_delete_notices_say_the_kept_items_go_too(self):
+        """Owner request (2026-11-16): the delete dialogs say what is kept for an undo is deleted with it."""
+        self.app.show_page("suggestions")
+        self.page.find()
+        self.page.approve(next(iter(self.page.cards)))
+        self.app.show_page("inbox")
+        self.app.inbox.refresh()
+        inbox = self.app.inbox
+        merged = next(iid for iid, item in inbox.items.items() if item.source.metadata.get("merged_from"))
+        plain = next(iid for iid in inbox.items if iid != merged)
+        for iid, expected in ((plain, False), (merged, True)):  # an ordinary item: no such line (positive control)
+            inbox.tree.selection_set(iid)
+            self.root.update()
+            with patch.object(self.app, "confirm", return_value=False) as asked:
+                inbox.discard_selected()
+            said = " ".join(asked.call_args.kwargs["points"])
+            self.assertEqual("merged into this were kept" in said, expected, said)
+
+        item = self.service.inbox()[0]
+        memory = self.service.move_inbox(self.control, item.memory_id, title=item.title, content=item.content)
+        self.app.show_page("memories")
+        self.app.memories.refresh()
+        self.app.memories.select(memory.memory_id)
+        with patch.object(self.app, "confirm", return_value=False) as asked:
+            self.app.memories.retract_selected()
+        self.assertIn("were kept so you could undo that. They are deleted with it",
+                      " ".join(asked.call_args.kwargs["points"]))
+
     def undo_merge_shown(self) -> bool:
         return bool(self.app.inbox.undo_merge_button.winfo_manager())
 

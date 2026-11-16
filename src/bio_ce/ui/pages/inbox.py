@@ -373,11 +373,16 @@ class InboxPage(Page):
         control = self.control()
         if not chosen or control is None or not self.app.require_action("review"):
             return
+        kept = sum(self.app.service.kept_count(item.memory_id, inbox=True) for item in chosen)
+        points = (DISCARD_NOTICE,)
+        if kept:  # a merged item: what was merged into it is kept until now, so the merge could be undone
+            points = (f"The {plural(kept, 'item')} merged into this were kept so the merge could be undone. They "
+                      "are deleted with it, the same way.", DISCARD_NOTICE)
         if not self.app.confirm(
             title=f"Discard {plural(len(chosen), 'item')}?",
             message="Discarded items are deleted from the inbox. This can't be undone.",
             quote=chosen[0].title if len(chosen) == 1 else None,
-            points=(DISCARD_NOTICE,),
+            points=points,
             confirm_text="Discard",
             danger=True,
         ):

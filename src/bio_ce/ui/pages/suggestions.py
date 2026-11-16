@@ -196,8 +196,8 @@ class SuggestionsPage(Page):
             return False
         self.app.data_changed()
         self.refresh()
-        self.app.notify("success", "Done. The inbox items it used are kept, so you can undo this here or later "
-                        "from History.", title="Suggestion approved",
+        self.app.notify("success", "Done. The inbox items it used are kept until you undo this (here or later "
+                        "from History) or delete what it made.", title="Suggestion approved",
                         action=("Undo", lambda: self.undo([proposal_id], ask=False)))
         return True
 

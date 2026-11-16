@@ -444,13 +444,21 @@ class MemoriesPage(Page):
             return
         if not self.app.require_action("retract"):
             return
+        try:
+            kept = self.app.service.kept_count(record.memory_id)
+        except Exception:  # noqa: BLE001 - only changes the wording
+            kept = 0
+        points = (
+            "Earlier revisions stay inside the database file. Retraction is not a secure erase.",
+            "This can't be undone from BIO CE. Restoring an older backup is the only way back.",
+        )
+        if kept:  # made by a suggestion or a move: its inbox items were kept so that could be undone
+            points += (f"The {plural(kept, 'inbox item')} this memory was made from were kept so you could undo "
+                       "that. They are deleted with it, the way a discard deletes.",)
         accepted = self.app.confirm(
             title="Retract this memory?",
             message="BIO CE and connected AI hosts will no longer find or read this memory.",
-            points=(
-                "Earlier revisions stay inside the database file. Retraction is not a secure erase.",
-                "This can't be undone from BIO CE. Restoring an older backup is the only way back.",
-            ),
+            points=points,
             quote=record.title,
             confirm_text="Retract memory",
             danger=True,

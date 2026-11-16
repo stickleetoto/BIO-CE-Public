@@ -37,7 +37,15 @@ from bio_ce.storage.backup import (
     remove_sqlite_sidecars,
     stage_restore,
 )
-from bio_ce.inbox import discard_inbox_items, finish_pending_cleanups, inbox_scope, run_expiry
+from bio_ce.inbox import (
+    discard_inbox_items,
+    erase_kept_for,
+    finish_pending_cleanups,
+    inbox_scope,
+    kept_originals,
+    kept_scope,
+    run_expiry,
+)
 from bio_ce.memory_policy import DUPLICATE_THRESHOLD, detect_secrets, normalize, similarity
 from bio_ce.storage.sqlite_store import SQLiteMemoryStore
 from bio_ce.ui.app import BIOCEDesktop
@@ -177,13 +185,30 @@ class DesktopMemoryService:
             source=SourceProvenance("user-entered", source_ref),
         )
 
-    def retract(self, current: MemoryRevision) -> MemoryRevision:
-        return self._store.retract(
+    def retract(self, current: MemoryRevision, *, control: ControlStore | None = None) -> MemoryRevision:
+        """Retract a memory; the inbox items kept for it (so a suggestion or a move could be undone) are discarded
+        with it, the way a discard deletes."""
+        kept = kept_originals(self._store, self.scope, [current.memory_id])
+        revision = self._store.retract(
             self.scope,
             current.memory_id,
             expected_revision_id=current.revision_id,
             source=SourceProvenance("user-requested-retraction", "bio-ce-desktop"),
         )
+        if kept:
+            owned = control is None
+            control = control or ControlStore(control_database_for(self.database))
+            try:
+                erase_kept_for(self._store, control, self.scope, kept)
+            finally:
+                if owned:
+                    control.close()
+        return revision
+
+    def kept_count(self, memory_id: str, *, inbox: bool = False) -> int:
+        """How many inbox items are kept for this memory (shown before it is deleted)."""
+        scope = inbox_scope(self.scope) if inbox else self.scope
+        return len(kept_originals(self._store, scope, [memory_id]))
 
     def approve_review(
         self, control: ControlStore, review_id: int, *, title: str | None = None, content: str | None = None
@@ -224,16 +249,19 @@ class DesktopMemoryService:
 
     def move_inbox(self, control: ControlStore, memory_id: str, *, title: str, content: str,
                    update: MemoryRevision | None = None) -> MemoryRevision:
-        """Make an inbox item a curated memory (or update ``update`` with it), then discard the inbox copy."""
+        """Make an inbox item a curated memory (or update ``update`` with it). The inbox copy is kept aside, not
+        deleted; it goes when the memory is retracted (owner rule 2026-11-16: only a delete removes rows)."""
         if detect_secrets(title, content):
             raise ValueError("This text contains a password, token, or key, so BIO CE won't store it.")
-        source = SourceProvenance("user-entered", "bio-ce-inbox", {"from_inbox": memory_id})
+        earlier = list(update.source.metadata.get("kept") or ()) if update is not None else []
+        source = SourceProvenance("user-entered", "bio-ce-inbox",
+                                  {"from_inbox": memory_id, "kept": sorted(set(earlier) | {memory_id})})
         if update is not None:
             revision = self._store.revise(self.scope, update.memory_id, expected_revision_id=update.revision_id,
                                           title=title, content=content, source=source)
         else:
             revision = self._store.add(self.scope, title=title, content=content, source=source)
-        discard_inbox_items(self._store, control, inbox_scope(self.scope), [memory_id])
+        self._store.move(inbox_scope(self.scope), kept_scope(self.scope), [memory_id])
         control.record(host="bio-ce-desktop", connection_id=None, action="inbox-move", outcome="moved",
                        memory_id=revision.memory_id, revision_id=revision.revision_id, title=title,
                        detail={"project": self.scope.project})
@@ -317,22 +345,27 @@ class DesktopMemoryService:
 
         Connections, permissions, and the audit log are never taken from the backup. Returns what happened to the
         control side: whether the pair file matched, spaces added, and review items that lost their target.
+
+        The current memories are saved first in the backups folder ("auto-before-restore-…", returned as
+        ``safety_backup``): a restore replaces them, and no action but a delete may lose a memory (2026-11-16).
         """
         source = Path(backup).expanduser().resolve()
         if source == self.database:
             raise BackupConflictError("The active database cannot be restored from itself.")
         pair_status, pair = check_pair(source)
+        safety = self.automatic_backup("before-restore")
         self._replace_database(source)
         owned = None
         if control is None and control_database_for(self.database).is_file():
             control = owned = ControlStore(control_database_for(self.database))
         if control is None:
             return {"pair": pair_status, "spaces_added": 0, "reviews_failed": 0, "discards_restored": 0,
-                    "restored_spaces": []}
+                    "restored_spaces": [], "safety_backup": safety}
         try:
-            return control.apply_restore(memories=self._store.inventory(),
-                                         backup_control=pair if pair_status == PAIR_MATCHED else None,
-                                         pair_status=pair_status)
+            report = control.apply_restore(memories=self._store.inventory(),
+                                           backup_control=pair if pair_status == PAIR_MATCHED else None,
+                                           pair_status=pair_status)
+            return {**report, "safety_backup": safety}
         finally:
             if owned is not None:
                 owned.close()

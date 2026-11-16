@@ -30,6 +30,8 @@ ALLOWED_SERVICE_CALLS = {
     "curation",
     # v0.4.3 export as text (Community-only; gated by the browse action)
     "export_text",
+    # v0.4.3 how many inbox items are kept for an undo (Community-only, read only; said in the delete dialogs)
+    "kept_count",
 }
 
 

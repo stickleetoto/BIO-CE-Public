@@ -50,6 +50,7 @@ from bio_ce.memory_policy import (
     normalize,
     prepare_text,
 )
+from bio_ce.inbox import erase_kept_for, kept_originals
 from bio_ce.spaces import PERSONAL_SPACE
 from bio_ce.storage.sqlite_store import INBOX_SUFFIX, SQLiteMemoryStore
 
@@ -538,8 +539,10 @@ class ReviewService:
                 revision = self.store.revise(scope, item.memory_id, expected_revision_id=item.expected_revision_id,
                                              title=final_title, content=final_content, source=source)
             else:
+                kept = kept_originals(self.store, scope, [item.memory_id])  # read before: a retracted one can't be
                 revision = self.store.retract(scope, item.memory_id,
                                               expected_revision_id=item.expected_revision_id, source=source)
+                erase_kept_for(self.store, self.control, scope, kept)  # the items kept for it go with it
         except (RevisionConflictError, MemoryNotFoundError) as exc:
             self.control.resolve_review(review_id, REVIEW_FAILED, "the memory changed after the request")
             self.control.record(host=item.host, connection_id=item.connection_id, action=f"review-{item.kind}",

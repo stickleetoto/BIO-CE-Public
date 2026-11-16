@@ -275,6 +275,13 @@ class SQLiteMemoryStore:
         with self._write_transaction():
             current = self._current_row(scope, memory_id)
             self._assert_expected_active(current, expected_revision_id)
+            # "kept" (inbox items kept so a suggestion or a move can be undone) follows the memory to every later
+            # revision unless this write sets it; otherwise an edit would leave them behind when it is deleted.
+            if "kept" not in source.metadata:
+                earlier = json.loads(current["source_metadata_json"] or "{}")
+                if isinstance(earlier, dict) and earlier.get("kept"):
+                    source = SourceProvenance(source.source_type, source.source_ref,
+                                              {**source.metadata, "kept": earlier["kept"]})
             values = {
                 "memory_id": memory_id,
                 "revision_number": int(current["revision_number"]) + 1,
@@ -460,8 +467,9 @@ class SQLiteMemoryStore:
            and :meth:`checkpoint` must be retried later.
         """
         _validate_scope(scope)
-        if not scope.namespace.endswith(INBOX_SUFFIX):
-            raise PermissionError("only inbox items can be physically deleted; curated memories are retracted")
+        if not (scope.namespace.endswith(INBOX_SUFFIX) or scope.namespace.endswith(INBOX_SUFFIX + KEPT_SUFFIX)):
+            raise PermissionError("only inbox items (and inbox items kept for an undo) can be physically deleted; "
+                                  "curated memories are retracted")
         ids = sorted(set(memory_ids))
         deleted = 0
         with self._write_transaction():

@@ -30,7 +30,8 @@ from bio_ce.control_store import ControlStore, ControlStoreError
 from bio_ce.core.models import MemoryNotFoundError, MemoryRevision, MemoryScope, SourceProvenance
 from bio_ce.memory_policy import DUPLICATE_THRESHOLD, detect_secrets, normalize, similarity
 from bio_ce.spaces import Space
-from bio_ce.storage.sqlite_store import KEPT_SUFFIX, SQLiteMemoryStore
+from bio_ce.inbox import kept_scope
+from bio_ce.storage.sqlite_store import SQLiteMemoryStore
 
 
 MERGE = "merge"
@@ -316,7 +317,12 @@ class CurationService:
         carried = {key: newest.source.metadata[key] for key in CARRIED if key in newest.source.metadata}
         ids = [revision.memory_id for revision in originals]
         # The result names its suggestion, and the items it used are kept aside, never deleted: see undo().
-        mark = {"suggestion": int(proposal_id)}
+        used = ids[1:] if suggestion.action == MERGE else ids
+        before = newest if suggestion.action == MERGE else (
+            self.store.read(space.curated, suggestion.target[0]) if suggestion.action == UPDATE_EXISTING
+            and suggestion.target is not None else None)
+        earlier_kept = list(before.source.metadata.get("kept") or ()) if before is not None else []
+        mark = {"suggestion": int(proposal_id), "kept": sorted(set(earlier_kept) | set(used))}
         if suggestion.action == MERGE:
             source = SourceProvenance(newest.source.source_type, newest.source.source_ref,
                                       {**newest.source.metadata, "merged_from": ids[1:], "stage": "inbox", **mark})
@@ -396,9 +402,12 @@ class CurationService:
             revision = self.store.retract(scope, result.memory_id, expected_revision_id=result.revision_id,
                                           source=undo_source)
         else:
-            source = earlier.source if suggestion.action == MERGE else SourceProvenance(
-                earlier.source.source_type, earlier.source.source_ref,
-                {**earlier.source.metadata, "undid_suggestion": suggestion.proposal_id})
+            # "kept" is set to what it was before (possibly nothing): the items given back are no longer kept for it.
+            kept_before = list(earlier.source.metadata.get("kept") or ())
+            source = SourceProvenance(earlier.source.source_type, earlier.source.source_ref,
+                                      {**earlier.source.metadata, "kept": kept_before} if suggestion.action == MERGE
+                                      else {**earlier.source.metadata, "undid_suggestion": suggestion.proposal_id,
+                                            "kept": kept_before})
             revision = self.store.revise(scope, result.memory_id, expected_revision_id=result.revision_id,
                                          title=earlier.title, content=earlier.content or "", source=source)
         self.store.move(aside, space.inbox, back)
@@ -485,11 +494,6 @@ def _suggestion(row: dict[str, Any]) -> Suggestion:
 _WORD = re.compile(r"\w{2,}")
 _STOP = {"the", "and", "for", "with", "that", "this", "user", "users", "use", "about", "from", "has", "have",
          "are", "was", "were", "사용자", "사용자는", "사용자의", "있다", "한다"}
-
-
-def kept_scope(inbox: MemoryScope) -> MemoryScope:
-    """Where the inbox items an approved suggestion used are kept, so it can be undone (never deleted)."""
-    return MemoryScope(inbox.project, inbox.namespace + KEPT_SUFFIX)
 
 
 def _marks(text: str, common: frozenset[str]) -> set[str]:

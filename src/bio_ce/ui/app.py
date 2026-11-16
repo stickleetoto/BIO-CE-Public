@@ -842,7 +842,8 @@ class BIOCEDesktop:
                 "Connections, permissions, and the activity log stay as they are now; a backup never brings back a "
                 "connection you removed.",
                 "Close connected AI hosts first; BIO CE can't restore while another program is reading the database.",
-                "If you want to keep your current memories, cancel and create a backup first.",
+                "BIO CE first saves your current memories as a backup in the backups folder of its data folder "
+                "(auto-before-restore-…), so you can go back.",
             ),
             confirm_text="Replace memories",
             danger=True,

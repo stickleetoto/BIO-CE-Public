@@ -927,6 +927,13 @@ class ControlStore:
                 f"UPDATE audit_log SET title = NULL, detail_json = '{{\"discarded\": true}}' "
                 f"WHERE memory_id IN ({marks})", ids)
             self._connection.execute(f"DELETE FROM inbox_usage WHERE memory_id IN ({marks})", ids)
+            # A suggestion's draft repeats its items' text (found 2026-11-16: it outlived a discard). An undo needs
+            # only the ids, so the text goes; the row stays as the record of what was decided.
+            for memory_id in ids:
+                self._connection.execute(
+                    "UPDATE curation_proposals SET draft_title = '', draft_content = '' "
+                    "WHERE memory_ids_json LIKE ? OR target_memory_id = ?",
+                    (f'%"{memory_id}"%', memory_id))
 
     # Import batches -----------------------------------------------------------
     # No file names or paths are stored: they can be personal. Entries are referenced only by id and line number.

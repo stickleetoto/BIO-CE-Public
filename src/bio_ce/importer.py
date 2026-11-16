@@ -43,7 +43,7 @@ from bio_ce.memory_policy import (
     prepare_text,
 )
 from bio_ce.spaces import PERSONAL_SPACE_ID, Space
-from bio_ce.storage.sqlite_store import SQLiteMemoryStore
+from bio_ce.storage.sqlite_store import INBOX_SUFFIX, KEPT_SUFFIX, SQLiteMemoryStore
 
 
 IMPORT_HOST = "bio-ce-import"
@@ -816,15 +816,18 @@ class ImportService:
         if batch["status"] == "undone":
             raise ImportRejected("This import was already undone.")
         ids = [memory_id for _key, memory_id in batch["memory_ids"]]
+        # Also its items a suggestion or a move kept aside: undoing the import deletes what it brought in.
         where = {memory_id: MemoryScope(project, namespace)
-                 for memory_id, project, namespace, _created in self.store.inbox_items()}
+                 for memory_id, project, namespace in self.store.inventory()
+                 if namespace.endswith(INBOX_SUFFIX) or namespace.endswith(INBOX_SUFFIX + KEPT_SUFFIX)}
         by_scope: dict[MemoryScope, list[str]] = {}
         for memory_id in ids:
             if memory_id in where:
                 by_scope.setdefault(where[memory_id], []).append(memory_id)
         removed = 0
         for scope, scope_ids in by_scope.items():
-            removed += discard_inbox_items(self.store, self.control, scope, scope_ids, host=IMPORT_HOST).deleted
+            deleted = discard_inbox_items(self.store, self.control, scope, scope_ids, host=IMPORT_HOST).deleted
+            removed += deleted if scope.namespace.endswith(INBOX_SUFFIX) else 0
         closed = 0
         for _key, review_id in batch["review_ids"]:
             try:
