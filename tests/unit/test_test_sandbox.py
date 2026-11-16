@@ -74,6 +74,9 @@ class SandboxInPlaceTests(unittest.TestCase):
         self.assertFalse(sandbox.is_protected("E:/BIO-CE-Public/tests"))  # a name that only starts the same
         self.assertFalse(sandbox.is_protected(sandbox.ROOT / "l" / "BIO-CE" / "data" / "memories.sqlite3"))
         self.assertFalse(sandbox.is_protected(":memory:"))
+        for root in sandbox.protected_roots():  # a junction's target is protected too, under its own name
+            target = os.path.realpath(root)
+            self.assertTrue(sandbox.is_protected(target), (root, target))
         if "LOCALAPPDATA" in sandbox.REAL:
             self.assertTrue(sandbox.is_protected(sandbox.REAL["LOCALAPPDATA"] / "BIO-CE" / "data"))
 

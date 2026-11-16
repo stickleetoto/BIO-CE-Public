@@ -113,7 +113,17 @@ def protected_roots() -> list[Path]:
         if value and (ROOT is None or not _under(_norm(value), (_norm(ROOT),))):
             roots.append(Path(value))
     roots += [Path(part) for part in os.environ.get("BIO_CE_TEST_PROTECT", "").split(";") if part.strip()]
-    return roots
+    # A junction or link points somewhere else (on this PC ~\.codex is a junction to another drive): that place
+    # is just as real, under its own name.
+    targets = []
+    for root in roots:
+        try:
+            target = Path(os.path.realpath(root))
+        except OSError:
+            continue
+        if _norm(target) != _norm(root):
+            targets.append(target)
+    return roots + targets
 
 
 def _norm(path) -> str:
