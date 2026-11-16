@@ -77,6 +77,17 @@
 - The smallest supported window is 860x560 at 100% display scaling (1290x840 at 150%). A screen that can't fit it, such as 1024x768 at 150%, gets a smaller window: nothing is cut off sideways (buttons wrap, table columns fit, long lines end in “…”), but the Memories and Inbox reading panes can run out of height, so lines under the title, and in Memories the Show details row, may not fit. Maximize the window, use a lower display scaling, or use the right-click menu on the Memories list.
 - The MCP server refuses to start until the BIO CE app has created its data folder. An AI app connected before
   BIO CE was opened once shows the server as failed until you open BIO CE.
+- On a 768 px tall screen with Windows text size set much larger (about 150%), the Memories reading pane can be
+  too short for its buttons; use the right-click menu on the list.
+- In the import preview, the TEXT column shows the start of long entries when the window is narrow (the short
+  columns keep their full text first). Select a row to read the whole entry under the table.
+- The Suggestions page lists suggestions for every space and names the space on each card; the Space box above it
+  doesn't filter them.
+- Changing an entry's text with **Edit…** in the import preview clears its source date, because that date was about
+  the original text. **Confirm dates…** can't bring it back (it confirms source dates); type the date in the Edit
+  window's "Said on" field if you know it.
+- An imported entry that is close to an item already in the inbox is imported as a new item, and Suggestions then
+  offers to merge them. Only an entry close to one of your memories goes to review as a possible change.
 
 ## v0.4.1-rc1 (pre-release)
 
