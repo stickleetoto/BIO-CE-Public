@@ -1,23 +1,25 @@
 # Copyright 2026 stickleetoto
 # SPDX-License-Identifier: Apache-2.0
 
-"""The Memories page's buttons are never cut off, even in the smallest window (v0.4.3-rc1 GUI check P13).
+"""The memory screen's buttons are never cut off, even in the smallest window (v0.4.3-rc1 GUI check P13).
 
 A button that pack has to shrink still shows part of its label, but a click on it does nothing (the click must land
 inside the button). In 0.4.3-rc1 "Move to…" joined Edit, History, and Retract in one row of the reading pane, and at
-a normal window size Move to… and Retract were cut off.
+a normal window size Move to… and Retract were cut off. v0.4.4 replaced that pane with the drawer (its action row is
+fixed at the top) and the Memories / Inbox / Suggestions bar with space chips and state tabs; the same sweep covers
+them.
 """
 
 from __future__ import annotations
 
 import tempfile
-import time
+import tkinter as tk
 import unittest
 from unittest.mock import patch
 
 from bio_ce.desktop import AppDataPaths, BIOCEDesktop, DesktopMemoryService
 from bio_ce.spaces import PERSONAL_SPACE
-from bio_ce.ui.pages.inbox import SpaceBar
+from bio_ce.ui.hub.data import ALL_SPACES, INBOX, MEMORIES
 from bio_ce.ui.widgets import FlowFrame
 from tests.integration.test_auto_memory_ui import FakeManagedConnections
 from tests.integration.test_desktop_ui_redesign import new_root
@@ -26,6 +28,7 @@ from tests.integration.test_desktop_ui_redesign import new_root
 class MemoriesActionsFitTests(unittest.TestCase):
     SCREEN: tuple[int, int] | None = None
     DPI = 96.0
+
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory(prefix="bio-ce-actions-fit-")
         self.paths = AppDataPaths.under(self.temp.name)
@@ -46,7 +49,7 @@ class MemoriesActionsFitTests(unittest.TestCase):
                       patch.object(self.root, "winfo_fpixels", return_value=self.DPI))
             with screen[0], screen[1], screen[2]:
                 self.app = BIOCEDesktop(self.root, self.service, self.paths, self.connections)
-        self.page = self.app.memories
+        self.hub = self.app.memories
 
     def tearDown(self) -> None:
         self.app.tasks.wait(10)
@@ -55,47 +58,45 @@ class MemoriesActionsFitTests(unittest.TestCase):
         self.connections.close()
         self.temp.cleanup()
 
-    def show(self, width: int, height: int, page: str = "memories") -> None:
+    def show(self, width: int, height: int, state: str = MEMORIES) -> None:
         self.root.geometry(f"{width}x{height}+20+20")
-        self.app.show_page(page)
-        if page == "memories":
-            self.page.refresh()
-            rows = self.page.tree.get_children()
-            self.page.select(rows[0])  # a memory of the space shown, so the reading pane is open
+        self.app.open_state(state)
+        if state == MEMORIES and self.hub.items:
+            self.hub.open_item(self.hub.items[0])  # the drawer is open, so its action row is checked
         for _ in range(6):
             self.root.update()
 
-    def buttons(self, page: str) -> dict:
-        target = self.app.memories if page == "memories" else self.app.inbox
-        found = {f"{page}.space_bar.{name}": getattr(target.space_bar, name)
-                 for name in ("memories_tab", "inbox_tab", "suggestions_tab", "picker")}
-        if page == "memories":
-            found.update({f"memories.{name}": getattr(target, name) for name in (
-                "edit_button", "history_button", "retract_button", "move_button", "export_button", "add_button")})
-        else:
-            found["inbox.import_button"] = target.import_button
+    def buttons(self, state: str) -> dict:
+        hub = self.hub
+        found = {"toolbar.add": hub.add_button, "toolbar.import": hub.import_button, "toolbar.export": hub.export_button}
+        found.update({f"chip.{key}": chip for key, chip in hub.chips.items()})
+        found.update({f"tab.{key}": tab for key, tab in hub.tabs.items()})
+        if state == MEMORIES:
+            drawer = hub.drawer
+            found.update({f"drawer.{name}": getattr(drawer, name) for name in (
+                "edit_button", "move_button", "history_button", "delete_button", "close_button")})
         return found
 
     def check_every_width(self, label: str) -> None:
-        """Every 20 px from the smallest window up, in both spaces, on Memories and Inbox.
+        """Every 20 px from the smallest window up, for all spaces and Personal alone, on Memories and Inbox.
 
         The sidebar switches modes at 1000 px, which an earlier version of this test skipped (Retract was cut off
         there). All problems are collected and reported together with the geometry, so a CI failure says exactly
         which widget, at which size, and why.
         """
         problems: list[str] = []
-        for space in ("general", "personal"):
-            self.app.set_space(space)
-            for page in ("memories", "inbox"):
+        for space in (ALL_SPACES, "personal"):
+            self.hub.set_space_filter(space)
+            for state in (MEMORIES, INBOX):
                 for width in range(860, 1301, 20):
-                    self.show(width, 700, page)
-                    for name, widget in self.buttons(page).items():
+                    self.show(width, 700, state)
+                    for name, widget in self.buttons(state).items():
                         mapped = bool(widget.winfo_ismapped())
                         if mapped and widget.winfo_width() >= widget.winfo_reqwidth():
                             continue
                         master = widget.nametowidget(widget.winfo_parent())
                         problems.append(
-                            f"{label} {space} {page} {width}px {name}: mapped={mapped} viewable="
+                            f"{label} {space} {state} {width}px {name}: mapped={mapped} viewable="
                             f"{bool(widget.winfo_viewable())} size={widget.winfo_width()}/{widget.winfo_reqwidth()} at "
                             f"{widget.winfo_x()},{widget.winfo_y()} manager={widget.winfo_manager()} master="
                             f"{master.winfo_width()}x{master.winfo_height()} root={self.root.winfo_width()}x"
@@ -119,7 +120,7 @@ class MemoriesActionsFitTests(unittest.TestCase):
         while pending:
             widget = pending.pop()
             pending.extend(widget.winfo_children())
-            if isinstance(widget, (FlowFrame, SpaceBar)):
+            if isinstance(widget, FlowFrame):
                 widget.relayout()
         self.root.update()
 
@@ -129,83 +130,53 @@ class MemoriesActionsFitTests(unittest.TestCase):
         self.check_every_width("125%")
 
     def test_no_button_is_cut_off_with_much_wider_fonts(self):
-        """A margin beyond what the CI runner showed (its text was about 15-25% wider than this PC's).
-
-        Only on screens at least 900 px tall: on a 768 px screen at 125% scaling, 50% wider text leaves the reading
-        pane too little height for its buttons (a vertical limit, listed in the known limitations).
-        """
-        if self.root.winfo_screenheight() < 900:
-            self.skipTest("needs a screen at least 900 px tall (vertical space, not width)")
+        """A margin beyond what the CI runner showed (its text was about 15-25% wider than this PC's). Before v0.4.4
+        this needed a tall screen (the reading pane's height); the drawer's action row does not."""
         self.widen_fonts(1.5)
         self.check_every_width("150%")
 
-    def test_a_squeezed_reading_pane_recovers_and_keeps_its_buttons(self):
-        """On a CI runner (1024x768, 125%) the reading pane once ended up 42 px wide and its buttons were hidden.
-        Squeeze it like that, resize the window, and the pane must come back wide enough for its buttons."""
-        self.show(972, 700)
-        total = self.page.split.winfo_width()
-        self.page.split.sashpos(0, total - 42)
-        self.assertEqual(self.page.split.sashpos(0), total - 42)  # the squeeze happened (positive control)
-        self.show(990, 700)
-        deadline = time.monotonic() + 3  # events can arrive late while other windows of the run are closing
-        needed = self.page.edit_button.winfo_reqwidth()
-        while self.page.reading_card.winfo_width() < needed and time.monotonic() < deadline:
-            self.root.update()
-            time.sleep(0.02)
-        for _ in range(4):
-            self.root.update()
-        for name in ("edit_button", "history_button", "retract_button"):
-            button = getattr(self.page, name)
-            with self.subTest(button=name):
-                self.assertTrue(button.winfo_ismapped(), "not shown")
-                self.assertGreaterEqual(button.winfo_width(), button.winfo_reqwidth(), "cut off")
-        self.assertGreaterEqual(self.page.reading_card.winfo_width(), self.page.edit_button.winfo_reqwidth())
-
-    def test_move_works_from_the_list_and_from_the_right_click_menu(self):
+    def test_move_works_from_the_card_menu_and_from_the_right_click_menu(self):
         self.show(960, 760)
-        self.page.tree.selection_set((self.first.memory_id, self.second.memory_id))
-        self.root.update()
-        with patch.object(self.app, "ask_choice", return_value="personal"):
-            self.page.move_button.invoke()
+        cards = {card.item.item_id: card for card in self.hub.grid.card_list()}
+        self.hub.card_clicked(cards[self.first.memory_id])
+        self.hub.toggle_select(cards[self.second.memory_id])  # Ctrl+click: two selected
+        with patch.object(tk.Menu, "tk_popup"):
+            menu = self.hub.move_menu([cards[self.first.memory_id].item], cards[self.first.memory_id])
+        labels = [menu.entrycget(index, "label") for index in range(menu.index("end") + 1)]
+        self.assertEqual(labels, ["Personal"])  # the space they are in (General) is not offered
+        menu.invoke(0)
+        self.service.use_space(self.connections.control.space("general").curated)
         self.assertEqual(self.service.list(), ())
         self.service.use_space(PERSONAL_SPACE.curated)
         self.assertEqual({r.memory_id for r in self.service.list()},
                          {self.first.memory_id, self.second.memory_id, self.private.memory_id})
         self.app.set_space("personal")
-        self.page.refresh()
-        self.page.tree.selection_set((self.first.memory_id,))
-        menu = self.page.context_menu()
+        card = next(card for card in self.hub.grid.card_list() if card.item.item_id == self.first.memory_id)
+        menu = self.hub.context_menu([card.item])
         labels = [menu.entrycget(index, "label") for index in range(menu.index("end") + 1)
                   if menu.type(index) in ("command", "cascade")]
-        self.assertEqual(labels, ["Edit", "History", "Move to", "Retract…"])
-        submenu = self.page.nametowidget(menu.entrycget(labels.index("Move to"), "menu"))
+        self.assertEqual(labels, ["Edit", "History", "Move to", "Delete", "Forget completely…"])
+        submenu = self.hub.nametowidget(menu.entrycget(labels.index("Move to"), "menu"))
         spaces = [submenu.entrycget(index, "label") for index in range(submenu.index("end") + 1)]
-        self.assertEqual(spaces, ["General"])  # the space shown now (Personal) is not offered
+        self.assertEqual(spaces, ["General"])  # the space it is in (Personal) is not offered
         with patch.object(self.app, "ask_choice", side_effect=AssertionError("the submenu already chose")):
             submenu.invoke(0)
         self.service.use_space(self.connections.control.space("general").curated)
         self.assertEqual([r.memory_id for r in self.service.list()], [self.first.memory_id])
 
-    def test_right_click_on_an_unselected_row_selects_it_first(self):
+    def test_right_click_on_an_unselected_card_selects_it_first(self):
         self.show(960, 760)
-        self.page.tree.selection_set((self.first.memory_id,))
-        self.root.update()
-        bbox = self.page.tree.bbox(self.second.memory_id)
-        event = type("Event", (), {"x": bbox[0] + 5, "y": bbox[1] + 5, "x_root": 0, "y_root": 0})()
-        with patch.object(tk_menu_type(), "tk_popup") as popped:
-            self.page._right_click(event)
-        self.assertEqual(self.page.tree.selection(), (self.second.memory_id,))
+        cards = {card.item.item_id: card for card in self.hub.grid.card_list()}
+        self.hub.card_clicked(cards[self.first.memory_id])
+        event = type("Event", (), {"x_root": 0, "y_root": 0})()
+        with patch.object(tk.Menu, "tk_popup") as popped:
+            self.hub.context_menu_at(cards[self.second.memory_id], event)
+        self.assertEqual(self.hub.selected_keys, {cards[self.second.memory_id].key})
         popped.assert_called_once()
-        self.page.tree.selection_set((self.first.memory_id, self.second.memory_id))
-        with patch.object(tk_menu_type(), "tk_popup"):
-            self.page._right_click(event)
-        self.assertEqual(set(self.page.tree.selection()), {self.first.memory_id, self.second.memory_id})
-
-
-def tk_menu_type():
-    import tkinter as tk
-    return tk.Menu
-
+        self.hub.toggle_select(cards[self.first.memory_id])
+        with patch.object(tk.Menu, "tk_popup"):
+            self.hub.context_menu_at(cards[self.second.memory_id], event)
+        self.assertEqual(self.hub.selected_keys, {cards[self.first.memory_id].key, cards[self.second.memory_id].key})
 
 
 class SmallScreenFitTests(MemoriesActionsFitTests):
@@ -215,9 +186,8 @@ class SmallScreenFitTests(MemoriesActionsFitTests):
     SCREEN = (1024, 768)
     DPI = 120.0  # 125% display scaling: the app's 860 px minimum becomes 1075 px, so the window stays 972 px wide
 
-    test_move_works_from_the_list_and_from_the_right_click_menu = None
-    test_right_click_on_an_unselected_row_selects_it_first = None
-    test_no_button_is_cut_off_with_much_wider_fonts = None
+    test_move_works_from_the_card_menu_and_from_the_right_click_menu = None
+    test_right_click_on_an_unselected_card_selects_it_first = None
 
 
 if __name__ == "__main__":

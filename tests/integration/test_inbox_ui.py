@@ -15,6 +15,7 @@ from bio_ce.core.models import MemoryScope, SourceProvenance
 from bio_ce.desktop import AppDataPaths, BIOCEDesktop, DesktopMemoryService
 from bio_ce.inbox import inbox_scope
 from bio_ce.storage.sqlite_store import SQLiteMemoryStore
+from bio_ce.ui.hub.data import INBOX as INBOX_TAB
 from tests.integration.test_auto_memory_ui import FakeManagedConnections
 from tests.integration.test_desktop_ui_redesign import new_root
 
@@ -51,79 +52,95 @@ class InboxUiTests(unittest.TestCase):
         self.connections.close()
         self.temp.cleanup()
 
-    def test_inbox_tab_lists_items_and_marks_guesses(self):
-        self.app.show_page("inbox")
-        page = self.app.inbox
-        self.assertEqual(set(page.items), {self.first.memory_id, self.second.memory_id})
-        self.assertTrue(self.app.nav["memories"].selected)  # the tab lives under Memories in the sidebar
-        page.tree.selection_set(self.first.memory_id)
+    def inbox(self):
+        self.app.open_state(INBOX_TAB)
         self.root.update()
-        self.assertIn("a guess the host made", page.detail_meta.cget("text"))
-        self.assertEqual(page.space_bar.inbox_tab.label.cget("text"), "Inbox (2)")
+        return self.app.memories
+
+    def ids(self, hub) -> set[str]:
+        return {item.item_id for item in hub.items}
+
+    def item(self, hub, memory_id):
+        return next(item for item in hub.items if item.item_id == memory_id)
+
+    def test_inbox_tab_lists_items_and_marks_guesses(self):
+        hub = self.inbox()
+        self.assertEqual(self.ids(hub), {self.first.memory_id, self.second.memory_id})
+        self.assertTrue(self.app.nav["memories"].selected)  # the tab lives under Memories in the sidebar
+        hub.open_item(self.item(hub, self.first.memory_id))
+        self.root.update()
+        self.assertIn("a guess the host made", hub.drawer.inbox_meta.cget("text"))
+        self.assertEqual(hub.tabs[INBOX_TAB].text, "Inbox 2")
+        card = hub.grid.cards[f"inbox:{self.first.memory_id}"]
+        self.assertEqual(set(card.buttons), {"to_memories", "move", "delete"})  # To memories / Move / Discard
 
     def test_move_to_memories_then_the_inbox_copy_is_gone(self):
-        self.app.show_page("inbox")
-        page = self.app.inbox
-        page.tree.selection_set(self.second.memory_id)
-        self.root.update()
+        hub = self.inbox()
         with patch.object(self.app, "edit_before_saving", return_value=("Weekly sync", "The team syncs every "
                                                                          "Monday morning.")):
-            page.move_selected()
-        self.assertNotIn(self.second.memory_id, page.items)
+            self.assertTrue(hub.do.to_memories(self.item(hub, self.second.memory_id)))
+        self.assertNotIn(self.second.memory_id, self.ids(hub))
         titles = {revision.title for revision in self.service.list(limit=50)}
         self.assertIn("Weekly sync", titles)
 
     def test_move_offers_to_update_a_similar_memory(self):
         existing = self.service.add(title="Dark themes", content="The user seems to like dark themes for long "
                                     "sessions.", source_ref="test")
-        self.app.show_page("inbox")
-        page = self.app.inbox
-        page.tree.selection_set(self.first.memory_id)
+        hub = self.inbox()
         with patch.object(self.app, "edit_before_saving",
                           return_value=("Dark themes", "The user seems to like dark themes for long sessions.")), \
                 patch.object(self.app, "confirm", return_value=True):
-            page.move_selected()
+            hub.do.to_memories(self.item(hub, self.first.memory_id))
         current = self.service.read(existing.memory_id)
         self.assertEqual(current.revision_number, 2)
         self.assertEqual(len([r for r in self.service.list(limit=50) if r.title == "Dark themes"]), 1)
 
-    def test_discard_needs_confirmation_and_shows_the_limits(self):
-        self.app.show_page("inbox")
-        page = self.app.inbox
-        page.tree.selection_set(self.first.memory_id, self.second.memory_id)
+    def test_discard_waits_for_undo_and_shows_the_limits(self):
+        # v0.4.4 §3.2: no dialog; the items leave the list, the notice says the limits and offers Undo.
+        hub = self.inbox()
         with patch.object(self.app, "confirm", return_value=False) as asked:
-            page.discard_selected()
-        points = asked.call_args.kwargs["points"][0]
-        self.assertIn("as far as the app can", points)
-        self.assertNotIn("permanently", points.lower())
-        self.assertEqual(len(page.items), 2)
-        with patch.object(self.app, "confirm", return_value=True):
-            page.discard_selected()
-        self.assertEqual(page.items, {})
+            self.assertTrue(hub.delete_items(list(hub.items)))
+        asked.assert_not_called()
+        message = self.app.infobar.message
+        self.assertIn("as far as the app can", message)
+        self.assertNotIn("permanently", message.lower())
+        self.assertEqual(hub.items, [])
+        self.assertEqual(len(self.service.inbox()), 2, "nothing is deleted while Undo is offered")
+        self.assertTrue(self.app.pending.undo())
+        self.assertEqual(len(hub.items), 2)  # positive control: back after Undo
+        hub.delete_items(list(hub.items))
+        self.app.pending.flush()
+        self.assertEqual(self.service.inbox(), ())
+        self.assertEqual(hub.items, [])
 
-    def test_cleanup_proposals_badge_dashboard_keep_and_discard_now(self):
+    def test_cleanup_proposals_keep_and_discard_now_and_no_badge(self):
         due = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat().replace("+00:00", "Z")
         self.control.propose_discard([self.first.memory_id], due_at=due)
         self.app.refresh_badges()
-        self.assertEqual(self.app.nav["memories"].badge_count, 1)
-        self.assertEqual(self.app.dashboard.review_detail.label.cget("text"), "Inbox items to clean up: 1")
-        self.assertEqual(self.app.dashboard.review_value.cget("text"), "1")
-        self.app.show_page("inbox")
-        page = self.app.inbox
-        self.assertTrue(page.cleanup.winfo_manager())
-        page.keep_proposal(self.control.curation_items()[0])
+        # v0.4.4 owner decision Q1: proposals show only in the Inbox tab, not in the badge or the review number.
         self.assertEqual(self.app.nav["memories"].badge_count, 0)
+        self.assertEqual(self.app.dashboard.review_value.cget("text"), "0")
+        self.assertNotIn("clean up", self.app.dashboard.review_detail.label.cget("text"))
+        hub = self.inbox()
+        self.assertTrue(hub.cleanup.winfo_manager())
+        hub.do.keep_proposal(self.control.curation_items()[0])
+        self.assertFalse(hub.cleanup.winfo_manager())
         self.control.propose_discard([self.second.memory_id], due_at=due)
-        page.refresh()
-        with patch.object(self.app, "confirm", return_value=True):
-            page.discard_proposal(self.control.curation_items()[0])
-        self.assertEqual(set(page.items), {self.first.memory_id})
+        hub.refresh()
+        with patch.object(self.app, "confirm", return_value=False) as asked:
+            hub.do.discard_proposal(self.control.curation_items()[0])
+        asked.assert_not_called()  # Discard now waits for Undo too
+        self.assertEqual(self.ids(hub), {self.first.memory_id})
+        self.assertFalse(hub.cleanup.winfo_manager())
+        self.app.pending.flush()
+        self.assertEqual({item.memory_id for item in self.service.inbox()}, {self.first.memory_id})
 
     def test_space_picker_switches_memories_and_new_memories_go_there(self):
         self.app.show_page("memories")
         self.assertNotIn("Alpha only", {r.title for r in self.service.list(limit=50)})
         self.app.set_space(self.alpha.space_id)
-        self.assertEqual(self.app.memories.space_bar.space.get(), "Alpha")
+        self.assertEqual(self.app.memories.space_filter, self.alpha.space_id)  # its space chip is chosen
+        self.assertEqual({item.title for item in self.app.memories.items}, {"Alpha only"})
         self.assertIn("Alpha only", {r.title for r in self.service.list(limit=50)})
         created = self.service.add(title="Alpha rule", content="Alpha releases need two reviewers.",
                                    source_ref="test")

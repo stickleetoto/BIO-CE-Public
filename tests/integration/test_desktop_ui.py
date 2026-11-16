@@ -76,9 +76,12 @@ class DesktopUIIntegrationTests(unittest.TestCase):
                 self.assertEqual(current.revision_number, 2)
                 self.assertEqual(service.read(first.memory_id).revision_id, current.revision_id)
 
+                # v0.4.4 §3.2: a delete waits for Undo instead of asking first; it runs when the notice ends.
                 with patch.object(app, "confirm", return_value=True) as confirm:
                     app.retract_selected()
-                confirm.assert_called_once()
+                confirm.assert_not_called()
+                self.assertEqual(service.count(), 1)
+                app.pending.flush()
                 self.assertEqual(service.count(), 0)
                 with self.assertRaises(MemoryNotFoundError):
                     service.read(first.memory_id)

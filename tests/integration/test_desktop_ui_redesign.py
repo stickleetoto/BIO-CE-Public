@@ -163,11 +163,14 @@ class RedesignedDesktopTests(unittest.TestCase):
             self.assertIs(app.current, app.pages[key])
             self.assertTrue(app.nav[key].selected)
             self.assertEqual(app.header_title.cget("text"), app.pages[key].title)
+        # v0.4.4: Ctrl+N opens the add form in the memory screen's drawer; Esc closes it (the editor page is gone).
         self._press("<Control-n>")
-        self.assertIs(app.current, app.editor)
-        self.assertTrue(app.nav["memories"].selected)
-        self._press("<Escape>")
         self.assertIs(app.current, app.memories)
+        self.assertTrue(app.memories.drawer_open and app.memories.drawer.editing)
+        self.assertTrue(app.nav["memories"].selected)
+        self._press("<Escape>", app.editor.title_field.entry)
+        self.assertIs(app.current, app.memories)
+        self.assertFalse(app.memories.drawer_open)
         for item in app.nav.values():
             self.assertEqual(str(item.cget("takefocus")), "1")
 
@@ -221,7 +224,8 @@ class RedesignedDesktopTests(unittest.TestCase):
         app.memories.refresh()
         self.root.update()
         self.assertFalse(app.memories.empty_all.winfo_manager())
-        self.assertTrue(app.memories.detail_empty.winfo_ismapped())
+        self.assertFalse(app.memories.drawer_open)  # the drawer opens only when a card is clicked
+        self.assertEqual(len(app.memories.grid.cards), 1)
         app.open_search("zzznomatchword")
         self.root.update()
         self.assertTrue(app.memories.no_results.winfo_ismapped())
@@ -229,7 +233,7 @@ class RedesignedDesktopTests(unittest.TestCase):
         app.memories.search.clear()
         self.root.update()
         self.assertFalse(app.memories.no_results.winfo_ismapped())
-        self.assertEqual(len(app.memories.tree.get_children()), 1)
+        self.assertEqual(len(app.memories.grid.cards), 1)
 
     def test_editor_validates_inline_and_guards_unsaved_changes(self):
         app = self._open()
@@ -247,7 +251,8 @@ class RedesignedDesktopTests(unittest.TestCase):
         with patch.object(app, "confirm", return_value=False) as confirm:
             self.assertFalse(app.show_page("dashboard"))
         confirm.assert_called_once()
-        self.assertIs(app.current, app.editor)
+        self.assertIs(app.current, app.memories)
+        self.assertTrue(app.memories.drawer.editing)
         self.assertEqual(app.title_value.get(), "Draft title")
         with patch.object(app, "confirm", return_value=True):
             self.assertTrue(app.show_page("dashboard"))
@@ -268,21 +273,29 @@ class RedesignedDesktopTests(unittest.TestCase):
         self.assertEqual(app.infobar.kind, "success")
         self.assertFalse(app.editor.dirty)
 
-    def test_retract_asks_first_and_cancel_changes_nothing(self):
+    def test_delete_waits_for_undo_and_undo_changes_nothing(self):
+        # v0.4.4 §3.2: no confirm dialog; the memory disappears, a notice offers Undo, and it runs only later.
         self._seed("Keep or retract")
         app = self._open()
         record = self.service.list()[0]
         app.open_memory(record.memory_id)
         self.root.update()
         with patch.object(app, "confirm", return_value=False) as confirm:
-            app.retract_selected()
-        self.assertTrue(confirm.call_args.kwargs["danger"])
-        self.assertEqual(confirm.call_args.kwargs["quote"], "Keep or retract")
+            self.assertTrue(app.retract_selected())
+        confirm.assert_not_called()
+        self.assertEqual(self.service.count(), 1)  # nothing deleted yet ...
+        self.assertEqual(app.memories.grid.cards, {})  # ... but it is out of the list
+        self.assertIn("Keep or retract", app.infobar.message)
+        self.assertIsNotNone(app.infobar.action_button)
+        app.infobar.action_button.invoke()  # Undo
+        self.root.update()
         self.assertEqual(self.service.count(), 1)
-        with patch.object(app, "confirm", return_value=True):
-            app.retract_selected()
+        self.assertEqual(len(app.memories.grid.cards), 1)  # positive control: back after Undo
+        app.open_memory(record.memory_id)
+        app.retract_selected()
+        app.pending.flush()  # the notice timed out (or the user left the page)
+        self.root.update()
         self.assertEqual(self.service.count(), 0)
-        self.assertEqual(app.infobar.kind, "success")
         self.assertTrue(app.memories.empty_all.winfo_manager())
 
     def test_stale_edit_is_rejected_and_the_users_text_is_kept(self):
@@ -301,7 +314,8 @@ class RedesignedDesktopTests(unittest.TestCase):
         app.content_value.delete("1.0", tk.END)
         app.content_value.insert("1.0", "My stale edit.")
         self.assertIsNone(app.save_memory())
-        self.assertIs(app.current, app.editor)
+        self.assertIs(app.current, app.memories)
+        self.assertTrue(app.memories.drawer.editing)
         self.assertEqual(app.infobar.kind, "warning")
         self.assertEqual(app.editor.content.get(), "My stale edit.")
         self.assertEqual(self.service.read(record.memory_id).title, "Changed elsewhere")
@@ -318,10 +332,10 @@ class RedesignedDesktopTests(unittest.TestCase):
         app = self._open()
         app.open_search("longwordmarker")
         self.root.update()
-        self.assertEqual(len(app.memories.tree.get_children()), 0)
+        self.assertEqual(len(app.memories.grid.cards), 0)
         app.open_search("revision")
         self.root.update()
-        self.assertEqual(len(app.memories.tree.get_children()), 1)
+        self.assertEqual(len(app.memories.grid.cards), 1)
         app.memories.select(record.memory_id)
         dialog = app.show_history()
         self.root.update()
@@ -336,7 +350,7 @@ class RedesignedDesktopTests(unittest.TestCase):
         latest = self.service.list()[0]
         app.open_memory(latest.memory_id)
         self.root.update()
-        self.assertEqual(app.memories.reader.get(), long_text)
+        self.assertEqual(app.memories.drawer.reader.get_text(), long_text)
 
     def test_backup_and_confirmed_restore_through_settings(self):
         self._seed("Before backup")

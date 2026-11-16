@@ -10,6 +10,8 @@ import tkinter as tk
 from bio_ce.connections import HostStatus, auto_memory_support
 from bio_ce.engine.contract import EngineUnavailable
 from bio_ce.ui.format import HOSTS, host_name, plural, preview, relative_time
+from bio_ce.ui.hub.data import REVIEWS
+from bio_ce.ui.i18n import t
 from bio_ce.ui.pages import Page
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS
 from bio_ce.ui.widgets import (
@@ -59,8 +61,12 @@ class DashboardPage(Page):
     def __init__(self, app, master) -> None:
         super().__init__(app, master)
         theme, c = self.theme, self.colors
-        Button(self.actions, theme, "Add memory", icon="add", variant="primary",
-               command=app.start_new_memory, tooltip="Add memory (Ctrl+N)").pack(side="right")
+        Button(self.actions, theme, t("hub.add"), icon="add", variant="primary",
+               command=app.start_new_memory, tooltip=t("hub.add_tip")).pack(side="right")
+        self.import_button = Button(self.actions, theme, t("hub.import"), variant="subtle",
+                                    command=lambda: app.show_page("import"), tooltip=t("hub.import_tip"))
+        self.import_button.pack(side="right", padx=(0, theme.px(SPACE_S)))
+        app.gate(self.import_button, "create")
 
         self.scroll = ScrollFrame(self, theme)
         self.scroll.pack(fill="both", expand=True)
@@ -98,18 +104,19 @@ class DashboardPage(Page):
         self.hosts_value = tk.Label(self.hosts_card.body, text="0", font=theme.font("stat"), background=c.surface,
                                     foreground=c.text, anchor="w")
         self.hosts_value.pack(fill="x")
-        self.hosts_detail = caption_label(self.hosts_card.body, theme, "of 2 hosts connected",
-                                          muted=True)
+        self.hosts_detail = caption_label(self.hosts_card.body, theme,
+                                          f"of {plural(len(HOSTS), 'host')} connected", muted=True)
         self.hosts_detail.pack(fill="x")
 
-        caption_label(self.review_card.body, theme, "Needs your review").pack(fill="x")
+        # v0.4.4 §2.4: one number, the review queue; it and its link open the memory screen's Reviews tab.
+        caption_label(self.review_card.body, theme, t("dashboard.reviews")).pack(fill="x")
         self.review_value = tk.Label(self.review_card.body, text="0", font=theme.font("stat"), background=c.surface,
                                      foreground=c.text, anchor="w", cursor="hand2")
         self.review_value.pack(fill="x")
-        self.review_detail = Button(self.review_card.body, theme, "Open review queue", variant="link",
-                                    command=lambda: app.show_page("connections"))
+        self.review_detail = Button(self.review_card.body, theme, t("dashboard.reviews_open"), variant="link",
+                                    command=lambda: app.open_state(REVIEWS))
         self.review_detail.pack(anchor="w")
-        self.review_value.bind("<ButtonRelease-1>", lambda _e: app.show_page("connections"))
+        self.review_value.bind("<ButtonRelease-1>", lambda _e: app.open_state(REVIEWS))
 
         lower = tk.Frame(body, background=c.bg)
         lower.pack(fill="both", expand=True, pady=(theme.px(SPACE_L), 0))
@@ -288,23 +295,23 @@ class DashboardPage(Page):
                 connected += 1
         self.hosts_value.configure(text=str(connected))
         self.hosts_detail.configure(text=f"of {plural(len(self.host_rows), 'host')} connected")
-        self.show_review_count(self.app.pending_review_count(), self.app.pending_cleanup_count())
+        self.show_review_count(self.app.pending_review_count())
+        try:
+            inbox = int(self.app.inbox_count_all())
+            control = getattr(self.app.connection_manager, "control", None)
+            suggestions = int(control.pending_proposal_count()) if control is not None else 0
+        except Exception:  # noqa: BLE001 - a count must never break the dashboard
+            inbox = suggestions = 0
+        if count is not None and (inbox or suggestions):
+            self.count_detail.configure(text=t("dashboard.inbox_and_suggestions", inbox=inbox,
+                                               suggestions=suggestions))
 
-    def show_review_count(self, reviews: int | None, cleanup: int | None = None) -> None:
-        """Review items (N) and inbox items proposed for discarding (M)."""
+    def show_review_count(self, reviews: int | None, _unused: int | None = None) -> None:
+        """The review queue only (owner decision Q1); the old "inbox items to clean up" line is gone (§2.4)."""
         c = self.colors
-        total = None if reviews is None else reviews + (cleanup or 0)
-        self.review_value.configure(text="—" if total is None else str(total),
-                                    foreground=c.warning if total else c.text)
-        if reviews:
-            text = f"Review queue: {reviews}" + (f" · to clean up: {cleanup}" if cleanup else "")
-            target = "connections"
-        elif cleanup:
-            text, target = f"Inbox items to clean up: {cleanup}", "inbox"
-        else:
-            text, target = "Nothing waiting", "connections"
-        self.review_detail.set_text(text)
-        self.review_detail.set_command(lambda: self.app.show_page(target))
+        self.review_value.configure(text="—" if reviews is None else str(reviews),
+                                    foreground=c.warning if reviews else c.text)
+        self.review_detail.set_text(t("dashboard.reviews_open") if reviews else t("dashboard.nothing_waiting"))
         self.after_idle(self._relayout)  # a longer button text may need fewer cards per row
 
 

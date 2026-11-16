@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from tkinter import ttk
 from pathlib import Path
 import tkinter as tk
@@ -27,10 +26,11 @@ from bio_ce.control_store import (
     MODE_PAUSED,
     MODE_READ_ONLY,
     AuditEntry,
-    ReviewItem,
 )
-from bio_ce.ui.dialogs import ReviewEditDialog, TextViewerDialog
+from bio_ce.ui.dialogs import TextViewerDialog
 from bio_ce.ui.format import HOST_COMMANDS, HOSTS, host_name, preview, relative_time
+from bio_ce.ui.hub.data import REVIEWS
+from bio_ce.ui.i18n import t
 from bio_ce.ui.pages import Page
 from bio_ce.ui.pages.dashboard import host_pill
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS
@@ -128,7 +128,6 @@ ACTIVITY_LABELS = {
     "rejected-by-user": ("Rejected by you", "neutral"),
     "failed": ("Couldn't apply", "danger"),
 }
-REVIEW_KIND_LABELS = {"create": "New memory", "update": "Change", "retract": "Retraction request"}
 
 
 class HostCard(Card):
@@ -370,20 +369,6 @@ class HostCard(Card):
             WrapLabel(column, check.detail, font=theme.font("caption"), foreground=c.text_secondary).pack(fill="x")
 
 
-PENDING_TEXT = {
-    "create": "Not saved yet. Nothing is stored until you approve it.",
-    "update": "Not changed yet. The memory stays as it is until you approve this.",
-    "retract": "Not retracted yet. The memory stays visible until you approve this.",
-}
-
-
-@dataclass(frozen=True, slots=True)
-class ReviewCard:
-    review_id: int
-    status_text: str
-    buttons: tuple
-
-
 class ConnectionsPage(Page):
     key = "connections"
     nav_key = "connections"
@@ -429,22 +414,15 @@ class ConnectionsPage(Page):
             card.pack(fill="x", pady=(theme.px(SPACE_M), 0))
             self.cards[host] = card
 
-        self.review_card = Card(body, theme, padding=SPACE_L + 4)
-        self.review_card.pack(fill="x", pady=(theme.px(SPACE_M), 0))
-        review_head = tk.Frame(self.review_card.body, background=c.surface)
-        review_head.pack(fill="x")
-        section_label(review_head, theme, "Needs your review").pack(side="left")
-        self.review_pill = Pill(review_head, theme, "0", "neutral")
-        self.review_pill.pack(side="left", padx=(theme.px(SPACE_S), 0))
-        caption_label(self.review_card.body, theme, "Changes an AI host proposed that BIO CE won't make on its own: "
-                      "uncertain or conflicting facts, and every retraction.", muted=True).pack(
-            fill="x", pady=(theme.px(SPACE_XS), theme.px(SPACE_S)))
-        self.review_list = tk.Frame(self.review_card.body, background=c.surface)
-        self.review_list.pack(fill="x")
-
+        # v0.4.4: what hosts ask to change is reviewed on the memory screen (Memories → Reviews), not here.
         self.activity_card = Card(body, theme, padding=SPACE_L + 4)
         self.activity_card.pack(fill="x", pady=(theme.px(SPACE_M), 0))
-        section_label(self.activity_card.body, theme, "Recent AI activity").pack(fill="x")
+        activity_head = tk.Frame(self.activity_card.body, background=c.surface)
+        activity_head.pack(fill="x")
+        self.reviews_link = Button(activity_head, theme, t("connections.open_reviews"), variant="link",
+                                   command=lambda: app.open_state(REVIEWS))
+        self.reviews_link.pack(side="right")
+        section_label(activity_head, theme, "Recent AI activity").pack(side="left")
         caption_label(self.activity_card.body, theme, "What hosts saved, updated, or tried to save. Select an "
                       "entry to open the memory.", muted=True).pack(fill="x", pady=(theme.px(SPACE_XS),
                                                                                      theme.px(SPACE_S)))
@@ -479,21 +457,19 @@ class ConnectionsPage(Page):
 
     def refresh_activity(self) -> None:
         theme, c = self.theme, self.colors
-        for frame in (self.review_list, self.activity_list):
-            for child in frame.winfo_children():
-                child.destroy()
+        for child in self.activity_list.winfo_children():
+            child.destroy()
         control = self.control
-        reviews: tuple[ReviewItem, ...] = control.reviews(limit=50) if control is not None else ()
-        self.review_cards: list[ReviewCard] = []
         activity: tuple[AuditEntry, ...] = control.recent_activity(limit=15) if control is not None else ()
-        self.review_pill.set(str(len(reviews)), "warning" if reviews else "neutral")
+        try:
+            waiting = int(control.pending_review_count()) if control is not None else 0
+        except Exception:  # noqa: BLE001
+            waiting = 0
+        self.reviews_link.set_text(t("connections.open_reviews_count", count=waiting) if waiting
+                                   else t("connections.open_reviews"))
         refresh_badges = getattr(self.app, "refresh_badges", None)
         if refresh_badges is not None:
             refresh_badges()
-        if not reviews:
-            caption_label(self.review_list, theme, "Nothing to review.", muted=True).pack(fill="x")
-        for item in reviews:
-            self._review_row(item)
         if not activity:
             caption_label(self.activity_list, theme, "No AI activity yet.", muted=True).pack(fill="x")
         for entry in activity:
@@ -514,44 +490,6 @@ class ConnectionsPage(Page):
                          foreground=c.text_muted).pack(side="left", padx=(theme.px(SPACE_S), 0))
             tk.Label(row, text=relative_time(entry.recorded_at), font=theme.font("caption"), background=c.surface,
                      foreground=c.text_muted).pack(side="right")
-
-    def _review_row(self, item: ReviewItem) -> None:
-        theme, c = self.theme, self.colors
-        box = tk.Frame(self.review_list, background=c.surface_alt, highlightthickness=1,
-                       highlightbackground=c.border)
-        box.pack(fill="x", pady=(0, theme.px(SPACE_S)))
-        inner = tk.Frame(box, background=c.surface_alt)
-        inner.pack(fill="x", padx=theme.px(SPACE_M), pady=theme.px(SPACE_S))
-        top = tk.Frame(inner, background=c.surface_alt)
-        top.pack(fill="x")
-        Pill(top, theme, REVIEW_KIND_LABELS.get(item.kind, item.kind), "info").pack(side="left")
-        tk.Label(top, text=f"{host_name(item.host)} · {relative_time(item.created_at)}", font=theme.font("caption"),
-                 background=c.surface_alt, foreground=c.text_muted).pack(side="left", padx=(theme.px(SPACE_S), 0))
-        tk.Label(inner, text=item.title, font=theme.font("body_strong"), background=c.surface_alt,
-                 foreground=c.text, anchor="w", justify="left").pack(fill="x", pady=(theme.px(SPACE_XS), 0))
-        if item.content:
-            WrapLabel(inner, preview(item.content, 400), font=theme.font("body"), foreground=c.text_secondary,
-                      background=c.surface_alt).pack(fill="x")
-        WrapLabel(inner, f"Why it needs you: {item.review_reason}", font=theme.font("caption"),
-                  foreground=c.text_muted, background=c.surface_alt).pack(fill="x", pady=(theme.px(SPACE_XS), 0))
-        status_text = PENDING_TEXT[item.kind]
-        WrapLabel(inner, status_text, font=theme.font("caption_strong"), foreground=c.warning,
-                  background=c.surface_alt).pack(fill="x", pady=(theme.px(SPACE_XS), 0))
-        buttons = tk.Frame(inner, background=c.surface_alt)
-        buttons.pack(fill="x", pady=(theme.px(SPACE_S), 0))
-        approve_text = "Retract memory" if item.kind == "retract" else "Approve"
-        made = [Button(buttons, theme, approve_text, variant="danger" if item.kind == "retract" else "primary",
-                       command=lambda: self.approve_review(item))]
-        made[-1].pack(side="left")
-        if item.kind != "retract":
-            made.append(Button(buttons, theme, "Edit and approve…",
-                               command=lambda: self.approve_review(item, edit=True)))
-            made[-1].pack(side="left", padx=(theme.px(SPACE_S), 0))
-        made.append(Button(buttons, theme, "Reject", command=lambda: self.reject_review(item)))
-        made[-1].pack(side="left", padx=(theme.px(SPACE_S), 0))
-        for button in made:
-            self.app.gate(button, "review")
-        self.review_cards.append(ReviewCard(item.review_id, status_text, tuple(made)))
 
     def focus_default(self) -> None:
         self.focus_set()
@@ -1002,48 +940,6 @@ class ConnectionsPage(Page):
         count = control.pause_all()
         self.app.hosts_changed()
         self.app.notify("success", f"Paused {count} connection{'s' if count != 1 else ''}.", title="AI access paused")
-
-    def approve_review(self, item: ReviewItem, *, edit: bool = False) -> None:
-        if not self.app.require_action("review"):
-            return
-        title, content = item.title, item.content
-        if edit:
-            edited = ReviewEditDialog(self, self.theme, title=item.title, content=item.content or "",
-                                      reason=item.review_reason).ask()
-            if edited is None:
-                return
-            title, content = edited
-        elif item.kind == "retract" and not self.app.confirm(
-            title="Retract this memory?",
-            message=f"{host_name(item.host)} asked to retract it. BIO CE and AI hosts will no longer find or read it.",
-            quote=item.title,
-            points=("Earlier revisions stay inside the database file. Retraction is not a secure erase.",),
-            confirm_text="Retract memory",
-            danger=True,
-        ):
-            return
-        try:
-            revision = self.app.service.approve_review(self.control, item.review_id, title=title, content=content)
-        except Exception as exc:  # conflicts, secrets, or a stale request
-            self.app.notify("warning", str(exc), title="Couldn't apply the change")
-            self.refresh_activity()
-            return
-        self.app.data_changed(select=None if item.kind == "retract" else revision.memory_id)
-        self.refresh_activity()
-        verb = {"create": "Saved", "update": "Updated", "retract": "Retracted"}[item.kind]
-        self.app.notify("success", f"“{preview(title, 60)}”", title=f"{verb} after your review")
-
-    def reject_review(self, item: ReviewItem) -> None:
-        if not self.app.require_action("review"):
-            return
-        try:
-            self.app.service.reject_review(self.control, item.review_id)
-        except Exception as exc:  # a stale card: the item was already handled
-            self.app.notify("warning", str(exc), title="Couldn't reject the suggestion")
-            self.refresh_activity()
-            return
-        self.refresh_activity()
-        self.app.notify("info", "Nothing was changed.", title="Suggestion rejected")
 
     def diagnose_host(self, host: str) -> None:
         card = self.cards[host]

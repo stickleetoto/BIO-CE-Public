@@ -14,7 +14,16 @@ from bio_ce.connections import CodeModeResult, ConnectionResult, HostStatus, Ski
 from bio_ce.control_store import ControlStore, MODE_AUTO_MEMORY, MODE_PAUSED, control_database_for
 from bio_ce.desktop import AppDataPaths, BIOCEDesktop, DesktopMemoryService
 from bio_ce.ui.dialogs import ReviewEditDialog
+from bio_ce.ui.hub.data import REVIEWS, HubItem
 from tests.integration.test_desktop_ui_redesign import new_root
+
+
+def review_item(app, review_id) -> HubItem:
+    """The Reviews tab's item for a review, also for one already handled (a stale card)."""
+    review = app.connection_manager.control.review(int(review_id))
+    general = next(space for space in app.spaces() if space.is_general)
+    return HubItem(REVIEWS, f"{REVIEWS}:{review.review_id}", str(review.review_id), general, review.title,
+                   review.content or "", review.created_at, review)
 
 
 def _all_widgets(widget):
@@ -228,16 +237,23 @@ class AutoMemoryConnectionsPageTests(unittest.TestCase):
         app.show_page("dashboard")
         self.root.update()
         self.assertEqual(app.dashboard.review_value.cget("text"), "0")
-        self.assertFalse(app.nav["connections"].badge.winfo_manager(), "no badge while nothing waits")
+        self.assertFalse(app.nav["memories"].badge.winfo_manager(), "no badge while nothing waits")
         for index in range(3):
             control.enqueue_review(host="codex", connection_id=self.connections.grant.connection_id, kind="create",
                                    title=f"Synthetic review {index}", content="synthetic", review_reason="test")
         app.show_page("memories")
         app.show_page("dashboard")
         self.root.update()
+        # v0.4.4 owner decision Q1: the one number is the review queue, on Memories (where the reviews are now).
         self.assertEqual(app.dashboard.review_value.cget("text"), "3")
-        self.assertEqual(app.nav["connections"].badge.cget("text"), "3")
-        self.assertTrue(app.nav["connections"].badge.winfo_manager())
+        self.assertEqual(app.nav["memories"].badge.cget("text"), "3")
+        self.assertTrue(app.nav["memories"].badge.winfo_manager())
+        self.assertFalse(app.nav["connections"].badge.winfo_manager(), "Connections shows no count any more")
+        app.review_detail_target = None
+        app.dashboard.review_detail.invoke()  # the number's link opens the Reviews tab
+        self.assertIs(app.current, app.memories)
+        self.assertEqual(app.memories.state, REVIEWS)
+        app.show_page("dashboard")
         # The status pill sits on its own line under the host name, inside the card.
         control.set_mode(self.connections.grant.connection_id, MODE_AUTO_MEMORY)
         app.hosts_changed()
@@ -262,30 +278,33 @@ class AutoMemoryConnectionsPageTests(unittest.TestCase):
                                review_reason="retraction always needs the user's approval", **common)
         control.enqueue_review(kind="create", title="Rejected idea", content="Synthetic idea to reject.",
                                review_reason="medium", **common)
-        app.show_page("connections")
-        page = app.connections
-        self.assertEqual(page.review_pill.cget("text").strip("• "), "4")
+        # v0.4.4: the review queue is the Reviews tab of the memory screen (moved from Connections).
+        app.open_state(REVIEWS)
+        page = app.memories.reviews
+        self.assertEqual(app.memories.tabs[REVIEWS].text, "Reviews 4")
 
-        items = {item.review_id: item for item in control.reviews()}
-        page.approve_review(items[first])
+        page.approve(review_item(app, first))
         self.assertEqual(self.service.count(), 2)
 
         with patch.object(ReviewEditDialog, "ask", return_value=("Uses a standing desk", "The user uses a "
                                                                   "standing desk every afternoon.")):
-            page.approve_review(items[second], edit=True)
+            page.approve(review_item(app, second), edit=True)
         titles = {revision.title: revision for revision in self.service.list()}
         self.assertIn("every afternoon", titles["Uses a standing desk"].content)
         self.assertTrue(titles["Uses a standing desk"].source.metadata["edited"])
 
         retract = next(item for item in control.reviews() if item.kind == "retract")
         with patch.object(app, "confirm", return_value=True):
-            page.approve_review(retract)
+            page.approve(review_item(app, retract.review_id))
         self.assertNotIn("Lab server", {revision.title for revision in self.service.list()})
 
-        page.reject_review(control.reviews()[0])
+        page.reject(review_item(app, control.reviews()[0].review_id))
+        self.assertEqual(control.pending_review_count(), 1, "a reject waits for Undo like a delete")
+        app.pending.flush()
         self.assertEqual(control.pending_review_count(), 0)
-        self.assertEqual(page.review_pill.cget("text").strip("• "), "0")
-        self.assertTrue(page.activity_list.winfo_children())
+        self.assertEqual(app.memories.tabs[REVIEWS].text, "Reviews 0")
+        app.show_page("connections")
+        self.assertTrue(app.connections.activity_list.winfo_children())
 
     def test_a_stale_review_card_cannot_apply_or_reject_a_handled_item(self):
         # U1-D1/D2: a card shown before the item was handled must not save it and must not raise.
@@ -294,16 +313,18 @@ class AutoMemoryConnectionsPageTests(unittest.TestCase):
         review_id = control.enqueue_review(kind="create", title="Prefers tea", content="The user prefers green tea.",
                                            review_reason="inferred", host="codex",
                                            connection_id=self.connections.grant.connection_id)
-        app.show_page("connections")
-        page = app.connections
-        stale = control.review(review_id)
-        page.reject_review(stale)
+        app.open_state(REVIEWS)
+        page = app.memories.reviews
+        stale = review_item(app, review_id)
+        page.reject(stale)
+        app.pending.flush()
         with patch.object(app, "notify") as notified:
-            page.approve_review(stale)
+            page.approve(stale)
         self.assertEqual(self.service.count(), 0, "a rejected suggestion was saved")
         self.assertEqual(notified.call_args.args[0], "warning")
         with patch.object(app, "notify") as notified:
-            page.reject_review(stale)  # used to raise ControlStoreError out of the Tk callback
+            page.reject(stale)  # used to raise ControlStoreError out of the Tk callback
+            app.pending.flush()
         self.assertEqual(notified.call_args.args[0], "warning")
         self.assertIn("already handled", notified.call_args.args[1])
         self.assertEqual(control.pending_review_count(), 0)

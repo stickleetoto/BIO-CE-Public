@@ -4,15 +4,16 @@
 """Every screen at the smallest window size: nothing cut off or pushed out of view (owner request, 2026-11-15).
 
 Two cut-off defects were found by hand in the v0.4.3-rc1 GUI check (Memories buttons, the import preview's
-SENSITIVE column). This test opens the Dashboard, Memories (list and reading pane), the Inbox, the import preview,
-the Suggestions, the Export dialog, the Connections cards, and Settings at the app's minimum size (860x560), filled
-with synthetic data, and fails on any button, table column, badge, or label that is cut off or out of view.
-A positive control makes a label long on purpose and expects the audit to catch it. The same test is meant to check
-the Korean texts of v0.4.4.
+SENSITIVE column). This test opens the Dashboard, the memory screen (v0.4.4: cards, the drawer for a memory and for an
+inbox item, the add form, Personal, the Suggestions and Reviews tabs, retracted memories), the import preview, the
+Export dialog, the Connections cards, and Settings at the app's minimum size (860x560), filled with synthetic data,
+and fails on any button, table column, badge, or label that is cut off or out of view. Positive controls make a
+label long on purpose and expect the audit to catch it. One run shows the memory screen in Korean (§6.3).
 """
 
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -23,8 +24,11 @@ from bio_ce.desktop import AppDataPaths, BIOCEDesktop, DesktopMemoryService
 from bio_ce.exporter import SOURCE_KINDS, SOURCE_LABELS
 from bio_ce.spaces import PERSONAL_SPACE
 from bio_ce.storage.sqlite_store import SQLiteMemoryStore
+from bio_ce.ui import i18n
 from bio_ce.ui.app import MINIMUM_SIZE
 from bio_ce.ui.dialogs import ExportDialog
+from bio_ce.ui.hub.data import INBOX as INBOX_TAB, MEMORIES, RETRACTED, REVIEWS, SUGGESTIONS
+from bio_ce.ui.widgets import ClampLabel
 from tests.integration.test_auto_memory_ui import FakeManagedConnections
 from tests.integration.test_desktop_ui_redesign import new_root
 from tests.ui_audit import audit
@@ -47,6 +51,7 @@ This is the complete set of memories I have stored.
 class LayoutAuditTests(unittest.TestCase):
     SCREEN: tuple[int, int] | None = None  # None: this PC's screen
     DPI = 96.0  # 96 = 100% scaling
+    LANGUAGE = "en"
 
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory(prefix="bio-ce-layout-audit-")
@@ -60,13 +65,21 @@ class LayoutAuditTests(unittest.TestCase):
         self.service = DesktopMemoryService(self.paths.user_database)
         self.first = self.service.add(title="시험용: 아주 긴 제목의 기억 — 회의록은 마크다운으로 쓰고 매주 금요일에 정리한다",
                                       content="긴 내용 " * 40, source_ref="test")
-        self.service.add(title="Editor", content="The user edits in helix.", source_ref="test")
+        self.editor_note = self.service.add(title="Editor", content="The user edits in helix.", source_ref="test")
+        gone = self.service.add(title="시험용: 지운 기억", content="지운 내용", source_ref="test")
+        self.service.retract(gone)
         self.connections = FakeManagedConnections(self.paths.user_database)
         self.control = self.connections.control
         self.control.set_mode(self.connections.grant.connection_id, MODE_AUTO_MEMORY)
         self.control.set_personal_enabled(True)
         self.control.set_personal_access(self.connections.grant.connection_id, can_read=True, can_write=True)
         self.control.create_space("Alpha Project With A Long Name")
+        common = dict(host="codex", connection_id=self.connections.grant.connection_id, review_reason="test")
+        self.control.enqueue_review(kind="update", title="Editor", content="The user writes meeting notes in "
+                                    "Markdown.", memory_id=self.editor_note.memory_id,
+                                    expected_revision_id=self.editor_note.revision_id, **common)
+        self.control.enqueue_review(kind="create", title="시험용: 작업 폴더", content="작업 폴더는 D 드라이브에 있다.",
+                                    **common)
         self.service.use_space(PERSONAL_SPACE.curated)
         self.service.add(title="시험용: 개인 메모", content="개인", source_ref="test")
         self.service.use_space(self.control.space("general").curated)
@@ -81,7 +94,9 @@ class LayoutAuditTests(unittest.TestCase):
                 self.addCleanup(screen.stop)
             # A window can't be larger than the screen (on the CI runner the minimum 860x560 at 150% became 1004x749).
             width, height = self.SCREEN[0] - 20, self.SCREEN[1] - 19
-        self.app = BIOCEDesktop(self.root, self.service, self.paths, self.connections)
+        with patch.dict(os.environ, {"BIO_CE_UI_LANGUAGE": self.LANGUAGE}):
+            self.app = BIOCEDesktop(self.root, self.service, self.paths, self.connections)
+        self.root.after_cancel(self.app._maintenance_after)
         theme = self.app.theme
         width = min(width or 10**6, theme.px(MINIMUM_SIZE[0]))
         height = min(height or 10**6, theme.px(MINIMUM_SIZE[1]))
@@ -90,6 +105,7 @@ class LayoutAuditTests(unittest.TestCase):
         # The app's minimum window is 860x560 at 100%; a smaller screen (the CI runner's 1024x768 at 150% is 683x512
         # at 100%) can't show it. Width is still checked in full there; running out of height is a known limitation.
         self.full_size = self.root.winfo_screenheight() * 0.85 >= theme.px(MINIMUM_SIZE[1])
+        self.hub = self.app.memories
 
     def tearDown(self) -> None:
         self.app.tasks.wait(10)
@@ -97,38 +113,63 @@ class LayoutAuditTests(unittest.TestCase):
         self.app.close()
         self.connections.close()
         self.temp.cleanup()
+        i18n.set_language("en")
 
     def settle(self) -> None:
         for _ in range(6):
             self.root.update()
 
-    def visit(self, page: str) -> list[str]:
+    def visit(self, page: str, label: str | None = None) -> list[str]:
         self.app.show_page(page)
         self.settle()
-        # The sidebar counts arrive in the background; show them every time so the audit always sees them
+        # The sidebar badge arrives in the background; show it every time so the audit always sees it
         # (in the narrow sidebar at this size a count beside the icon was once cut to 2 px).
-        for key, count in (("memories", 12), ("connections", 3)):
-            if not self.app.nav[key].badge_count:
-                self.app.nav[key].set_badge(count)
+        if not self.app.nav["memories"].badge_count:
+            self.app.nav["memories"].set_badge(12)
+        if not self.app.nav["connections"].badge_count:
+            self.app.nav["connections"].set_alert(True)
         self.settle()
-        return audit(self.root, page, vertical=self.full_size)
+        problems = audit(self.root, page, vertical=self.full_size)
+        return [p.replace(f"{page}:", f"{label}:", 1) for p in problems] if label else problems
+
+    def state(self, state: str, label: str) -> list[str]:
+        self.app.open_state(state)
+        return self.visit("memories", label)
+
+    def memory_screens(self) -> list[str]:
+        problems = self.state(MEMORIES, "memories (cards)")
+        self.app.open_memory(self.first.memory_id)
+        problems += self.visit("memories", "memories (drawer)")
+        self.hub.drawer.history.set_open(True)
+        self.hub.drawer.details.set_open(True)
+        problems += self.visit("memories", "memories (drawer, history and details)")
+        self.hub.drawer.start_edit()
+        problems += self.visit("memories", "memories (edit form)")
+        self.app.editor.load(None)
+        self.hub.close_drawer(force=True)
+        self.app.set_space("personal")
+        problems += self.visit("memories", "memories (Personal)")
+        self.hub.set_space_filter("all")
+        self.app.open_state(INBOX_TAB)
+        if self.hub.items:
+            self.hub.open_item(self.hub.items[0])
+        problems += self.visit("memories", "inbox (item selected)")
+        self.hub.close_drawer(force=True)
+        self.app.suggestions.find()
+        problems += self.state(SUGGESTIONS, "suggestions")
+        problems += self.state(REVIEWS, "reviews")
+        problems += self.state(RETRACTED, "retracted")
+        if self.hub.items:
+            self.hub.open_item(self.hub.items[0])
+        problems += self.visit("memories", "retracted (drawer)")
+        self.hub.close_drawer(force=True)
+        self.app.open_state(MEMORIES)
+        return problems
 
     def all_screens(self) -> list[str]:
         problems: list[str] = []
         problems += self.visit("dashboard")
-        self.app.show_page("memories")
-        self.app.memories.refresh()
-        self.app.memories.select(self.first.memory_id)
-        problems += self.visit("memories")
-        self.app.set_space("personal")
-        problems += self.visit("memories")
-        self.app.set_space("general")
-        self.app.show_page("inbox")
-        self.app.inbox.refresh()
-        children = self.app.inbox.tree.get_children()
-        if children:
-            self.app.inbox.tree.selection_set(children[0])
-        problems += [p.replace("inbox:", "inbox (item selected):", 1) for p in self.visit("inbox")]
+        problems += self.memory_screens()
         self.app.show_page("import")
         importer = self.app.importer
         importer.refresh()
@@ -137,8 +178,6 @@ class LayoutAuditTests(unittest.TestCase):
         importer.start_preview()
         self.app.tasks.wait(30)
         problems += [p.replace("import:", "import preview:", 1) for p in self.visit("import")]
-        self.app.suggestions.find()
-        problems += self.visit("suggestions")
         self.app.pages["connections"].refresh()
         problems += self.visit("connections")
         problems += self.visit("settings")
@@ -160,48 +199,68 @@ class LayoutAuditTests(unittest.TestCase):
 
     def test_the_audit_catches_a_label_made_too_long_on_purpose(self):
         """Positive control: a long button text and a long badge must be reported."""
-        self.app.show_page("memories")
-        self.app.memories.refresh()
+        self.app.open_memory(self.first.memory_id)
         self.settle()
-        self.assertEqual([p for p in audit(self.root, "memories") if "Move to" in p], [])
-        self.app.memories.move_button.set_text("Move to a space with a deliberately very long name " * 3)
-        self.app.set_space("personal")
-        self.app.memories.space_bar.personal_pill.configure(text="Personal: " + "a very long note " * 12)
-        self.app.memories.space_bar.relayout()
+        self.assertEqual([p for p in audit(self.root, "memories") if "deliberately" in p], [])
+        self.hub.drawer.move_button.set_text("Move to a space with a deliberately very long name " * 3)
+        self.hub.drawer.action_row.relayout()
         self.settle()
         found = audit(self.root, "memories")
         self.assertTrue(any("button" in p and "Move to a space" in p for p in found), found)
+        self.hub.close_drawer(force=True)
+        self.app.open_state(REVIEWS)
+        self.settle()
+        pills = [w for w in _walk(self.hub.reviews) if w.winfo_class() == "Label" and hasattr(w, "kind")]
+        self.assertTrue(pills)
+        pills[0].configure(text="Change: " + "a very long note " * 12)
+        self.settle()
+        found = audit(self.root, "memories")
         self.assertTrue(any("badge" in p and "a very long note" in p for p in found), found)
 
-    def test_a_title_that_pushes_the_rest_out_is_caught(self):
-        """Positive control for "squeezed out": a title allowed to grow without limit hides what is below it."""
-        self.app.show_page("memories")
-        self.app.memories.refresh()
-        self.app.memories.select(self.first.memory_id)
+    def test_a_title_that_pushes_the_rest_out_is_caught_and_the_drawer_keeps_its_buttons(self):
+        """Positive control for "squeezed out": a title allowed to grow without limit above the cards hides them.
+        In the drawer the same title only makes its content scroll: the action row stays (K1, K2)."""
+        if not self.full_size:
+            self.skipTest("height is not checked on a screen below the minimum window size")
+        self.app.open_memory(self.first.memory_id)
         self.settle()
-        title = self.app.memories.detail_title
+        title = self.hub.drawer.title_label
         title.max_lines = 200
         title.set_text("시험용 긴 제목 " * 300)
+        self.settle()
+        self.assertEqual(audit(self.root, "memories"), [])
+        for button in (self.hub.drawer.edit_button, self.hub.drawer.delete_button, self.hub.drawer.close_button):
+            self.assertTrue(button.winfo_viewable())
+        self.hub.close_drawer(force=True)
+        pusher = ClampLabel(self.hub, self.app.theme, max_lines=200)
+        pusher.pack(fill="x", before=self.hub.body)
+        pusher.set_text("시험용 긴 제목 " * 600)
         self.settle()
         found = audit(self.root, "memories")
         self.assertTrue(any("squeezed out" in p or ("cut" in p and "clamplabel" in p) for p in found), found)
 
     def test_a_long_line_is_shortened_not_cut(self):
         """The one-line labels end in "…" instead of being cut; turning that off is caught."""
-        if not self.full_size:
-            self.skipTest("the reading pane has no height for this line on a screen below the minimum window size")
-        self.app.show_page("memories")
-        self.app.memories.refresh()
-        self.app.memories.select(self.first.memory_id)
+        self.app.open_memory(self.first.memory_id)
         self.settle()
-        label = self.app.memories.meta_label
-        label.set_text("Updated 2026-11-15 16:24 · Source: " + "a very long source name " * 8)
+        label = self.hub.drawer.meta_label
+        label.set_text("General · Revision 1 · updated just now · Source: " + "a very long source name " * 8)
         self.settle()
         self.assertTrue(str(label.cget("text")).endswith("…"))
-        self.assertEqual([p for p in audit(self.root, "memories") if "meta" in p or "very long source" in p], [])
+        card = next(iter(self.hub.grid.cards.values()))
+        card.title_label.set_text("시험용 아주 긴 카드 제목 " * 30)
+        self.settle()
+        self.assertTrue(str(card.title_label.cget("text")).endswith("…"), "a long card title is shortened (K10)")
+        self.assertEqual([p for p in audit(self.root, "memories") if "very long source" in p], [])
         label.configure(text="Updated · Source: " + "a very long source name " * 8)  # skips the shortening
         self.root.update_idletasks()
         self.assertTrue(any("not shortened to fit" in p for p in audit(self.root, "memories")))
+
+
+def _walk(widget):
+    for child in widget.winfo_children():
+        yield child
+        yield from _walk(child)
 
 
 class CiScreenLayoutAuditTests(LayoutAuditTests):
@@ -209,6 +268,40 @@ class CiScreenLayoutAuditTests(LayoutAuditTests):
 
     SCREEN = (1024, 768)
     DPI = 144.0
+
+
+class KoreanLayoutAuditTests(unittest.TestCase):
+    """§6.3: the memory screen in Korean at the minimum window and at the CI screen, with a positive control."""
+
+    def run_screens(self, base: type) -> None:
+        class Korean(base):  # type: ignore[misc, valid-type]
+            LANGUAGE = "ko"
+
+            def runTest(self) -> None:  # noqa: N802 - unittest name
+                pass
+
+        case = Korean()
+        case.setUp()
+        try:
+            self.assertEqual(case.hub.tabs[MEMORIES].text.split()[0], "기억")
+            problems = case.memory_screens()
+            newline = chr(10)
+            self.assertEqual(problems, [], f"{len(problems)} problems:{newline}" + newline.join(problems))
+            case.app.open_memory(case.first.memory_id)
+            case.settle()
+            case.hub.drawer.move_button.set_text("아주 긴 공간 이름으로 옮기기 " * 6)  # positive control in Korean
+            case.hub.drawer.action_row.relayout()
+            case.settle()
+            self.assertTrue(any("button" in p and "아주 긴" in p for p in audit(case.root, "memories")))
+        finally:
+            case.tearDown()
+            case.doCleanups()
+
+    def test_the_memory_screen_in_korean_at_the_minimum_window(self):
+        self.run_screens(LayoutAuditTests)
+
+    def test_the_memory_screen_in_korean_at_the_ci_screen(self):
+        self.run_screens(CiScreenLayoutAuditTests)
 
 
 if __name__ == "__main__":

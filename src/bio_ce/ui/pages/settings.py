@@ -16,7 +16,9 @@ from bio_ce.inbox import DISCARD_NOTICE
 from bio_ce.ui.dialogs import TextViewerDialog
 from bio_ce.ui.format import file_size, plural
 from bio_ce.engine.presentation import SEPARATE_DATABASES_NOTE, engine_rows
+from bio_ce.ui.i18n import t
 from bio_ce.ui.pages import Page
+from bio_ce.ui.shortcuts import SHORTCUTS
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS
 from bio_ce.ui.widgets import (
     Button,
@@ -31,18 +33,6 @@ from bio_ce.ui.widgets import (
 )
 
 
-SHORTCUTS = (
-    ("Ctrl+1 – Ctrl+4", "Go to Dashboard, Memories, Connections, Settings"),
-    ("Ctrl+N", "Add a memory"),
-    ("Ctrl+F", "Search memories"),
-    ("Ctrl+S", "Save the memory you are editing"),
-    ("Esc", "Leave the editor or close a dialog"),
-    ("Ctrl+E", "Edit the selected memory"),
-    ("Ctrl+H", "Show revision history"),
-    ("Delete", "Retract the selected memory (asks first)"),
-    ("F5", "Refresh the current page"),
-    ("Tab / Shift+Tab", "Move between controls; Enter or Space activates"),
-)
 
 PRIVACY_POINTS = (
     ("shield", "Stored only on this PC",
@@ -150,6 +140,20 @@ class SettingsPage(Page):
         app.gate(self.backup_button, "backup")
         Button(backup_row, theme, "Export memories as text…", variant="link", command=app.export_memories).pack(
             side="left", padx=(theme.px(SPACE_M), 0))
+        # v0.4.4 §7.2: BIO CE's own automatic backups (before a move or a restore) are limited to the latest N pairs.
+        keep_row = tk.Frame(backup, background=c.surface)
+        keep_row.pack(fill="x", pady=(theme.px(SPACE_M), 0))
+        tk.Label(keep_row, text=t("settings.backups.keep_label"), font=theme.font("body"), background=c.surface,
+                 foreground=c.text, anchor="w").pack(side="left")
+        self.auto_backup_value = tk.StringVar(master=self)
+        Field(keep_row, theme, textvariable=self.auto_backup_value, width=5).pack(
+            side="left", padx=(theme.px(SPACE_M), theme.px(SPACE_S)))
+        tk.Label(keep_row, text=t("settings.backups.keep_range"), font=theme.font("caption"), background=c.surface,
+                 foreground=c.text_muted).pack(side="left")
+        self.auto_backup_button = Button(keep_row, theme, t("common.save"), command=self.save_auto_backup_keep)
+        self.auto_backup_button.pack(side="left", padx=(theme.px(SPACE_M), 0))
+        WrapLabel(backup, t("settings.backups.keep_note"), font=theme.font("caption"),
+                  foreground=c.text_muted).pack(fill="x", pady=(theme.px(SPACE_XS), 0))
         tk.Frame(backup, height=1, background=c.border).pack(fill="x", pady=theme.px(SPACE_L))
         tk.Label(backup, text="Restore from a backup", font=theme.font("body_strong"), background=c.surface,
                  foreground=c.text, anchor="w").pack(fill="x")
@@ -180,12 +184,15 @@ class SettingsPage(Page):
         shortcuts = self._card(body, "Keyboard shortcuts", None)
         grid = tk.Frame(shortcuts, background=c.surface)
         grid.pack(fill="x", pady=(theme.px(SPACE_S), 0))
-        for index, (keys, action) in enumerate(SHORTCUTS):
-            tk.Label(grid, text=keys, font=theme.font("mono"), background=c.surface_alt, foreground=c.text,
+        self.shortcut_rows = []
+        for index, shortcut in enumerate(SHORTCUTS):  # one table for the keys and this list (v0.4.4 F3)
+            tk.Label(grid, text=shortcut.keys, font=theme.font("mono"), background=c.surface_alt, foreground=c.text,
                      padx=theme.px(SPACE_S), pady=theme.px(1)).grid(row=index, column=0, sticky="w",
                                                                     pady=theme.px(3))
-            tk.Label(grid, text=action, font=theme.font("body"), background=c.surface, foreground=c.text_secondary,
-                     anchor="w").grid(row=index, column=1, sticky="w", padx=(theme.px(SPACE_M), 0))
+            label = WrapLabel(grid, t(shortcut.text), font=theme.font("body"), foreground=c.text_secondary)
+            label.grid(row=index, column=1, sticky="we", padx=(theme.px(SPACE_M), 0))
+            self.shortcut_rows.append(label)
+        grid.columnconfigure(1, weight=1)
 
         about = self._card(body, "About BIO CE", None)
         tk.Label(about, text=f"BIO Community Edition {bio_ce.display_version()} · {release_channel(bio_ce.__version__)}",
@@ -441,6 +448,29 @@ class SettingsPage(Page):
         self.app.notify("success", "Inbox settings saved.", title="Inbox settings")
         self.render_inbox_settings()
 
+    def render_auto_backup_keep(self) -> None:
+        control = self.spaces_control()
+        try:
+            keep = control.auto_backup_keep() if control is not None else None
+        except Exception:  # noqa: BLE001
+            keep = None
+        self.auto_backup_value.set("" if keep is None else str(keep))
+        self.auto_backup_button.set_enabled(control is not None)
+
+    def save_auto_backup_keep(self) -> int | None:
+        control = self.spaces_control()
+        if control is None:
+            return None
+        try:
+            keep = control.set_auto_backup_keep(int(self.auto_backup_value.get().strip()))
+        except (ValueError, TypeError):
+            self.app.notify("error", t("settings.backups.keep_invalid"), title=t("settings.backups.keep_title"))
+            self.render_auto_backup_keep()
+            return None
+        self.app.notify("success", t("settings.backups.keep_saved", count=keep), title=t("settings.backups.keep_title"))
+        self.render_auto_backup_keep()
+        return keep
+
     # Memory engine -------------------------------------------------------------------------------
 
     def _build_engine_card(self, body: tk.Misc) -> None:
@@ -544,6 +574,7 @@ class SettingsPage(Page):
         self.render_engines()
         self.render_spaces()
         self.render_inbox_settings()
+        self.render_auto_backup_keep()
         size = database_size(self.app.paths.user_database)
         parts = [plural(count, "active memory", "active memories") if count is not None else "Memory count unavailable",
                  f"{file_size(size)} on disk"]

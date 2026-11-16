@@ -53,16 +53,19 @@ class PersonalUiTests(unittest.TestCase):
         self.app.set_space("personal")
         self.app.show_page("memories")
         self.root.update()
-        bar = self.app.memories.space_bar
-        self.assertEqual(bar.space.get(), "Personal")
-        self.assertTrue(bar.personal_pill.winfo_manager())
+        hub = self.app.memories
+        self.assertEqual(hub.space_filter, "personal")
+        self.assertIn("personal", hub.chips)  # the Personal chip shows only while Personal is on
+        self.assertIn("locked", hub.chips["personal"].text)
         self.service.add(title="Clinic", content="The user's clinic is on Elm Street.", source_ref="test")
         with patch.object(self.app, "confirm", return_value=True):
             self.assertTrue(self.settings.turn_off_personal())
         self.root.update()
         self.assertEqual(self.names(), ["General"])
         self.assertEqual(self.service.scope, self.control.space("general").curated)  # back on General
-        self.assertFalse(bar.personal_pill.winfo_manager())
+        hub.refresh()
+        self.assertNotIn("personal", hub.chips)
+        self.assertNotIn("Clinic", {item.title for item in hub.items})
         self.service.use_space(PERSONAL_SPACE.curated)
         self.assertEqual([r.title for r in self.service.list()], ["Clinic"])  # the memory stayed
 
@@ -105,17 +108,17 @@ class PersonalUiTests(unittest.TestCase):
         second = self.service.add(title="Blood type", content="The user's blood type is O.", source_ref="test")
         keep = self.service.add(title="Editor", content="The user edits in helix.", source_ref="test")
         self.app.show_page("memories")
-        self.app.memories.refresh()
+        hub = self.app.memories
+        hub.refresh()
         self.root.update()
-        self.app.memories.tree.selection_set((first.memory_id, second.memory_id))
-        with patch.object(self.app, "ask_choice") as asked:
-            self.app.memories.move_selected()  # Personal is off: the only other space would be none
-        asked.assert_not_called()
+        chosen = [item for item in hub.items if item.item_id in (first.memory_id, second.memory_id)]
+        self.assertEqual(hub.move_targets(chosen), [])  # Personal is off: there is nowhere to move
+        self.assertEqual(hub.drop_targets(chosen), set())
         self.control.set_personal_enabled(True)
-        self.app.memories.tree.selection_set((first.memory_id, second.memory_id))
-        with patch.object(self.app, "ask_choice", return_value="personal") as asked:
-            self.app.memories.move_selected()
-        self.assertEqual([key for key, _label, _detail in asked.call_args.kwargs["choices"]], ["personal"])
+        hub.refresh()
+        chosen = [item for item in hub.items if item.item_id in (first.memory_id, second.memory_id)]
+        self.assertEqual([space.space_id for space in hub.move_targets(chosen)], ["personal"])
+        self.assertEqual(hub.do.move(chosen, PERSONAL_SPACE), 2)
         self.assertEqual([r.memory_id for r in self.service.list()], [keep.memory_id])
         backups = list((self.paths.user_database.parent / "backups").glob("auto-before-move-*.sqlite3"))
         self.assertEqual(len([b for b in backups if not b.name.endswith(".control.sqlite3")]), 1)

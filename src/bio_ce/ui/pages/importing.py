@@ -29,6 +29,8 @@ from bio_ce.importer import (
 )
 from bio_ce.ui.dialogs import EntryEditDialog
 from bio_ce.ui.format import format_timestamp, plural, preview as short
+from bio_ce.ui.hub.data import INBOX, SUGGESTIONS
+from bio_ce.ui.i18n import t
 from bio_ce.ui.pages import Page
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS
 from bio_ce.ui.widgets import (
@@ -67,8 +69,8 @@ class ImportPage(Page):
         self._cancel = threading.Event()
         self._progress = [0, 0]
         self._destinations: list[tuple[str, str]] = []
-        Button(self.actions, theme, "Back to inbox", variant="subtle",
-               command=lambda: app.show_page("inbox")).pack(side="right")
+        Button(self.actions, theme, t("import.back"), icon="back", variant="subtle",
+               command=lambda: app.open_state(INBOX)).pack(side="right")
         scroll = ScrollFrame(self, theme)
         scroll.pack(fill="both", expand=True)
         body = scroll.body
@@ -587,15 +589,20 @@ class ImportPage(Page):
 
     def _imported(self, result) -> None:
         self.app.data_changed()
-        self.app.find_suggestions(batch_id=result.batch_id, quiet=True)
+        suggested = self.app.find_suggestions(batch_id=result.batch_id, quiet=True)
         self.render_history()
         if result.status == "partial":
-            self.app.notify("warning", f"Only part of the import was saved ({result.to_inbox} to the inbox). Use "
-                            "Retry in Recent imports, or Undo.", title="Import interrupted")
+            # There is no "Retry" button (inventory §13 item 2): previewing the same text again shows what was saved
+            # as already there, so importing again adds only the rest.
+            self.app.notify("warning", t("import.partial", count=result.to_inbox), title=t("import.partial_title"),
+                            action=(t("hub.open_inbox"), lambda: self.app.open_state(INBOX)))
         else:
-            self.app.notify("success", f"Imported {plural(result.to_inbox, 'entry', 'entries')} to the inbox"
-                            + (f" and sent {result.to_review} to review" if result.to_review else "") + ".",
-                            title="Imported", action=("Open inbox", lambda: self.app.show_page("inbox")))
+            message = f"Imported {plural(result.to_inbox, 'entry', 'entries')} to the inbox" + (
+                f" and sent {result.to_review} to review" if result.to_review else "") + "."
+            if suggested:
+                message += " " + t("import.suggested", count=suggested)
+            self.app.notify("success", message, title="Imported",
+                            action=(t("hub.open_inbox"), lambda: self.app.open_state(INBOX)))
         self.preview = None
         self.result.pack_forget()
         self.text.set("")
@@ -652,8 +659,7 @@ class ImportPage(Page):
             self.app.notify("error", "BIO CE couldn't prepare the suggestions.", title="Suggestions")
             return 0
         self.app.refresh_badges()
-        self.app.show_page("suggestions")
-        self.app.suggestions.show_batch(batch_id)
+        self.app.open_state(SUGGESTIONS, batch_id=batch_id)
         return added
 
     def undo_batch(self, batch_id: str) -> dict | None:

@@ -19,6 +19,7 @@ from bio_ce.control_store import MODE_AUTO_MEMORY
 from bio_ce.desktop import AppDataPaths, BIOCEDesktop, DesktopMemoryService
 from bio_ce.spaces import PERSONAL_SPACE
 from bio_ce.ui.dialogs import EntryEditDialog
+from bio_ce.ui.hub.data import INBOX, REVIEWS
 from bio_ce.ui.pages.importing import GENERAL_NOTE, PERSONAL_CHOICE
 from bio_ce.ui.widgets import ScrollFrame
 from tests.ui_audit import HEADING_DIVIDER, style_padding_x
@@ -194,13 +195,18 @@ class ImportUiTests(unittest.TestCase):
 
     def test_the_review_list_follows_an_import_and_its_undo(self):
         """GUI check (2026-11-16): after Undo import closed its reviews, Connections still listed 3 while the
-        sidebar badge said 1; the page was never told the reviews changed."""
+        sidebar badge said 1; the page was never told the reviews changed. (v0.4.4: the reviews and their badge
+        are on the memory screen.)"""
         self.service.add(title="Coffee", content="The user drinks two cups of coffee every morning before work.",
                          source_ref="test")
-        self.app.show_page("connections")
-        self.root.update()
-        connections = self.app.pages["connections"]
-        self.assertEqual(len(connections.review_cards), 0)
+        reviews = self.app.memories.reviews
+
+        def shown() -> tuple[int, int]:
+            self.app.open_state(REVIEWS)
+            self.root.update()
+            return len(reviews.review_cards), self.app.nav["memories"].badge_count
+
+        self.assertEqual(shown(), (0, 0))
         self.app.show_page("import")
         self.page.set_text("[2025-01-02] - The user drinks green tea every morning instead of coffee before work.")
         self.page.choose_destination("general")
@@ -209,16 +215,12 @@ class ImportUiTests(unittest.TestCase):
             self.page.do_import()
             self.app.tasks.wait(30)
         self.root.update()
-        self.app.show_page("connections")
-        self.root.update()
-        self.assertEqual((len(connections.review_cards), self.app.nav["connections"].badge_count), (1, 1))
+        self.assertEqual(shown(), (1, 1))
         self.app.show_page("import")
         batch = self.control.import_batches()[0]["batch_id"]
         with patch.object(self.app, "confirm", return_value=True):
             self.page.undo_batch(batch)
-        self.app.show_page("connections")
-        self.root.update()
-        self.assertEqual((len(connections.review_cards), self.app.nav["connections"].badge_count), (0, 0))
+        self.assertEqual(shown(), (0, 0))
 
     def test_the_page_is_not_left_blank_after_an_import(self):
         """GUI check (2026-11-15): after Import the preview closes and the page gets much shorter; the view stayed
@@ -278,15 +280,17 @@ class ImportUiTests(unittest.TestCase):
 
     def test_the_inbox_lists_every_imported_item_and_shows_dates_apart(self):
         from bio_ce.importer import ImportPlanner, ImportService, parse_text
-        from bio_ce.ui.pages.inbox import import_line
+        from bio_ce.ui.hub.drawer import import_line
         spaces = self.app.spaces()
         text = "\n".join(f"[2025-01-{n % 28 + 1:02d}] - Imported list fact {n} about place {n * 37}." for n in range(600))
         preview = self.service.import_planner(spaces, size_limit=2000).preview(
             parse_text(text), source="claude", destination="general")
         self.service.import_service(self.control, spaces).commit(preview)
-        self.app.show_page("inbox")
-        self.app.inbox.refresh()
-        self.assertEqual(len(self.app.inbox.items), 600)  # more than one page of 500
+        self.app.open_state(INBOX)
+        self.assertEqual(len(self.app.memories.items), 600)  # more than one page of 500
+        self.assertEqual(self.app.memories.tabs[INBOX].text, "Inbox 600")
+        self.assertLess(len(self.app.memories.grid.cards), 600)  # cards are made a page at a time
+        self.assertTrue(self.app.memories.grid.more_button.winfo_manager())
         self.assertIsInstance(ImportPlanner, type)
         self.assertIsInstance(ImportService, type)
         self.assertEqual(import_line({"import_source": "claude", "claimed_date": "2025-01-02"}),
@@ -313,10 +317,26 @@ class ImportUiTests(unittest.TestCase):
                 self.assertLessEqual(total, tree.winfo_width() + 2, {c: tree.column(c, "width") for c in columns})
                 self.assertGreaterEqual(int(tree.column("text", "width")), 150)  # the text keeps a readable width
 
-    def test_the_inbox_page_opens_the_import_page(self):
-        self.app.show_page("inbox")
-        self.app.inbox.import_button.invoke()
-        self.assertIs(self.app.current, self.page)
+    def test_the_memory_screen_and_the_dashboard_open_the_import_page_and_back_returns(self):
+        # v0.4.4 §4: Import… is on the memory screen's toolbar and the dashboard; Back goes to the memory screen.
+        for button in (self.app.memories.import_button, self.app.dashboard.import_button):
+            self.app.show_page("dashboard")
+            button.invoke()
+            self.assertIs(self.app.current, self.page)
+        back = next(child for child in self.page.actions.winfo_children())
+        back.invoke()
+        self.assertIs(self.app.current, self.app.memories)
+        self.assertEqual(self.app.memories.state, INBOX)
+
+    def test_a_partial_import_says_what_to_do_without_a_missing_retry_button(self):
+        """Inventory §13 item 2: the notice pointed at a "Retry" button that doesn't exist."""
+        from types import SimpleNamespace
+        result = SimpleNamespace(batch_id="b1", status="partial", to_inbox=3, to_review=0)
+        with patch.object(self.app, "notify") as notice:
+            self.page._imported(result)
+        message = notice.call_args.args[1]
+        self.assertNotIn("Retry", message)
+        self.assertIn("Preview the same text again", message)
 
 
 if __name__ == "__main__":

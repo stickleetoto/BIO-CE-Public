@@ -32,6 +32,8 @@ ALLOWED_SERVICE_CALLS = {
     "export_text",
     # v0.4.3 how many inbox items are kept for an undo (Community-only, read only; said in the delete dialogs)
     "kept_count",
+    # v0.4.4 Forget completely, also for retracted memories, which only it lists (Community-only; gated by retract)
+    "forget", "retracted", "retracted_count",
 }
 
 

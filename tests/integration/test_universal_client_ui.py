@@ -21,6 +21,7 @@ from bio_ce.engine.community import CommunityEngineAdapter
 from bio_ce.engine.contract import Capability, EngineState, Support, WriteOutcome, WriteStatus
 from bio_ce.engine.external import ExternalEngineAdapter
 from bio_ce.engine.switching import EngineSelection, SwitchPhase
+from bio_ce.ui.hub.data import REVIEWS
 from tests.engine_fixtures import SyntheticTransport
 from tests.integration.test_auto_memory_ui import FakeManagedConnections
 from tests.integration.test_desktop_ui_redesign import FakeConnections
@@ -114,6 +115,7 @@ class UniversalClientTests(unittest.TestCase):
             self.assertIsNotNone(app.show_history())
             with patch.object(app, "confirm", return_value=True):
                 app.retract_selected()
+            app.pending.flush()  # v0.4.4: the delete runs when its Undo notice ends
         self.assertEqual((create.call_count, revise.call_count, retract.call_count), (1, 1, 1))
         self.assertTrue(listing.called and get.called and history.called)
         self.assertEqual([r.title for r in self.service.list()], ["Community only note"])
@@ -123,18 +125,21 @@ class UniversalClientTests(unittest.TestCase):
             self.service.add(title=f"Parity note {index}", content=f"Parity body {index}.", source_ref=f"src-{index}")
         app = self.open()
         app.show_page("memories")
-        shown = list(app.memories.tree.get_children())
+        shown = [item.item_id for item in app.memories.items]
         self.assertEqual(shown, [r.memory_id for r in self.service.list()])
         app.memories.select(shown[0])
         expected = self.service.read(shown[0])
         self.assertEqual((app.selected.revision_id, app.selected.title, app.selected.content,
                           app.selected.source_ref), (expected.revision_id, expected.title, expected.content,
                                                      expected.source.source_ref))
-        self.assertIn(expected.source.source_ref, app.memories.meta_label.cget("text"))
+        self.assertIn(expected.source.source_ref, app.memories.drawer.meta_label._full)
         app.query.set("Parity body 1")
         app.memories.refresh()
-        self.assertEqual(list(app.memories.tree.get_children()),
-                         [hit.memory_id for hit in self.service.search("Parity body 1")])
+        # The memory screen's search finds what has every word (v0.4.4 HubData); the service's word search ranks
+        # partial matches too, so the screen's results are the full matches among them.
+        found = [item.item_id for item in app.memories.items]
+        self.assertEqual(found, [r.memory_id for r in self.service.list() if r.title == "Parity note 1"])
+        self.assertLessEqual(set(found), {hit.memory_id for hit in self.service.search("Parity body 1")})
 
     # Capability gating with another engine ---------------------------------------------
 
@@ -143,22 +148,25 @@ class UniversalClientTests(unittest.TestCase):
         app = self.open(engine=core, engine_selection=CORE_ACTIVE)
         self.assertEqual(app.engine_banner().title, "Using Synthetic engine")
         app.show_page("memories")
-        titles = {app.memories.records[iid].title for iid in app.memories.tree.get_children()}
+        titles = {item.title for item in app.memories.items}
         self.assertIn("Synthetic engine note 0", titles)
         self.assertNotIn("Community only note", titles, "Community memories must not appear under another engine")
         for action in EDIT_ACTIONS + ("review", "backup", "restore"):
             self.assertFalse(app.allowed(action).enabled, action)
         self.assertFalse(app.memories.add_button.enabled)
-        app.memories.select(app.memories.tree.get_children()[0])
-        self.assertFalse(app.memories.edit_button.enabled)
-        self.assertFalse(app.memories.retract_button.enabled)
-        self.assertTrue(app.memories.history_button.enabled)
+        app.memories.select(app.memories.items[0].item_id)
+        drawer = app.memories.drawer
+        self.assertFalse(drawer.edit_button.enabled)
+        self.assertFalse(drawer.delete_button.enabled)
+        self.assertTrue(drawer.history_button.enabled)
+        card = next(iter(app.memories.grid.cards.values()))
+        self.assertFalse(card.buttons["edit"].enabled or card.buttons["delete"].enabled)
         app.show_page("settings")
         self.assertFalse(app.settings.backup_button.enabled)
         self.assertFalse(app.settings.restore_button.enabled)
         with patch.object(app, "notify") as notified:
             app.start_new_memory()  # Ctrl+N path
-        self.assertIsNot(app.current, app.editor)
+        self.assertFalse(app.memories.drawer.editing)
         self.assertEqual(notified.call_args.args[0], "warning")
         self.assertIn("does not offer", notified.call_args.args[1])
 
@@ -176,16 +184,18 @@ class UniversalClientTests(unittest.TestCase):
                                    content="The user prefers green tea.", review_reason="inferred")
         finally:
             control.close()
+        # v0.4.4: reviews are a tab of the memory screen (they moved from Connections).
         app = self.open(FakeManagedConnections(self.paths.user_database))
-        app.show_page("connections")
-        self.assertIn("Not saved yet", app.connections.review_cards[0].status_text)
-        self.assertTrue(all(button.enabled for button in app.connections.review_cards[0].buttons))
+        app.open_state(REVIEWS)
+        cards = app.memories.reviews.review_cards
+        self.assertIn("Not saved yet", cards[0].status_text)
+        self.assertTrue(all(button.enabled for button in cards[0].buttons))
         app.close()
         self.service = DesktopMemoryService(self.paths.user_database)
         app = self.open(FakeManagedConnections(self.paths.user_database), engine=self.core(),
                         engine_selection=CORE_ACTIVE)
-        app.show_page("connections")
-        self.assertFalse(any(button.enabled for button in app.connections.review_cards[0].buttons))
+        app.open_state(REVIEWS)
+        self.assertFalse(any(button.enabled for button in app.memories.reviews.review_cards[0].buttons))
 
     # Failures and disconnected states ---------------------------------------------------
 
@@ -198,7 +208,7 @@ class UniversalClientTests(unittest.TestCase):
         with patch.object(app, "notify") as notified:
             app.show_page("memories")
             app.memories.refresh()
-        self.assertEqual(app.memories.tree.get_children(), ())
+        self.assertEqual(app.memories.grid.cards, {})
         self.assertEqual(notified.call_args.args[0], "error")
         self.assertIn("engine", notified.call_args.args[1].lower())
         self.assertFalse(any(app.allowed(action).enabled for action in ("browse", "create", "backup")))
@@ -218,7 +228,7 @@ class UniversalClientTests(unittest.TestCase):
         self.assertEqual(app.engine_banner().title, "No memory engine connected")
         self.assertIn("no engine", app.engine_label.cget("text").lower())
         app.show_page("memories")
-        self.assertEqual(app.memories.tree.get_children(), ())
+        self.assertEqual(app.memories.grid.cards, {})
         self.assertFalse(app.memories.add_button.enabled)
         app.show_page("settings")
         self.assertFalse(app.settings.engine_rows["community"].active)
@@ -239,7 +249,8 @@ class UniversalClientTests(unittest.TestCase):
                 patch.object(app, "notify") as notified:
             self.assertIsNone(app.save_memory())
         self.assertEqual(notified.call_args.args[0], "error")
-        self.assertIs(app.current, app.editor, "the user's text stays in the editor")
+        self.assertTrue(app.memories.drawer.editing, "the user's text stays in the form")
+        self.assertEqual(app.title_value.get(), "Will fail")
         self.assertEqual(self.service.count(), 1)
 
     # Pending vs saved ----------------------------------------------------------------
@@ -269,7 +280,7 @@ class UniversalClientTests(unittest.TestCase):
         self.service = DesktopMemoryService(self.paths.user_database)
         app = self.open()
         app.show_page("memories")
-        titles = {app.memories.records[iid].title for iid in app.memories.tree.get_children()}
+        titles = {item.title for item in app.memories.items}
         self.assertEqual(titles, {"Community only note", "Survives restart"})
         self.assertEqual(app.engine_banner().title, "Using Community Engine")
         self.assertFalse((self.paths.root / "engine-selection.json").exists(), "no selection file is created")

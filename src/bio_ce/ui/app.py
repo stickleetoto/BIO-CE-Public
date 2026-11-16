@@ -30,18 +30,17 @@ from bio_ce.storage.backup import PAIR_MATCHED, BackupError, pair_path
 from bio_ce.spaces import PERSONAL_SPACE
 from bio_ce.exporter import SOURCE_KINDS, SOURCE_LABELS, UNENCRYPTED_NOTICE, ExportOptions, ExportRefused, write_export
 from bio_ce.ui.dialogs import ChoiceDialog, ConfirmDialog, ExportDialog, NameDialog, ReviewEditDialog
-from bio_ce.ui.format import HOSTS, preview
+from bio_ce.ui.format import HOSTS
 from bio_ce.ui.i18n import resolve, set_language, t
 from bio_ce.ui.pending import PendingDeletes
+from bio_ce.ui.hub.common import space_label
+from bio_ce.ui.hub.data import ALL_SPACES, INBOX, SUGGESTIONS
+from bio_ce.ui.hub.page import HubPage
 from bio_ce.ui.pages import Page
 from bio_ce.ui.pages.connections import ConnectionsPage
 from bio_ce.ui.pages.dashboard import DashboardPage
-from bio_ce.ui.pages.editor import EditorPage
 from bio_ce.ui.pages.importing import ImportPage
-from bio_ce.ui.pages.inbox import InboxPage
-from bio_ce.ui.pages.memories import MemoriesPage
 from bio_ce.ui.pages.settings import SettingsPage
-from bio_ce.ui.pages.suggestions import SuggestionsPage
 from bio_ce.ui.tasks import TaskRunner
 from bio_ce.ui.theme import (
     SIDEBAR_COMPACT_BELOW,
@@ -160,11 +159,12 @@ class BIOCEDesktop:
         self.dashboard = DashboardPage(self, self.page_host)
         self._space_id = "general"
         self._maintenance_after: str | None = None
-        self.memories = MemoriesPage(self, self.page_host)
-        self.inbox = InboxPage(self, self.page_host)
+        # v0.4.4: one memory screen for memories, the inbox, suggestions, and reviews (design §2.2). The add / edit
+        # form lives in its drawer; Import is still a page of its own, opened from there and from the dashboard.
+        self.memories = HubPage(self, self.page_host)
+        self.editor = self.memories.drawer.editor
+        self.suggestions = self.memories.suggestions
         self.importer = ImportPage(self, self.page_host)
-        self.suggestions = SuggestionsPage(self, self.page_host)
-        self.editor = EditorPage(self, self.page_host)
         self.connections = ConnectionsPage(self, self.page_host)
         self.settings = SettingsPage(self, self.page_host)
         self.pages: dict[str, Page] = {
@@ -173,8 +173,7 @@ class BIOCEDesktop:
             "connections": self.connections,
             "settings": self.settings,
         }
-        self._routes: dict[str, Page] = dict(self.pages, editor=self.editor, inbox=self.inbox,
-                                             suggestions=self.suggestions, **{"import": self.importer})
+        self._routes: dict[str, Page] = dict(self.pages, **{"import": self.importer})
 
         self._bind_shortcuts()
         root.bind("<Configure>", self._on_resize, add="+")
@@ -268,7 +267,7 @@ class BIOCEDesktop:
         if self.current is target:
             target.focus_default()
             return True
-        if self.current is self.editor and not self.editor.confirm_leave():
+        if self.current is self.memories and not self.memories.confirm_leave():
             return False
         self.pending.flush()  # leaving the page: a delete waiting for Undo runs now
         if self.current is not None:
@@ -294,8 +293,8 @@ class BIOCEDesktop:
         self.header_subtitle.configure(text=subtitle)
 
     def refresh_current(self) -> None:
-        if self.current is self.editor:
-            return
+        if self.current is self.memories and self.memories.drawer.editing:
+            return  # the form keeps the user's text
         if self.current is self.connections:
             self.connections.refresh()
             return
@@ -306,32 +305,31 @@ class BIOCEDesktop:
 
     def open_search(self, query: str) -> None:
         if self.show_page("memories"):
-            self.memories.query.set(query)
+            if self.memories.query.get() != query:
+                self.memories.query.set(query)
             self.memories.refresh()
             self.memories.search.focus_set()
             self.memories.search.entry.icursor(tk.END)
 
     def open_memory(self, memory_id: str) -> None:
         if self.show_page("memories"):
-            if self.memories.query.get():
-                self.memories.query.set("")
-            self.memories.refresh(select=memory_id)
-            self.memories.tree.focus_set()
+            self.memories.open_memory(memory_id)
+
+    def open_state(self, state: str, *, batch_id: str | None = None) -> None:
+        """The memory screen on one of its tabs (memories, inbox, suggestions, reviews)."""
+        if self.show_page("memories"):
+            self.memories.show_state(state)
+            if state == SUGGESTIONS and batch_id is not None:
+                self.suggestions.show_batch(batch_id)
 
     def _bind_shortcuts(self) -> None:
+        # The table in bio_ce.ui.shortcuts lists every key; the memory screen binds its own (hub/keys.py).
         root = self.root
         for index, (key, *_rest) in enumerate(NAVIGATION, start=1):
             root.bind(f"<Control-Key-{index}>", lambda _e, target=key: self._shortcut(lambda: self.show_page(target)))
         root.bind("<Control-n>", lambda _e: self._shortcut(self.start_new_memory))
         root.bind("<Control-f>", lambda _e: self._shortcut(lambda: self.open_search(self.memories.query.get())))
-        root.bind("<Control-s>", lambda _e: self._shortcut(self.save_memory if self.current is self.editor else None))
-        root.bind("<Control-e>", lambda _e: self._shortcut(self.start_edit_memory if self.current is self.memories
-                                                           else None))
-        root.bind("<Control-h>", lambda _e: self._shortcut(self.show_history if self.current is self.memories
-                                                           else None))
         root.bind("<F5>", lambda _e: self._shortcut(self.refresh_current))
-        root.bind("<Escape>", lambda _e: self._shortcut(self.cancel_edit if self.current is self.editor else None),
-                  add="+")
 
     def _shortcut(self, action: Callable[[], Any] | None) -> str:
         if action is not None and self.root.grab_current() is None:
@@ -458,12 +456,11 @@ class BIOCEDesktop:
         # Connections too: an import makes reviews and Undo import closes them; its list stayed at 3 while the
         # badge said 1 (GUI check, 2026-11-16).
         connections = self.pages.get("connections")
-        for page in (self.dashboard, self.memories, self.settings, self.inbox, self.importer, self.suggestions,
-                     connections):
+        for page in (self.dashboard, self.memories, self.settings, self.importer, connections):
             if page is not None:
                 page.stale = True
         self.refresh_badges()
-        if self.current in (self.dashboard, self.memories, self.settings, self.inbox, connections):
+        if self.current in (self.dashboard, self.memories, self.settings, connections):
             if self.current is self.memories:
                 self.memories.refresh(select=select)
             else:
@@ -489,16 +486,22 @@ class BIOCEDesktop:
         except Exception:  # noqa: BLE001 - a count must never break the window
             return None
 
+    def connection_problem(self) -> bool:
+        """A host whose settings need attention (a conflicting entry); shown as "!" on Connections."""
+        return any(status is not None and status.configuration_conflict
+                   for status in self._host_statuses.values())
+
     def refresh_badges(self) -> None:
+        """v0.4.4 owner decision Q1: the only number is what waits for the user's decision, the review queue, on
+        Memories (where the reviews are now). Suggestions and discard proposals show in the memory screen's tabs."""
         reviews = self.pending_review_count()
-        cleanup = self.pending_cleanup_count()
-        if "connections" in self.nav:
-            self.nav["connections"].set_badge(reviews or 0)
         if "memories" in self.nav:
-            self.nav["memories"].set_badge(cleanup or 0)
+            self.nav["memories"].set_badge(reviews or 0)
+        if "connections" in self.nav:
+            self.nav["connections"].set_alert(self.connection_problem())
         dashboard = getattr(self, "dashboard", None)
         if dashboard is not None:
-            dashboard.show_review_count(reviews, cleanup)
+            dashboard.show_review_count(reviews)
 
     # Spaces and the inbox -------------------------------------------------
 
@@ -537,7 +540,13 @@ class BIOCEDesktop:
             self._space_id = "general"
             if general is not None:
                 self.service.use_space(general.curated)
-            self.memories.selected = None
+        if not enabled:
+            drawer = self.memories.drawer
+            shown = drawer.item.space if drawer.item is not None else drawer.editor.space
+            if shown is not None and shown.is_personal:
+                self.memories.close_drawer(force=True)
+            if self.memories.space_filter == PERSONAL_SPACE.space_id:
+                self.memories.space_filter = "general"
         self.data_changed()
         self.hosts_changed()
         return True
@@ -588,45 +597,58 @@ class BIOCEDesktop:
                     action=("Show in folder", lambda: self.reveal_file(written)))
         return written
 
-    def move_memories(self, memory_ids: list[str], target, *, inbox: bool = False) -> int | None:
-        """Move memories of the shown space to ``target`` (a Space) after an automatic backup."""
+    def move_memories(self, memory_ids: list[str], target, *, inbox: bool = False, source=None,
+                      notify: bool = True) -> int | None:
+        """Move memories (or inbox items) of ``source`` (a Space; default the shown one) to ``target`` after an
+        automatic backup. The memory screen's notice adds an Undo that moves them back the same way."""
         control = getattr(self.connection_manager, "control", None)
         if control is None or not memory_ids or not self.require_action("edit"):
             return None
         if target.is_personal and not self.personal_enabled():
-            self.notify("warning", "Turn on Personal in Settings → Spaces first.", title="Personal is off")
+            self.notify("warning", t("hub.move.personal_off"), title=t("hub.move.personal_off_title"))
             return None
+        self.pending.flush()  # a waiting delete of these runs first, in the space it was made in
+        before = self.service.scope
         try:
+            if source is not None:
+                self.service.use_space(source.curated)
             result = self.service.move_memories(control, memory_ids, target.curated, inbox=inbox)
         except Exception:  # noqa: BLE001 - shown to the user
-            self.notify("error", "BIO CE couldn't move these memories. Nothing was changed.", title="Not moved")
+            self.notify("error", t("hub.move.failed"), title=t("hub.move.failed_title"))
             return None
-        self.memories.selected = None
+        finally:
+            self.service.use_space(before)
+        self.memories.close_drawer_for(memory_ids)
         self.data_changed()
         moved = int(result.get("moved", 0))
-        self.notify("success", f"Moved {moved} {'memory' if moved == 1 else 'memories'} to {target.display_name}. "
-                    "A backup from just before the move is in the data folder's backups folder.",
-                    title="Moved")
+        if notify:
+            self.notify("success", t("hub.move.done", count=moved, space=space_label(target)), title=t("hub.move.title"))
         return moved
 
     def current_space(self):
         return next((space for space in self.spaces() if space.space_id == self._space_id), None)
 
-    def set_space(self, space_id: str) -> None:
-        """Show another space on the Memories and Inbox pages; new memories go there too."""
+    def set_space(self, space_id: str, *, refresh: bool = True) -> None:
+        """Show one space on the memory screen (its space chip); new memories go there too."""
         space = next((item for item in self.spaces() if item.space_id == space_id), None)
-        if space is None or space_id == self._space_id or not self.require_action("browse"):
+        if space is None or not self.require_action("browse"):
             return
-        if self.current is self.editor and not self.editor.confirm_leave():
+        if refresh and self.memories.space_filter != space_id:
+            if self.memories.drawer_open and not self.memories.close_drawer():
+                return
+            self.memories.space_filter = space_id
+            self.memories.stale = True
+        if space_id == self._space_id and not refresh:
             return
         self._space_id = space_id
         self.service.use_space(space.curated)
-        self.memories.selected = None
-        self.data_changed()
+        if refresh:
+            self.data_changed()
 
-    def inbox_count(self) -> int:
+    def inbox_count_all(self) -> int:
+        """Inbox items of every space (the dashboard's count line)."""
         try:
-            return len(self.service.inbox())
+            return len(self.memories.data.items(INBOX, ALL_SPACES))
         except Exception:  # noqa: BLE001
             return 0
 
@@ -653,15 +675,17 @@ class BIOCEDesktop:
             except Exception:  # noqa: BLE001 - retried on the next pass
                 result = None
             if result is not None:
-                if result.proposed:
-                    self.notify("info", f"{result.proposed} inbox item(s) went unused for a while and are proposed "
-                                "for discarding. Keep the ones you want on the Inbox tab.", title="Inbox clean-up",
-                                action=("Open inbox", lambda: self.show_page("inbox")))
+                if result.proposed and not self._notice_busy():
+                    self.notify("info", t("hub.cleanup.proposed", count=result.proposed),
+                                title=t("hub.cleanup.proposed_title"),
+                                action=(t("hub.open_inbox"), lambda: self.open_state(INBOX)))
                 if result.proposed or result.discarded:
                     self.data_changed()
                 if result.waiting_cleanup:
                     delay = 2 * 60 * 1000
-            self.find_suggestions(quiet=True)
+            # The "Open suggestions" notice never showed (every caller was quiet; inventory §13 item 1): the daily
+            # pass now says so, unless another notice (an Undo, a result) is on screen.
+            self.find_suggestions(quiet=self._notice_busy())
         try:
             self._maintenance_after = self.root.after(delay, self.inbox_maintenance)
         except tk.TclError:
@@ -678,11 +702,17 @@ class BIOCEDesktop:
             return 0
         if added:
             self.refresh_badges()
-            self.suggestions.stale = True
+            self.memories.stale = True
+            if self.current is self.memories:
+                self.memories.refresh()
             if not quiet:
-                self.notify("info", f"BIO CE has {added} sorting suggestion(s) for your inbox.",
-                            title="Suggestions", action=("Open suggestions", lambda: self.show_page("suggestions")))
+                self.notify("info", t("hub.sugg.waiting", count=added), title=t("hub.sugg.title"),
+                            action=(t("hub.open_suggestions"), lambda: self.open_state(SUGGESTIONS)))
         return added
+
+    def _notice_busy(self) -> bool:
+        """A notice is on screen (for example an Undo); background news must not replace it."""
+        return bool(self.infobar.visible or self.pending.hidden())
 
     def schedule_cleanup_retry(self) -> None:
         if self._maintenance_after is not None:
@@ -701,15 +731,6 @@ class BIOCEDesktop:
                 card.apply(self._host_statuses.get(host))
         if self.current is self.dashboard:
             self.dashboard.refresh()
-
-    def memory_saved(self, saved: MemoryView, *, created: bool) -> None:
-        self.memories.query.set("")
-        self.show_page("memories")
-        self.data_changed(select=saved.memory_id)
-        self.memories.tree.focus_set()
-        title = "Memory saved" if created else f"Saved revision {saved.revision_number}"
-        where = "on this PC" if saved.engine_id == COMMUNITY_ENGINE_ID else f"in {engine_name(saved.engine_id)}"
-        self.notify("success", f"“{preview(saved.title, 60)}” is stored {where}.", title=title)
 
     # Compatibility API (used by tests and older callers) -------------------
 
@@ -737,30 +758,17 @@ class BIOCEDesktop:
     def editing(self) -> MemoryView | None:
         return self.editor.editing
 
-    @property
-    def memory_table(self):
-        return self.memories.tree
-
     def start_new_memory(self) -> None:
-        if not self.require_action("create"):
-            return
-        if self.current is self.editor and self.editor.editing is None:
-            self.editor.focus_default()
-            return
-        if self.current is self.editor and not self.editor.confirm_leave():
-            return
-        self.editor.load(None)
-        self.show_page("editor")
+        """Ctrl+N and every Add button: the add form in the memory screen's drawer (the editor page is gone)."""
+        self.memories.new_memory()
 
     def start_edit_memory(self) -> None:
-        record = self.memories.selected
-        if record is None:
-            self.notify("info", "Select a memory in the list first.")
+        drawer = self.memories.drawer
+        if drawer.record is None or drawer.mode != "memories":
+            self.notify("info", t("hub.select_first"))
             return
-        if not self.require_action("edit"):
-            return
-        self.editor.load(record)
-        self.show_page("editor")
+        if self.require_action("edit"):
+            drawer.start_edit()
 
     def save_memory(self) -> MemoryView | None:
         return self.editor.save_memory()
@@ -768,8 +776,10 @@ class BIOCEDesktop:
     def cancel_edit(self) -> None:
         self.editor.cancel_edit()
 
-    def retract_selected(self) -> None:
-        self.memories.retract_selected()
+    def retract_selected(self) -> bool:
+        """Delete the memory open in the drawer (or the selected cards): it waits for Undo (v0.4.4 §3.2)."""
+        items = self.memories.chosen_items() or ([self.memories.drawer.item] if self.memories.drawer.item else [])
+        return self.memories.delete_items(items)
 
     def show_history(self):
         return self.memories.show_history()
@@ -863,8 +873,9 @@ class BIOCEDesktop:
             danger=True,
         ):
             return False
-        if self.current is self.editor and not self.editor.confirm_leave():
+        if not self.memories.confirm_leave():
             return False
+        self.pending.flush()  # a waiting delete runs on the memories it was made for, before they are replaced
         self.root.configure(cursor="watch")
         self.root.update_idletasks()
         try:
@@ -879,7 +890,7 @@ class BIOCEDesktop:
         finally:
             self.root.configure(cursor="")
         self.memories.query.set("")
-        self.memories.selected = None
+        self.memories.close_drawer(force=True)
         self.data_changed()
         self.refresh_badges()
         message = "The backup is now your active memory database."
@@ -900,7 +911,7 @@ class BIOCEDesktop:
             self.notify("warning", "A host connection change is still running. Wait for it to finish, then close "
                         "BIO CE.", title="Please wait")
             return
-        if self.current is self.editor and not self.editor.confirm_leave():
+        if not self.memories.confirm_leave():
             return
         try:
             self.pending.flush()  # a delete waiting for Undo runs before the app closes
