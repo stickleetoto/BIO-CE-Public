@@ -214,6 +214,8 @@ RESTORE_KEEP_DAYS = 7
 PERSONAL_ENABLED_KEY = "personal_enabled"
 UI_LANGUAGE_KEY = "ui_language"  # v0.4.4: app_settings row, no schema change
 UI_LANGUAGES = ("auto", "en", "ko")
+AUTO_BACKUP_KEEP_KEY = "auto_backup_keep"  # v0.4.4 §7.2: app_settings row, no schema change
+AUTO_BACKUP_KEEP = (10, 1, 100)  # default, lowest, highest
 # The only control tables a restore reads from the backup's pair file. Everything else (connections, their space
 # permissions and settings, the audit log, the review queue, app_settings) keeps its current rows.
 RESTORED_FROM_BACKUP = ("spaces", "space_folders", "inbox_usage", "curation_items")
@@ -839,6 +841,31 @@ class ControlStore:
                 "INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?) "
                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
                 (UI_LANGUAGE_KEY, choice, _now()))
+
+    # Automatic backups (v0.4.4) -------------------------------------------------
+
+    def auto_backup_keep(self) -> int:
+        """How many automatic backup pairs BIO CE keeps (default 10, 1 to 100); a damaged value reads as 10."""
+        default, low, high = AUTO_BACKUP_KEEP
+        with self._lock:
+            row = self._connection.execute("SELECT value FROM app_settings WHERE key = ?",
+                                           (AUTO_BACKUP_KEEP_KEY,)).fetchone()
+        try:
+            value = int(row[0]) if row is not None else default
+        except (TypeError, ValueError):
+            return default
+        return min(max(value, low), high)
+
+    def set_auto_backup_keep(self, keep: int) -> int:
+        _default, low, high = AUTO_BACKUP_KEEP
+        if type(keep) is not int or not low <= keep <= high:
+            raise ValueError(f"the number of automatic backups to keep is from {low} to {high}")
+        with self._write():
+            self._connection.execute(
+                "INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+                (AUTO_BACKUP_KEEP_KEY, str(keep), _now()))
+        return keep
 
     def personal_access(self, connection_id: str) -> tuple[bool, bool]:
         """The stored Personal permission for one connection (before its mode): (can_read, can_write)."""

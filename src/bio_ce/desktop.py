@@ -13,6 +13,7 @@ import ctypes
 from dataclasses import dataclass
 from datetime import datetime
 import json
+import logging
 import os
 from pathlib import Path
 import tkinter as tk
@@ -22,7 +23,7 @@ import uuid
 
 from bio_ce import __version__
 from bio_ce.auto_memory import ReviewService
-from bio_ce.control_store import ControlStore, control_database_for
+from bio_ce.control_store import AUTO_BACKUP_KEEP, ControlStore, control_database_for
 from bio_ce.core.models import (
     MemoryRevision,
     MemoryScope,
@@ -34,6 +35,7 @@ from bio_ce.storage.backup import (
     BackupConflictError,
     check_pair,
     create_backup,
+    prune_automatic_backups,
     remove_sqlite_sidecars,
     stage_restore,
 )
@@ -55,6 +57,7 @@ from bio_ce.ui.dialogs import ask_privacy_consent
 from bio_ce.ui.theme import Theme, app_icon, apply_window_chrome, enable_windows_dpi_awareness
 
 
+_LOG = logging.getLogger(__name__)
 PERSONAL_SCOPE = MemoryScope("bio-ce-personal", "default")
 _SETTINGS_VERSION = 1
 INSTANCE_MUTEX_NAME = "BIO-CE-Desktop-SingleInstance"
@@ -338,18 +341,46 @@ class DesktopMemoryService:
         ids = sorted(set(memory_ids))
         if not ids or source == destination:
             return {"moved": 0, "backup": None}
-        backup = self.automatic_backup("before-move")
+        backup = self.automatic_backup("before-move", control=control)
         moved = self._store.move(source, destination, ids)
         control.record(host="bio-ce-desktop", connection_id=None, action="space-move", outcome="moved",
                        detail={"count": moved, "from": f"{source.project}/{source.namespace}",
                                "to": f"{destination.project}/{destination.namespace}"})
         return {"moved": moved, "backup": backup}
 
-    def automatic_backup(self, reason: str) -> Path:
-        """A backup pair in the data folder's backups folder, made before a bulk change; never overwritten."""
+    def automatic_backup(self, reason: str, *, control: ControlStore | None = None,
+                         protect: tuple[Path, ...] = ()) -> Path:
+        """A backup pair in the data folder's backups folder, made before a bulk change; never overwritten.
+
+        Afterwards only the newest automatic pairs are kept (Settings: ``auto_backup_keep``, default 10), counting
+        every reason together; backups the user named are never touched, nor ``protect`` (one being restored).
+        Pruning never fails the backup: a file that can't be removed is recorded and tried again next time."""
         folder = self.database.parent / "backups"
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
-        return self.create_backup(folder / f"auto-{reason}-{stamp}.sqlite3")
+        made = self.create_backup(folder / f"auto-{reason}-{stamp}.sqlite3")
+        self._prune_automatic_backups(folder, control, protect=protect)
+        return made
+
+    def _prune_automatic_backups(self, folder: Path, control: ControlStore | None, *,
+                                 protect: tuple[Path, ...]) -> None:
+        owned = None
+        try:
+            if control is None and control_database_for(self.database).is_file():
+                control = owned = ControlStore(control_database_for(self.database))
+            keep = control.auto_backup_keep() if control is not None else AUTO_BACKUP_KEEP[0]
+            removed, failed = prune_automatic_backups(folder, keep, protect=protect)
+            if (removed or failed) and control is not None:
+                # Counts only: a backup's file name can be personal.
+                control.record(host="bio-ce-desktop", connection_id=None, action="backup-prune",
+                               outcome="failed" if failed else "removed",
+                               detail={"removed": removed, "failed": failed})
+            elif failed:
+                _LOG.warning("%d old automatic backup(s) could not be removed", failed)
+        except Exception:  # noqa: BLE001 - the backup itself is made; pruning is retried next time
+            _LOG.warning("old automatic backups could not be pruned", exc_info=True)
+        finally:
+            if owned is not None:
+                owned.close()
 
     def create_backup(self, destination: str | Path) -> Path:
         """Memory snapshot X.sqlite3 plus the connection records X.control.sqlite3 beside it."""
@@ -369,7 +400,7 @@ class DesktopMemoryService:
         if source == self.database:
             raise BackupConflictError("The active database cannot be restored from itself.")
         pair_status, pair = check_pair(source)
-        safety = self.automatic_backup("before-restore")
+        safety = self.automatic_backup("before-restore", control=control, protect=(source,))
         self._replace_database(source)
         owned = None
         if control is None and control_database_for(self.database).is_file():

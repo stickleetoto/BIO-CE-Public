@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import hashlib
 import os
 from pathlib import Path
+import re
 import sqlite3
 import tempfile
 from urllib.parse import quote
@@ -214,6 +215,71 @@ def stage_restore(source: str | Path, target_directory: str | Path) -> Path:
         remove_sqlite_sidecars(staged)
         raise
     return staged
+
+
+# "auto-<reason>-<YYYYmmdd-HHMMSS-ffffff>.sqlite3": the only names BIO CE gives its own backups. A backup the user
+# saved under another name, even one that starts with "auto-", never matches.
+_AUTOMATIC_NAME = re.compile(r"^auto-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*-(\d{8}-\d{6}-\d{6})\.sqlite3$")
+
+
+def automatic_backups(folder: str | Path) -> list[Path]:
+    """BIO CE's own backups (memory files) in ``folder``, oldest first, whatever their reason."""
+    directory = Path(folder)
+    if not directory.is_dir():
+        return []
+    found = []
+    for path in directory.iterdir():
+        match = _AUTOMATIC_NAME.match(path.name)
+        if match is not None and path.is_file():
+            found.append((match.group(1), path.name, path))
+    return [path for _stamp, _name, path in sorted(found)]
+
+
+def prune_automatic_backups(folder: str | Path, keep: int, *,
+                            protect: tuple[str | Path, ...] = ()) -> tuple[int, int]:
+    """Keep the newest ``keep`` automatic backup pairs in ``folder``; returns (pairs removed, pairs that failed).
+
+    A pair goes as a pair: the control file first, and the memory file only after it, so a failure never leaves a
+    control file without its memories. ``protect`` names backups that must stay this time (one being restored).
+    A file that cannot be removed is left for the next automatic backup; it never raises.
+    """
+    if type(keep) is not int or keep < 1:
+        raise ValueError("keep at least one automatic backup")
+    shielded = {Path(path).expanduser().resolve() for path in protect}
+    removed = failed = 0
+    for path in automatic_backups(folder)[:-keep]:
+        if path.resolve() in shielded:
+            continue
+        try:
+            pair = pair_path(path)
+            if pair.exists():
+                remove_backup_file(pair)
+            remove_backup_file(path)
+            removed += 1
+        except OSError:
+            failed += 1
+    return removed, failed
+
+
+def remove_backup_file(path: str | Path) -> None:
+    """Overwrite a backup file with zeros, flush it to the drive, then delete it (as far as the app can: on an SSD
+    the zeros may not reach the original blocks)."""
+    target = Path(path)
+    size = target.stat().st_size
+    block = b"\0" * (1 << 20)
+    with open(target, "r+b") as stream:
+        written = 0
+        while written < size:
+            step = min(len(block), size - written)
+            stream.write(block[:step])
+            written += step
+        stream.flush()
+        os.fsync(stream.fileno())
+    _unlink(target)
+
+
+def _unlink(path: Path) -> None:
+    path.unlink()
 
 
 def remove_sqlite_sidecars(database: str | Path) -> None:
