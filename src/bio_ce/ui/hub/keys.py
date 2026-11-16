@@ -28,8 +28,8 @@ class HubKeys:
             root.bind(sequence, lambda event, a=action: self._run(event, a), add="+")
 
     def typing(self) -> bool:
-        try:
-            widget = self.app.root.focus_get()
+        try:  # the focused widget; without the system focus, the one that gets it back (the same when keys arrive)
+            widget = self.app.root.focus_get() or self.app.root.focus_lastfor()
         except (KeyError, tk.TclError):
             return False
         return widget is not None and widget.winfo_class() in TYPING_CLASSES

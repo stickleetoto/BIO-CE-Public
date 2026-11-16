@@ -114,6 +114,14 @@ class HubUiTests(unittest.TestCase):
                 raise
         self.settle()
 
+    def focus(self, widget: tk.Misc) -> None:
+        """Keyboard focus without bringing the window forward (tests run off screen, 2026-11-17): Tk gives the
+        widget the focus when the window has it, so a card's FocusIn is told to the screen here as Tk would."""
+        widget.focus_set()
+        if widget in self.hub.grid.cards.values():
+            self.hub.card_focused(widget)
+        self.settle()
+
     def card(self, memory_id: str, state: str = MEMORIES):
         return self.hub.grid.cards[f"{state}:{memory_id}"]
 
@@ -150,7 +158,7 @@ class HubUiTests(unittest.TestCase):
         self.assertTrue(card.buttons_shown())
         self.assertEqual([b.text for b in card.buttons.values()], ["Edit", "Move", "Delete"])
         card.show_buttons(False)
-        card.focus_force()
+        self.focus(card)
         card.event_generate("<FocusIn>")
         self.settle()
         self.assertTrue(card.buttons_shown())
@@ -169,8 +177,7 @@ class HubUiTests(unittest.TestCase):
         self.hub.drawer.close_button.invoke()
         self.assertFalse(self.hub.drawer_open)
         self.hub.card_clicked(card)
-        card.focus_force()
-        self.settle()
+        self.focus(card)
         self.hub.keys.escape()
         self.assertFalse(self.hub.drawer_open)
         self.assertFalse(card.opened)
@@ -262,19 +269,16 @@ class HubUiTests(unittest.TestCase):
     def test_keys_e_delete_and_ctrl_z_act_on_the_focused_card_but_not_while_typing(self):
         hub = self.hub
         card = self.card(self.first.memory_id)
-        card.focus_force()
-        self.settle()
+        self.focus(card)
         hub.keys.edit()  # E
         self.assertTrue(hub.drawer.editing)
         self.app.editor.cancel_edit()
         hub.close_drawer(force=True)
-        hub.search.entry.focus_force()
-        self.settle()
+        self.focus(hub.search.entry)
         hub.focus_key = card.key
         hub.keys.delete()  # Delete while typing in the search box: nothing happens
         self.assertEqual(self.app.pending.hidden(), frozenset())
-        card.focus_force()
-        self.settle()
+        self.focus(card)
         hub.keys.delete()
         self.assertEqual(self.app.pending.hidden(), {self.first.memory_id})  # positive control
         hub.keys.undo()  # Ctrl+Z
@@ -285,8 +289,7 @@ class HubUiTests(unittest.TestCase):
         hub = self.hub
         hub.card_clicked(self.card(self.first.memory_id))
         hub.toggle_select(self.card(self.second.memory_id))
-        self.card(self.first.memory_id).focus_force()
-        self.settle()
+        self.focus(self.card(self.first.memory_id))
         with patch.object(tk.Menu, "tk_popup") as popped:
             hub.keys.move()
         popped.assert_called_once()
