@@ -457,7 +457,8 @@ class SQLiteMemoryStore:
             raise RuntimeError("database is in use; close connected readers and retry")
 
     def purge(self, scope: MemoryScope, memory_ids: list[str] | tuple[str, ...]) -> PurgeResult:
-        """Physically delete inbox items, as far as the app can; curated memories are only ever retracted.
+        """Physically delete inbox items, as far as the app can; curated memories are retracted, or erased with
+        :meth:`erase` when the user forgets them completely.
 
         1. One transaction deletes the items' revisions, search rows, and memory rows; secure_delete is on for
            this connection, so the freed space is overwritten.
@@ -467,9 +468,23 @@ class SQLiteMemoryStore:
            and :meth:`checkpoint` must be retried later.
         """
         _validate_scope(scope)
-        if not (scope.namespace.endswith(INBOX_SUFFIX) or scope.namespace.endswith(INBOX_SUFFIX + KEPT_SUFFIX)):
+        if not is_inbox_namespace(scope.namespace):
             raise PermissionError("only inbox items (and inbox items kept for an undo) can be physically deleted; "
                                   "curated memories are retracted")
+        return self._delete_rows(scope, memory_ids)
+
+    def erase(self, scope: MemoryScope, memory_ids: list[str] | tuple[str, ...]) -> PurgeResult:
+        """Forget completely (v0.4.4): physically delete curated memories, the same way :meth:`purge` deletes.
+
+        Only a person asks for this (the desktop app); no host tool reaches it. Inbox items go through
+        :meth:`purge`, so each path refuses the other's scopes.
+        """
+        _validate_scope(scope)
+        if is_inbox_namespace(scope.namespace):
+            raise PermissionError("inbox items are discarded with purge(); erase() is for curated memories")
+        return self._delete_rows(scope, memory_ids)
+
+    def _delete_rows(self, scope: MemoryScope, memory_ids: list[str] | tuple[str, ...]) -> PurgeResult:
         ids = sorted(set(memory_ids))
         deleted = 0
         with self._write_transaction():
@@ -745,6 +760,11 @@ class SQLiteMemoryStore:
             raise RuntimeError("memory store is closed")
 
 
+def is_inbox_namespace(namespace: str) -> bool:
+    """An inbox ("<space>.inbox") or the items kept aside from one ("<space>.inbox.kept"); else curated."""
+    return namespace.endswith(INBOX_SUFFIX) or namespace.endswith(INBOX_SUFFIX + KEPT_SUFFIX)
+
+
 def _validate_scope(scope: MemoryScope) -> None:
     if not isinstance(scope, MemoryScope):
         raise ValidationError("scope must be a MemoryScope")
@@ -786,4 +806,4 @@ def _row_to_revision(row: sqlite3.Row, scope: MemoryScope) -> MemoryRevision:
     )
 
 
-__all__ = ["INBOX_SUFFIX", "KEPT_SUFFIX", "PurgeResult", "SQLiteMemoryStore"]
+__all__ = ["INBOX_SUFFIX", "KEPT_SUFFIX", "PurgeResult", "SQLiteMemoryStore", "is_inbox_namespace"]

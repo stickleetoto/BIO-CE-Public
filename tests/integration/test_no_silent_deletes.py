@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Invariant (owner request, 2026-11-16): no user action physically removes a memory row, except an explicit delete
-(Discard, retracting a memory: its kept originals go with it, Undo import) and the inbox expiry.
+(Discard, retracting a memory: its kept originals go with it, Undo import, Forget completely: v0.4.4) and the inbox
+expiry.
 
 Every action runs on one synthetic database; the memory and revision rows are compared before and after. Restore
 replaces the database by design, so every row it removes must be in the backup it makes first. A positive control
@@ -138,6 +139,10 @@ class NoSilentDeletesTests(unittest.TestCase):
         current = self.service.read(note.memory_id)
         check("retract a memory", lambda: self.service.retract(current), deletes=True)
         self.assertIn(note.memory_id, rows(self.database)["memories"])  # retraction never removes the memory itself
+        doomed = self.service.add(title="Forget me", content="The user asked BIO CE to forget this.",
+                                  source_ref="test")
+        check("forget completely", lambda: self.service.forget(doomed, control=self.control), deletes=True)
+        self.assertNotIn(doomed.memory_id, rows(self.database)["memories"])  # positive: forgetting removes the row
 
     def test_no_action_removes_a_row_unless_it_is_a_delete(self):
         self.every_action()

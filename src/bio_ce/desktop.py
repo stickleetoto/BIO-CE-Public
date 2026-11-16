@@ -38,9 +38,11 @@ from bio_ce.storage.backup import (
     stage_restore,
 )
 from bio_ce.inbox import (
+    ForgetResult,
     discard_inbox_items,
     erase_kept_for,
     finish_pending_cleanups,
+    forget_memory,
     inbox_scope,
     kept_originals,
     kept_scope,
@@ -204,6 +206,20 @@ class DesktopMemoryService:
                 if owned:
                     control.close()
         return revision
+
+    def forget(self, current: MemoryRevision, *, control: ControlStore | None = None) -> ForgetResult:
+        """Forget completely (v0.4.4): erase this memory, all its revisions, the inbox items kept for it, and the
+        review items about it from BIO CE's files. No undo. Backups and exports made earlier still contain it.
+
+        ``completed`` is False while another process (a connected MCP server) holds an older snapshot; the clean-up
+        then finishes later through :meth:`finish_cleanups`."""
+        owned = control is None
+        control = control or ControlStore(control_database_for(self.database))
+        try:
+            return forget_memory(self._store, control, self.scope, current.memory_id)
+        finally:
+            if owned:
+                control.close()
 
     def kept_count(self, memory_id: str, *, inbox: bool = False) -> int:
         """How many inbox items are kept for this memory (shown before it is deleted)."""

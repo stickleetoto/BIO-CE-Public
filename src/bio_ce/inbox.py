@@ -1,10 +1,11 @@
 # Copyright 2026 stickleetoto
 # SPDX-License-Identifier: Apache-2.0
 
-"""Discarding inbox items.
+"""Discarding inbox items, and forgetting a curated memory completely.
 
-Inbox items are the only memories BIO CE deletes physically; curated memories are retracted and keep their
-history. A discard removes the item's rows with secure_delete on, merges the search index, removes what the
+Inbox items are deleted physically when discarded; curated memories are retracted and keep their history, unless
+the user forgets one completely (v0.4.4, :func:`forget_memory`, desktop app only), which deletes it the same way.
+A discard removes the item's rows with secure_delete on, merges the search index, removes what the
 control file kept about it (audit titles and details, usage rows), and empties both write-ahead logs. It is
 recorded as done only after both checkpoints succeed; while another process holds an older snapshot (a
 connected MCP server, which lets go after a minute without calls), the discard waits as "cleanup pending" and
@@ -31,7 +32,7 @@ from bio_ce.control_store import (
     ControlStore,
 )
 from bio_ce.core.models import MemoryNotFoundError, MemoryScope
-from bio_ce.storage.sqlite_store import INBOX_SUFFIX, KEPT_SUFFIX, SQLiteMemoryStore
+from bio_ce.storage.sqlite_store import INBOX_SUFFIX, KEPT_SUFFIX, SQLiteMemoryStore, is_inbox_namespace
 
 
 DESKTOP_HOST = "bio-ce-desktop"
@@ -138,21 +139,66 @@ def discard_inbox_items(store: SQLiteMemoryStore, control: ControlStore, scope: 
     return DiscardResult(item_id, purged.deleted, completed)
 
 
+@dataclass(frozen=True, slots=True)
+class ForgetResult:
+    item_id: int
+    deleted: int
+    kept: int
+    reviews: int
+    completed: bool
+
+
+def forget_memory(store: SQLiteMemoryStore, control: ControlStore, scope: MemoryScope, memory_id: str, *,
+                  host: str = DESKTOP_HOST) -> ForgetResult:
+    """Forget a curated memory completely (v0.4.4 §7.1): no undo, and only a person asks for it.
+
+    In this order: the inbox items kept for it are discarded first (as a retraction does); the review items about
+    it are closed and lose their text; the control file's other text about it goes (:meth:`forget_memories`); the
+    memory, every revision, and its search rows are erased like a discard. The erase is recorded as a clean-up
+    first, so an interruption, or another process that holds a snapshot, leaves it to
+    :func:`finish_pending_cleanups`. The audit entry keeps counts only.
+    """
+    if is_inbox_namespace(scope.namespace):
+        raise PermissionError("inbox items are discarded, not forgotten")
+    history = store.history(scope, memory_id)  # a missing or retracted memory raises before anything changes
+    review_ids = sorted({int(revision.source.metadata["review_id"]) for revision in history
+                         if type(revision.source.metadata.get("review_id")) is int})
+    kept = erase_kept_for(store, control, scope, kept_originals(store, scope, [memory_id]), host=host)
+    reviews = control.forget_reviews([memory_id], review_ids=review_ids)
+    control.forget_memories([memory_id])
+    item_id = control.open_discard([memory_id], status=CURATION_CLEANUP_PENDING)
+    erased = store.erase(scope, [memory_id])
+    completed = erased.checkpointed and control.checkpoint()
+    if completed:
+        control.set_curation_status(item_id, CURATION_DISCARDED)
+    control.record(host=host, connection_id=None, action="forget",
+                   outcome="forgotten" if completed else "cleanup-pending",
+                   detail={"count": erased.deleted, "kept": kept, "reviews": reviews, "project": scope.project,
+                           "item_id": item_id})
+    if completed:
+        control.checkpoint()
+    return ForgetResult(item_id, erased.deleted, kept, reviews, completed)
+
+
 def finish_pending_cleanups(store: SQLiteMemoryStore, control: ControlStore) -> int:
-    """Retry the checkpoints of discards that were waiting; returns how many are now done."""
+    """Retry the checkpoints of discards (and forgotten memories) that were waiting; returns how many are now done."""
     waiting = control.curation_items(statuses=(CURATION_CLEANUP_PENDING,))
     if not waiting:
         return 0
-    # A discard interrupted before its delete (for example the app was closed) is carried out first.
-    present = {memory_id: MemoryScope(project, namespace) for memory_id, project, namespace in store.inventory()
-               if namespace.endswith(INBOX_SUFFIX) or namespace.endswith(INBOX_SUFFIX + KEPT_SUFFIX)}
+    # A discard or a forget interrupted before its delete (for example the app was closed) is carried out first.
+    # Only those two open a clean-up, and a forget is the only one that names a curated memory (ids never change
+    # stage), so the namespace decides the path: purge for inbox items, erase for a forgotten memory.
+    present = {memory_id: MemoryScope(project, namespace) for memory_id, project, namespace in store.inventory()}
     for item in waiting:
         by_scope: dict[MemoryScope, list[str]] = {}
         for memory_id in item["memory_ids"]:
             if memory_id in present:
                 by_scope.setdefault(present[memory_id], []).append(memory_id)
         for scope, ids in by_scope.items():
-            store.purge(scope, ids)
+            if is_inbox_namespace(scope.namespace):
+                store.purge(scope, ids)
+            else:
+                store.erase(scope, ids)
         control.forget_memories(item["memory_ids"])
     if not (store.checkpoint() and control.checkpoint()):
         return 0
@@ -226,4 +272,5 @@ def run_expiry(store: SQLiteMemoryStore, control: ControlStore, *, now: datetime
     return ExpiryResult(proposed, discarded, waiting)
 
 
-__all__ = ["DISCARD_NOTICE", "ExpiryResult", "run_expiry", "DiscardResult", "discard_inbox_items", "finish_pending_cleanups", "inbox_scope"]
+__all__ = ["DISCARD_NOTICE", "ExpiryResult", "run_expiry", "DiscardResult", "discard_inbox_items", "finish_pending_cleanups", "inbox_scope",
+           "ForgetResult", "forget_memory"]

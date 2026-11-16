@@ -617,6 +617,56 @@ class ControlStore:
         if not changed:
             raise ControlStoreError("That review item was already handled.")
 
+    def forget_reviews(self, memory_ids: list[str] | tuple[str, ...], *,
+                       review_ids: list[int] | tuple[int, ...] = ()) -> int:
+        """Forget completely (v0.4.4): review items about forgotten memories lose their text; returns how many.
+
+        Items that target one of ``memory_ids``, and the items in ``review_ids`` (the reviews a forgotten memory was
+        approved from), keep their row as the record: a pending one is closed as failed, every one loses its title,
+        text, and the host's evidence (only the space stays). Audit entries that name one of these items lose their
+        title and details, as :meth:`forget_memories` does for entries that name the memory.
+        """
+        ids = sorted(set(memory_ids))
+        wanted = {int(review_id) for review_id in review_ids}
+        stamp = _now()
+        touched = 0
+        with self._write():
+            if ids:
+                marks = ", ".join("?" for _ in ids)
+                wanted |= {int(row[0]) for row in self._connection.execute(
+                    f"SELECT review_id FROM review_queue WHERE memory_id IN ({marks})", ids)}
+            for review_id in sorted(wanted):
+                row = self._connection.execute("SELECT metadata_json FROM review_queue WHERE review_id = ?",
+                                               (review_id,)).fetchone()
+                if row is None:
+                    continue
+                touched += 1
+                try:
+                    metadata = json.loads(row[0] or "{}")
+                except ValueError:
+                    metadata = {}
+                where = {key: metadata[key] for key in ("project", "namespace")
+                         if isinstance(metadata, dict) and isinstance(metadata.get(key), str)}
+                self._connection.execute(
+                    "UPDATE review_queue SET status = ?, resolved_at = ?, resolution = ? "
+                    "WHERE review_id = ? AND status = 'pending'",
+                    (REVIEW_FAILED, stamp, "the memory was forgotten", review_id))
+                self._connection.execute(
+                    "UPDATE review_queue SET title = '', content = NULL, metadata_json = ? WHERE review_id = ?",
+                    (json.dumps(where, sort_keys=True), review_id))
+            if wanted:
+                for entry_id, detail in self._connection.execute(
+                        "SELECT entry_id, detail_json FROM audit_log WHERE detail_json LIKE '%review_id%'").fetchall():
+                    try:
+                        named = json.loads(detail).get("review_id")
+                    except (ValueError, AttributeError):
+                        continue
+                    if isinstance(named, int) and named in wanted:
+                        self._connection.execute(
+                            "UPDATE audit_log SET title = NULL, detail_json = '{\"discarded\": true}' "
+                            "WHERE entry_id = ?", (entry_id,))
+        return touched
+
     # Spaces -----------------------------------------------------------------
 
     def spaces(self, *, include_archived: bool = False) -> tuple[Space, ...]:
@@ -934,7 +984,8 @@ class ControlStore:
         return tuple({**dict(row), "memory_ids": json.loads(row["memory_ids_json"])} for row in rows)
 
     def forget_memories(self, memory_ids: list[str] | tuple[str, ...]) -> None:
-        """Drop every text this file keeps about discarded inbox items: audit titles and details, usage rows.
+        """Drop every text this file keeps about discarded inbox items (and forgotten memories): audit titles and
+        details, usage rows, suggestion drafts.
 
         The audit rows themselves stay (with their outcome and time) so the history of changes stays complete.
         """
