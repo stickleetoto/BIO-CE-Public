@@ -296,6 +296,7 @@ class NavItem(tk.Frame):
         self.badge = tk.Label(self.row, text="", font=theme.font("caption_strong"), borderwidth=0,
                               background=c.warning, foreground=c.bg, padx=theme.px(6))
         self.badge_count = 0
+        self.alert = False
         self._compact = False
         Tooltip(self, theme, f"{text} ({shortcut})" if shortcut else text)
         for part in (self, self.row, self.indicator, self.icon_label, self.label, self.badge):
@@ -312,8 +313,17 @@ class NavItem(tk.Frame):
 
     def set_badge(self, count: int) -> None:
         self.badge_count = max(0, int(count))
+        self.alert = False
         if self.badge_count:
             self.badge.configure(text=str(self.badge_count) if self.badge_count < 100 else "99+")
+        self._show_badge()
+
+    def set_alert(self, alert: bool) -> None:
+        """A "!" instead of a number: something needs attention, not a count of things to decide (v0.4.4 §2.1)."""
+        self.alert = bool(alert)
+        self.badge_count = 1 if self.alert else 0
+        if self.alert:
+            self.badge.configure(text="!")
         self._show_badge()
 
     def set_compact(self, compact: bool) -> None:
