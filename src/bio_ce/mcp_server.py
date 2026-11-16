@@ -29,7 +29,7 @@ import sys
 from pathlib import Path
 import sqlite3
 import threading
-from contextlib import AbstractContextManager, nullcontext
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from typing import Annotated, Any, Callable, TypeVar
 
 from mcp.server import MCPServer
@@ -39,6 +39,7 @@ from pydantic import Field
 from bio_ce import display_version
 from bio_ce.auto_memory import AutoMemoryWriter
 from bio_ce.server_lifetime import ServerLifetime, idle_seconds_from, parent_process_id, release_seconds_from
+from bio_ce.server_registry import ServerRegistration
 from bio_ce.control_store import AccessDenied, ControlStore, ControlStoreError, control_database_for
 from bio_ce.core.models import (
     MemoryNotFoundError,
@@ -560,17 +561,31 @@ def run_mcp_stdio(
     _utf8_stderr()
     token = os.environ.get(TOKEN_ENVIRONMENT_VARIABLE) if connection_id else None
     release: list[Callable[[], None]] = []
+    registration: list[ServerRegistration] = []  # v0.4.4: this server's record in the data folder
+
+    def unregister() -> None:
+        if registration:
+            registration[0].remove()
+
     lifetime = ServerLifetime(
-        lambda _reason: _end_process(close),
+        lambda _reason: (unregister(), _end_process(close)),
         idle_seconds=idle_seconds_from(os.environ),
         parent_pid=parent_process_id(),
         release_seconds=release_seconds_from(os.environ),
         on_release=lambda: release[0]() if release else None,
     )
+
+    @contextmanager
+    def activity():
+        with lifetime.activity():
+            if registration:
+                registration[0].touch()
+            yield
+
     try:
         server, close = create_mcp_server(
             database, project=project, namespace=namespace, connection_id=connection_id, token=token,
-            activity=lifetime.activity, release_hook=release,
+            activity=activity, release_hook=release,
         )
     except DataFolderMissing as exc:
         _logger.error("%s", exc)
@@ -581,10 +596,13 @@ def run_mcp_stdio(
     except ValueError as exc:
         _logger.error("%s", exc)
         return 2
+    registration.append(ServerRegistration(Path(database).expanduser().resolve().parent,
+                                           connection_id=connection_id, parent_pid=parent_process_id()))
     lifetime.start()
     try:
         server.run("stdio")  # returns when the host closes stdin
     finally:
+        unregister()
         close()
     return 0
 
