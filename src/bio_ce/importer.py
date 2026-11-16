@@ -42,6 +42,7 @@ from bio_ce.memory_policy import (
     normalize,
     prepare_text,
 )
+from bio_ce.curation import TOPIC_THRESHOLD, topic_overlap
 from bio_ce.spaces import PERSONAL_SPACE_ID, Space
 from bio_ce.storage.sqlite_store import INBOX_SUFFIX, KEPT_SUFFIX, SQLiteMemoryStore
 
@@ -602,7 +603,12 @@ class ImportPlanner:
             item.match_id, item.match_revision_id, item.match_title = match.memory_id, match.revision_id, match.title
             self._set(item, EXISTS, ("BIO CE already has this in the destination space",))
             return
-        if match is not None and score >= CONFLICT_LOW and _shares_keyword(content, match):
+        # A review protects a curated memory from being replaced, so only a memory, and only for the same topic:
+        # sharing an opening and an ending ("사용자는 … 한다") made three reviews that would replace one fact
+        # with another (GUI check, 2026-11-16). A near inbox item is New; a merge suggestion handles that.
+        if match is not None and match.scope == space.curated and score >= CONFLICT_LOW \
+                and _shares_keyword(content, match) \
+                and topic_overlap(content, f"{match.title}\n{match.content or ''}") >= TOPIC_THRESHOLD:
             item.match_id, item.match_revision_id, item.match_title = match.memory_id, match.revision_id, match.title
             self._set(item, CONFLICT, ("imported text may differ from an existing memory; you review it, nothing "
                                        "is overwritten",))

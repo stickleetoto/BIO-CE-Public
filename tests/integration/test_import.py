@@ -281,6 +281,42 @@ class PreviewTests(_Fixture):
                          current.revision_id)  # nothing was overwritten
         self.assertEqual(preview.summary()["exists"], 1)
 
+    def test_different_facts_that_share_only_their_opening_are_not_conflicts(self):
+        """GUI check (2026-11-16, 5th candidate): importing "회의록", "달리기", "스페이스" made three reviews that would
+        replace "주말에 자전거" with them. A review only protects a curated memory, and only for the same topic."""
+        bike = "시험용: 사용자는 주말에 자전거를 탄다."
+        others = ("시험용: 사용자는 회의록을 마크다운으로 쓴다.", "시험용: 사용자는 아침에 30분 달리기를 한다.",
+                  "시험용: 사용자는 탭보다 스페이스를 선호한다.")
+        same_topic = "시험용: 사용자는 토요일마다 자전거를 탄다."
+        text = "\n".join(f"[2025-06-30] - {line}" for line in (*others, same_topic))
+        self.store.add(PERSONAL_SPACE.inbox, title=bike, content=bike, source=USER)
+        states = {item.content: item.state for item in self.preview(text).items}
+        self.assertEqual(states, {line: NEW for line in (*others, same_topic)})  # inbox items: merging handles them
+        memory = self.store.add(PERSONAL_SPACE.curated, title=bike, content=bike, source=USER)
+        items = {item.content: item for item in self.preview(text).items}
+        self.assertEqual([items[line].state for line in others], [NEW, NEW, NEW])
+        self.assertEqual((items[same_topic].state, items[same_topic].match_id), (CONFLICT, memory.memory_id))
+
+    def test_near_repeats_of_inbox_items_import_and_become_merge_suggestions(self):
+        """The GUI checklist's merge-sample (2026-11-16): lines that add to an inbox item import as New and give a
+        Merge suggestion with that item; a line on another topic gives none."""
+        from bio_ce.curation import MERGE, CurationService
+        first = ("회의록을 마크다운으로 쓴다.", "아침에 30분 달리기를 한다.", "주말에 자전거를 탄다.",
+                 "탭보다 스페이스를 선호한다.")
+        second = ("회의록을 마크다운으로 쓰고 매주 금요일에 팀과 공유한다.", "아침에 30분 달리기를 하고 저녁에는 스트레칭을 한다.",
+                  "주말에 자전거를 타고 한강 공원까지 간다.", "들여쓰기에 탭보다 스페이스 네 칸을 선호한다.")
+        other = "고양이 두 마리를 키운다."
+        self.service.commit(self.preview("\n".join(f"[2025-06-30] - 시험용: 사용자는 {line}" for line in first)))
+        preview = self.preview("\n".join(f"[2025-07-05] - 시험용: 사용자는 {line}" for line in (*second, other)))
+        self.assertEqual({item.state for item in preview.items}, {NEW})
+        self.service.commit(preview)
+        curation = CurationService(self.store, self.control, self.spaces)
+        self.assertEqual(curation.find(), 4)
+        pairs = sorted(tuple(sorted(s.draft_content.split(". "))) for s in curation.suggestions())
+        self.assertTrue(all(s.action == MERGE for s in curation.suggestions()))
+        self.assertFalse(any(other in s.draft_content for s in curation.suggestions()))
+        self.assertEqual(len(pairs), 4)
+
     def test_sensitive_labels_set_the_default_check_by_destination(self):
         text = "\n".join([
             "[2025-01-01] - 사용자는 2023년에 허리 디스크 진단을 받았다.",

@@ -446,10 +446,15 @@ class BIOCEDesktop:
 
     def data_changed(self, select: str | None = None) -> None:
         """Mark pages stale after a write and refresh the visible one."""
-        for page in (self.dashboard, self.memories, self.settings, self.inbox, self.importer, self.suggestions):
-            page.stale = True
+        # Connections too: an import makes reviews and Undo import closes them; its list stayed at 3 while the
+        # badge said 1 (GUI check, 2026-11-16).
+        connections = self.pages.get("connections")
+        for page in (self.dashboard, self.memories, self.settings, self.inbox, self.importer, self.suggestions,
+                     connections):
+            if page is not None:
+                page.stale = True
         self.refresh_badges()
-        if self.current in (self.dashboard, self.memories, self.settings, self.inbox):
+        if self.current in (self.dashboard, self.memories, self.settings, self.inbox, connections):
             if self.current is self.memories:
                 self.memories.refresh(select=select)
             else:

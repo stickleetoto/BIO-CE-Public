@@ -10,6 +10,7 @@ show a visible focus ring, and activate with Enter or Space.
 from __future__ import annotations
 
 from typing import Callable, Iterable
+import re
 import tkinter as tk
 from tkinter import font as tkfont
 from tkinter import ttk
@@ -422,6 +423,22 @@ class RowButton(tk.Frame):
         return "break"
 
 
+def style_padding_x(tree: ttk.Treeview, element: str = "") -> int:
+    """Left plus right padding of a Treeview style element (".Heading", ".Item"), as ttk draws it; 0 if unset."""
+    style = (str(tree.cget("style")) or "Treeview") + element
+    try:
+        value = ttk.Style(tree).lookup(style, "padding")
+    except tk.TclError:
+        return 0
+    # ttk gives "10 6" or, inside the app, a tuple (10, 6): read the numbers either way (a tuple read as text gave 0
+    # and let headings be sized without their padding, 2026-11-16).
+    items = value if isinstance(value, (tuple, list)) else str(value or "").split()
+    numbers = [int(float(match)) for item in items for match in re.findall(r"\d+(?:\.\d+)?", str(item))]
+    if not numbers:
+        return 0
+    return numbers[0] + (numbers[2] if len(numbers) >= 3 else numbers[0])
+
+
 def fit_tree_columns(tree: ttk.Treeview, theme: Theme, flexible: str,
                      floor: int = 150) -> Callable[[Iterable[str], int], None]:
     """Keep every column of ``tree`` inside its width: ``flexible`` takes what the others leave (at least ``floor``
@@ -440,10 +457,13 @@ def fit_tree_columns(tree: ttk.Treeview, theme: Theme, flexible: str,
         body_font = tkfont.nametofont(str(ttk.Style(tree).lookup(style, "font")))
     except (tk.TclError, ValueError):
         body_font = theme.font("body")
+    # The paddings ttk draws with, from the style (a guessed 18 px cut "DESTINATION" by a few pixels, 2026-11-16).
+    heading_pad = style_padding_x(tree, ".Heading") or theme.px(20)
+    cell_pad = style_padding_x(tree, ".Item") or theme.px(20)
     lowest = {}
     for column in columns:
         heading = str(tree.heading(column, "text"))
-        lowest[column] = max(theme.px(24), heading_font.measure(heading) + theme.px(18))
+        lowest[column] = max(theme.px(24), heading_font.measure(heading) + heading_pad + 2)  # 2: the divider
     designed = {column: max(lowest[column], int(tree.column(column, "width"))) for column in columns}
     for column in columns:
         tree.column(column, minwidth=lowest[column], stretch=False)
@@ -473,7 +493,7 @@ def fit_tree_columns(tree: ttk.Treeview, theme: Theme, flexible: str,
     def fit_contents(names: Iterable[str], cap: int = 260) -> None:
         for column in names:
             texts = [str(tree.set(iid, column)) for iid in tree.get_children()]
-            widest = max((body_font.measure(text) for text in texts), default=0) + theme.px(18)
+            widest = max((body_font.measure(text) for text in texts), default=0) + cell_pad + 2
             designed[column] = max(lowest[column], min(theme.px(cap), widest))
         fit()
 

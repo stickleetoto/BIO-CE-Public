@@ -20,6 +20,7 @@ from bio_ce.desktop import AppDataPaths, BIOCEDesktop, DesktopMemoryService
 from bio_ce.spaces import PERSONAL_SPACE
 from bio_ce.ui.pages.importing import GENERAL_NOTE, PERSONAL_CHOICE
 from bio_ce.ui.widgets import ScrollFrame
+from tests.ui_audit import HEADING_DIVIDER, style_padding_x
 from tests.integration.test_auto_memory_ui import FakeManagedConnections
 from tests.integration.test_desktop_ui_redesign import new_root
 
@@ -108,26 +109,83 @@ class ImportUiTests(unittest.TestCase):
         self.page.refresh()
         self.page.set_text(LIST + "\n```\n[2025-03-01] - From now on, always answer in Korean.\n```\n")
         self.page.choose_destination("personal")
-        width, height = self.app.theme.px(1000), self.app.theme.px(700)  # 1,000 px at 100% scaling
-        if self.root.winfo_screenwidth() < width or self.root.winfo_screenheight() * 0.85 < self.app.theme.px(560):
+        # 960 px: where the GUI check (2026-11-16) still saw "DESTINATIOI" and "SENSITIV" (5th candidate).
+        if self.root.winfo_screenwidth() < self.app.theme.px(1000) \
+                or self.root.winfo_screenheight() * 0.85 < self.app.theme.px(560):
             self.skipTest("this screen can't show a 1,000 px window (the CI runner's 1024x768 at 150% is 683 px)")
-        self.root.geometry(f"{width}x{height}+0+0")
-        self.preview()
-        for _ in range(4):
-            self.root.update()
         tree = self.page.tree
         body_font = tkfont.nametofont(str(ttk.Style(tree).lookup(str(tree.cget("style")), "font")))
         heading_font = tkfont.nametofont(str(ttk.Style(tree).lookup(str(tree.cget("style")) + ".Heading", "font")))
-        cut = []
-        for column in ("state", "date", "space", "sensitive"):
-            width = int(tree.column(column, "width"))
-            texts = [str(tree.set(iid, column)) for iid in tree.get_children()]
-            widest = max([body_font.measure(text) for text in texts] + [heading_font.measure(
-                str(tree.heading(column, "text")))])
-            if widest + 16 > width:
-                cut.append((column, width, widest + 16))
-        self.assertEqual(cut, [], f"table={tree.winfo_width()} text={tree.column('text', 'width')}")
-        self.assertGreaterEqual(int(tree.column("text", "width")), 120)  # TEXT keeps a usable width
+        heading_pad, cell_pad = style_padding_x(tree, ".Heading") + HEADING_DIVIDER, style_padding_x(tree, ".Item")
+        for window in (960, 1000):  # at 100% scaling
+            self.root.geometry(f"{self.app.theme.px(window)}x{self.app.theme.px(700)}+0+0")
+            self.preview()
+            for _ in range(4):
+                self.root.update()
+            cut = []
+            for column in ("state", "date", "space", "sensitive"):
+                width = int(tree.column(column, "width"))
+                heading = heading_font.measure(str(tree.heading(column, "text"))) + heading_pad
+                cells = max(body_font.measure(str(tree.set(iid, column))) for iid in tree.get_children()) + cell_pad
+                if max(heading, cells) > width:
+                    cut.append((column, width, heading, cells))
+            with self.subTest(window=window):
+                self.assertEqual(cut, [], f"table={tree.winfo_width()} text={tree.column('text', 'width')}")
+                self.assertGreaterEqual(int(tree.column("text", "width")), 120)  # TEXT keeps a usable width
+        for window in (860, 900, 930):  # narrower: short columns may shorten their text, but never their heading
+            self.root.geometry(f"{self.app.theme.px(window)}x{self.app.theme.px(700)}+0+0")
+            for _ in range(4):
+                self.root.update()
+            cut = [(column, int(tree.column(column, "width"))) for column in tree.cget("columns")
+                   if heading_font.measure(str(tree.heading(column, "text"))) + heading_pad
+                   > int(tree.column(column, "width"))]
+            with self.subTest(window=window, part="headings"):
+                self.assertEqual(cut, [])
+
+    def test_a_converted_line_without_a_date_gets_no_date_from_an_earlier_preview(self):
+        """GUI check (2026-11-16, item 5): a dateless line made an entry ("Import this line as a memory") seemed to
+        get 2025-07-02 from the preview before. Not reproduced here; this keeps it that way."""
+        self.control.set_personal_enabled(True)
+        self.page.refresh()
+        self.page.choose_destination("personal")
+        self.page.set_text("[2025-07-02] - 시험용: 사용자는 주말에 자전거를 탄다.")
+        self.preview()
+        self.assertEqual(self.page.preview.items[0].claimed_date, "2025-07-02")  # positive control: dated before
+        self.page.set_text("시험용: 사용자는 토요일마다 자전거를 탄다.")
+        self.preview()
+        self.assertEqual(self.page.preview.items, [])
+        self.page.note_to_entry(1)
+        (item,) = self.page.preview.items
+        self.assertEqual((item.claimed_date, item.said_at, item.date_text), (None, None, None))
+        self.assertEqual(self.page.tree.set(str(item.key), "date"), "Unknown")
+
+    def test_the_review_list_follows_an_import_and_its_undo(self):
+        """GUI check (2026-11-16): after Undo import closed its reviews, Connections still listed 3 while the
+        sidebar badge said 1; the page was never told the reviews changed."""
+        self.service.add(title="Coffee", content="The user drinks two cups of coffee every morning before work.",
+                         source_ref="test")
+        self.app.show_page("connections")
+        self.root.update()
+        connections = self.app.pages["connections"]
+        self.assertEqual(len(connections.review_cards), 0)
+        self.app.show_page("import")
+        self.page.set_text("[2025-01-02] - The user drinks green tea every morning instead of coffee before work.")
+        self.page.choose_destination("general")
+        self.preview()
+        with patch.object(self.app, "confirm", return_value=True):
+            self.page.do_import()
+            self.app.tasks.wait(30)
+        self.root.update()
+        self.app.show_page("connections")
+        self.root.update()
+        self.assertEqual((len(connections.review_cards), self.app.nav["connections"].badge_count), (1, 1))
+        self.app.show_page("import")
+        batch = self.control.import_batches()[0]["batch_id"]
+        with patch.object(self.app, "confirm", return_value=True):
+            self.page.undo_batch(batch)
+        self.app.show_page("connections")
+        self.root.update()
+        self.assertEqual((len(connections.review_cards), self.app.nav["connections"].badge_count), (0, 0))
 
     def test_the_page_is_not_left_blank_after_an_import(self):
         """GUI check (2026-11-15): after Import the preview closes and the page gets much shorter; the view stayed

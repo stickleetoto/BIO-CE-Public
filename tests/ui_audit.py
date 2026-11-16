@@ -23,9 +23,15 @@ from tkinter import font as tkfont
 from tkinter import ttk
 
 from bio_ce.ui.widgets import Button, ElideLabel, Pill, WrapLabel
+from bio_ce.ui.widgets import style_padding_x as _style_padding_x
 
 TOLERANCE = 1
-HEADING_PADDING = 16  # ttk's heading padding and divider; with 8, "DESTINATION" passed here but showed cut
+HEADING_DIVIDER = 2  # the line between headings; the padding itself is read from the style (style_padding_x)
+
+
+#: Left plus right padding of a Treeview style element, read from the style as ttk draws it. A guessed constant
+#: (8, then 16) let "DESTINATION" pass here while it showed cut at about 960 px (2026-11-16).
+style_padding_x = _style_padding_x
 
 
 def _walk(widget: tk.Misc):
@@ -165,9 +171,10 @@ def audit(top: tk.Misc, where: str, *, vertical: bool = True) -> list[str]:
                 heading_font = tkfont.nametofont(str(ttk.Style(widget).lookup(style + ".Heading", "font")))
             except (tk.TclError, ValueError):
                 heading_font = tkfont.nametofont("TkHeadingFont")
+            padding = style_padding_x(widget, ".Heading")
             for column in columns:
                 heading = str(widget.heading(column, "text"))
-                need = heading_font.measure(heading) + HEADING_PADDING if heading else 0
+                need = heading_font.measure(heading) + padding + HEADING_DIVIDER if heading else 0
                 if need > int(widget.column(column, "width")) + TOLERANCE:
                     problems.append(f"{where}: table heading cut: '{heading}' in {describe(widget)} "
                                     f"width={widget.column(column, 'width')} needs={need}")
