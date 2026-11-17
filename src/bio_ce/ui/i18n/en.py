@@ -510,6 +510,346 @@ STRINGS: dict[str, object] = {
     "connections.servers.ended_title": "Servers ended",
     "connections.servers.end_failed": "BIO CE couldn't end every idle server. The count shows what still runs.",
     # ===== U5-A: Connections screen (src/bio_ce/ui/pages/connections.py) =====
+    # Page and header
+    "connections.title": "AI connections",
+    "connections.subtitle": "Let AI coding tools use and grow your memories",
+    "connections.refresh": "Refresh",
+    "connections.refresh_tip": "Check the hosts again (F5)",
+    "connections.pause_all": "Pause all AI access",
+    "connections.pause_all_tip": "Stop every connected host from reading or changing memories",
+    "connections.callout.title": "Read only unless you allow more",
+    "connections.callout.body": "A connected host can search and read your memories. With Auto memory on, it can also "
+                                "save and update lasting ones; BIO CE refuses secrets and anything taken from documents, "
+                                "and keeps uncertain changes and every retraction for your review. BIO CE changes a "
+                                "host’s settings only after you confirm, and never calls an AI model itself. Memories a "
+                                "host reads become part of that conversation and may be sent to the host’s AI model "
+                                "provider (for example OpenAI for Codex or Anthropic for Claude Code) under that "
+                                "provider’s terms.",
+    "connections.app_closed_note": "You can close the BIO CE app: connected AI tools keep using your memories.",
+    # Host cards
+    "connections.host.codex": "OpenAI’s coding agent. The command-line tool and the desktop app use the same settings, "
+                              "so one connection covers both.",
+    "connections.host.claude": "Anthropic’s command-line coding agent. The Claude desktop chat app has its own card "
+                               "below.",
+    "connections.host.claude_desktop": "Anthropic’s desktop chat app. BIO CE adds one entry to the app’s settings file; "
+                                       "quit and reopen the app after connecting or disconnecting.",
+    "connections.provider.codex": "usually OpenAI, or another provider you configured in Codex",
+    "connections.provider.claude": "usually Anthropic, or the cloud provider you configured in Claude Code",
+    "connections.provider.claude_desktop": "Anthropic",
+    "connections.checking": "Checking…",
+    "connections.auto_support": "Auto memory in this host",
+    "connections.row.access": "Access",
+    "connections.row.spaces": "Spaces",
+    "connections.row.saving": "Saving",
+    "connections.row.hooks": "Session hooks",
+    "connections.row.code_mode": "Code mode",
+    "connections.row.skill": "Memory skill",
+    "connections.mode.read_only": "Read only",
+    "connections.mode.auto_memory": "Auto memory",
+    "connections.mode.paused": "Paused",
+    "connections.mode.read_only_tip": "Search and read only",
+    "connections.mode.auto_memory_tip": "Also save and update lasting memories under BIO CE's rules",
+    "connections.mode.paused_tip": "No reading or changes until you resume",
+    "connections.mode.changed_title": "{name}: {mode}",
+    "connections.off": "Off",
+    "connections.unknown": "Unknown",
+    "connections.action.connect": "Connect",
+    "connections.action.reconnect": "Reconnect",
+    "connections.action.disconnect": "Disconnect",
+    "connections.action.diagnose": "Run diagnostics",
+    "connections.action.diagnose_tip": "Check the setup without changing anything",
+    "connections.action.install": "Install",
+    "connections.action.remove": "Remove",
+    "connections.action.update": "Update",
+    "connections.action.replace": "Replace",
+    "connections.action.apply": "Apply",
+    "connections.diagnostics": "Diagnostics",
+    # Card status messages
+    "connections.status.unchecked": "BIO CE couldn't check {name}. Select Refresh to try again.",
+    "connections.status.desktop_missing": "BIO CE didn't find the Claude desktop app for this Windows user. Install "
+                                          "it, open it once, then select Refresh.",
+    "connections.status.missing": "BIO CE looks for the “{command}” command and didn't find it. Install {name}, "
+                                  "confirm that “{command} --version” works in a new terminal, then select Refresh.",
+    "connections.status.conflict": "{name} already has a different MCP server named “bio-ce”, or its settings file "
+                                   "can't be read. BIO CE won't change it. Run diagnostics for details.",
+    "connections.status.legacy": "{name} was connected by BIO CE v0.2: it can only search and read, and BIO CE can't "
+                                 "pause or revoke it. Select Reconnect to manage its access.",
+    "connections.status.auto_memory": "{name} can search and read your memories and save or update lasting ones under "
+                                      "BIO CE’s rules. Uncertain changes and retractions wait for your review.",
+    "connections.status.paused": "{name}’s access is paused. It can’t read or change memories until you choose "
+                                 "another mode.",
+    "connections.status.read_only": "{name} can search and read your memories. Auto memory is off.",
+    "connections.status.installed": "{name} is installed. Connect it to let it search and read your memories.",
+    # Spaces, Personal, saving mode
+    "connections.spaces.all": "General and all project spaces",
+    "connections.spaces.general_only": "General only",
+    "connections.spaces.use_general_only": "Use General only",
+    "connections.spaces.use_all": "Use all project spaces",
+    "connections.spaces.title": "{name}: spaces",
+    "connections.spaces.now_all": "{name} can now use General and all project spaces.",
+    "connections.spaces.now_general": "{name} now uses General only. Project spaces stay as they are.",
+    "connections.summary": "Use all project spaces: {projects}. Saving: {saving}. You can change both on this card.",
+    "connections.summary.all": "on",
+    "connections.summary.general_only": "off (General only)",
+    "connections.summary.collect": "Collect (to your inbox)",
+    "connections.summary.curated": "Curated",
+    "connections.personal.allow": "Allow…",
+    "connections.personal.change": "Change…",
+    "connections.personal.read": "Read only",
+    "connections.personal.read_write": "Read and save",
+    "connections.personal.title": "{name}: Personal",
+    "connections.personal.off_message": "Turn on Personal in Settings → Spaces first.",
+    "connections.personal.off_title": "Personal is off",
+    "connections.personal.message": "Personal holds memories about you. {name} reads it only when you ask about "
+                                    "personal matters, and session hooks never use it.",
+    "connections.personal.read_detail": "{name} can search and read Personal.",
+    "connections.personal.write_detail": "{name} can also save personal memories you ask it to keep.",
+    "connections.personal.off_detail": "{name} can't use Personal.",
+    "connections.personal.continue": "Continue",
+    "connections.personal.allow_title": "Allow {name} to read Personal?",
+    "connections.personal.allow_message": "Personal memories {name} reads become part of your conversation and are sent "
+                                          "to the AI service {name} uses ({provider}). BIO CE can't control what "
+                                          "happens to them there.",
+    "connections.personal.point_hooks": "Session hooks never add Personal memories to a conversation.",
+    "connections.personal.point_off": "You can turn this off here at any time.",
+    "connections.personal.consent": "I understand that Personal memories this host reads are sent to its AI service.",
+    "connections.personal.allow_confirm": "Allow",
+    "connections.personal.not_ticked": "Nothing changed: tick the box to confirm you understand.",
+    "connections.personal.now_read": "{name} can now read Personal.",
+    "connections.personal.now_write": "{name} can now read and save in Personal.",
+    "connections.personal.now_off": "{name} can no longer use Personal.",
+    "connections.setting_failed": "BIO CE couldn't change this setting.",
+    "connections.saving.collect": "Collect: lasting information goes to your inbox",
+    "connections.saving.curated": "Curated: only what you stated or confirmed",
+    "connections.saving.to_collect": "Switch to Collect",
+    "connections.saving.to_curated": "Switch to Curated",
+    "connections.saving.title": "{name}: saving",
+    "connections.saving.collect_title": "{name}: Collect saving",
+    "connections.saving.curated_title": "{name}: Curated saving",
+    "connections.saving.collect_message": "Let this host collect into your inbox?",
+    "connections.saving.collect_point_what": "{name} saves lasting information to your inbox without asking: things "
+                                             "you said, its own guesses (marked as guesses), and summaries of files "
+                                             "when you ask it to remember them.",
+    "connections.saving.collect_point_use": "Inbox items aren't used by hosts unless they ask for the inbox, and never "
+                                            "by session hooks. You move the ones worth keeping to your memories on "
+                                            "Memories → Inbox.",
+    "connections.saving.collect_point_cleanup": "Items unused for 30 days are proposed for discarding, and discarded 7 "
+                                                "days later unless you keep them. You can change both periods in "
+                                                "Settings.",
+    "connections.saving.collect_point_review": "Changes to your curated memories still wait for your review. Secrets "
+                                               "are always refused.",
+    "connections.saving.collect_point_skill": "If BIO CE installed the memory skill for this host, it rewrites the "
+                                              "skill for collect mode.",
+    "connections.saving.curated_message": "Switch back to curated saving?",
+    "connections.saving.curated_point_what": "Only what you stated or confirmed is saved, as before. Everything else "
+                                             "waits for your review.",
+    "connections.saving.curated_point_inbox": "Items already in the inbox stay there until you move or discard them.",
+    "connections.saving.curated_point_skill": "If BIO CE installed the memory skill for this host, it rewrites the "
+                                              "skill for curated mode.",
+    "connections.saving.now_collect": "{name} now uses collect saving.",
+    "connections.saving.now_curated": "{name} now uses curated saving.",
+    # Session hooks
+    "connections.hooks.on": "On: recalls memories at session start and per prompt",
+    "connections.hooks.add_title": "Add BIO CE session hooks to {name}?",
+    "connections.hooks.add_message": "BIO CE will add two hooks to {name}’s user settings so it can recall memories "
+                                     "without being asked.",
+    "connections.hooks.point_start": "At session start, BIO CE adds its memory rules and memories related to the "
+                                     "working folder.",
+    "connections.hooks.point_prompt": "With each message you send, BIO CE looks up memories that share words with it. "
+                                      "Your message is not stored or logged.",
+    "connections.hooks.point_silent": "The hooks never save anything themselves and stay silent while access is "
+                                      "paused.",
+    "connections.hooks.point_backup": "Your current settings file is backed up first.",
+    "connections.hooks.point_backup_codex": "Your current settings file is backed up first. Codex runs new hooks only "
+                                            "after you trust them: open Codex and use /hooks to review and approve the "
+                                            "two BIO CE entries.",
+    "connections.hooks.add_confirm": "Add hooks",
+    "connections.hooks.updating": "Updating hooks…",
+    "connections.hooks.added": "{name} will recall BIO CE memories in new sessions.",
+    "connections.hooks.added_codex": "{name} will recall BIO CE memories in new sessions. Open Codex and approve the "
+                                     "BIO CE hooks with /hooks.",
+    "connections.hooks.removed": "BIO CE removed its hooks from {name}.",
+    "connections.hooks.updated_title": "Session hooks updated",
+    # Codex code mode
+    "connections.code_mode.applied": "On: BIO CE’s tools are shown in Codex code mode",
+    "connections.code_mode.user_set": "Set by you in Codex settings",
+    "connections.code_mode.connect_point": "If Codex is version 0.166 or later, BIO CE also adds one option to its own "
+                                           "entry so Codex shows BIO CE’s tools in code mode. It checks the result and "
+                                           "puts your settings back if Codex does not accept it.",
+    "connections.code_mode.title": "Show BIO CE’s tools in Codex code mode?",
+    "connections.code_mode.message": "BIO CE will add one line to its own “bio-ce” entry in Codex’s settings: "
+                                     "omit_tools_from = [\"code_mode\"].",
+    "connections.code_mode.point_version": "This needs Codex 0.166 or later; BIO CE checks the version first.",
+    "connections.code_mode.point_backup": "Codex’s settings file is backed up first. BIO CE checks the result with "
+                                          "Codex and puts the previous file back if Codex does not accept it.",
+    "connections.code_mode.point_other": "Other MCP servers and settings are not changed.",
+    "connections.code_mode.updating": "Updating Codex…",
+    "connections.code_mode.done_title": "Codex code mode",
+    # Memory skill
+    "connections.skill.absent": "Not installed",
+    "connections.skill.current": "Installed",
+    "connections.skill.outdated": "Installed · update available",
+    "connections.skill.modified": "Installed · edited by you",
+    "connections.skill.desktop": "Upload it yourself in Claude",
+    "connections.skill.save_zip": "Save skill as ZIP…",
+    "connections.skill.preview": "Preview",
+    "connections.skill.preview_link": "Preview the memory skill…",
+    "connections.skill.viewer_title": "BIO CE memory skill",
+    "connections.skill.location": "Location: {path}",
+    "connections.skill.desktop_note": "The Claude desktop app has no skills folder BIO CE can use. Save the skill as a "
+                                      "ZIP and upload it yourself in Claude: Customize → Skills. It goes to your Claude "
+                                      "account, needs code execution turned on, and contains only BIO CE’s fixed text, "
+                                      "never your memories.",
+    "connections.skill.zip_title": "Save the memory skill as a ZIP?",
+    "connections.skill.zip_point": "BIO CE only saves the file. Uploading it is up to you.",
+    "connections.skill.zip_confirm": "Choose where to save",
+    "connections.skill.zip_save_title": "Save the BIO CE memory skill",
+    "connections.skill.zip_exists": "A file with this name already exists. Choose a new name.",
+    "connections.skill.zip_failed": "BIO CE couldn't save the ZIP there.",
+    "connections.skill.not_saved": "Not saved",
+    "connections.skill.zip_saved": "Saved. In Claude, open Customize → Skills and upload this ZIP.",
+    "connections.skill.zip_saved_title": "Skill saved",
+    "connections.skill.show_in_folder": "Show in folder",
+    "connections.skill.connect_option": "Also install the BIO CE memory skill, which tells {name} when to search and "
+                                        "save memories. Location: {path}",
+    "connections.skill.agents_option": "Also add the same guidance to Codex’s AGENTS.md (only needed if Codex does not "
+                                       "pick up the skill). Location: {path}",
+    "connections.skill.replace_title": "Replace your edited memory skill in {name}?",
+    "connections.skill.rewrite_message": "You edited the memory skill, so BIO CE asks before rewriting it for the new "
+                                         "saving mode.",
+    "connections.skill.point_edited_backup": "Your edited file is backed up to your BIO CE folder first.",
+    "connections.skill.point_keep": "If you keep it, update it yourself so it matches the new mode.",
+    "connections.skill.keep_mine": "Keep my file",
+    "connections.skill.updating": "Updating the memory skill…",
+    "connections.skill.remove_title": "Remove the memory skill from {name}?",
+    "connections.skill.remove_message": "BIO CE will delete {path}.",
+    "connections.skill.point_backup_kept": "A backup copy is kept in your BIO CE folder.",
+    "connections.skill.point_stays": "Your memories and the connection stay.",
+    "connections.skill.update_title": "Update the memory skill for {name}?",
+    "connections.skill.install_title": "Install the memory skill for {name}?",
+    "connections.skill.install_message": "The skill tells {name} when to search BIO CE and what to save. It goes to "
+                                         "{path}.",
+    "connections.skill.point_server": "BIO CE’s server still decides what may be stored; the skill only says when to "
+                                      "use it.",
+    "connections.skill.result.installed": "The memory skill is installed for {name}.",
+    "connections.skill.result.updated": "The memory skill for {name} is up to date now.",
+    "connections.skill.result.unchanged": "The memory skill for {name} was already up to date.",
+    "connections.skill.result.kept_modified": "You edited the memory skill for {name}, so BIO CE left it as it is.",
+    "connections.skill.result.removed": "The memory skill was removed from {name}.",
+    "connections.skill.result.absent": "{name} had no memory skill to remove.",
+    "connections.skill.result.other": "Memory skill: {state}.",
+    # Connect and disconnect
+    "connections.connect.title": "Connect {name}?",
+    "connections.connect.message": "BIO CE will use {name}’s own command to add one MCP server entry named “bio-ce” to "
+                                   "your user settings.",
+    "connections.connect.point_read": "{name} will be able to search and read active memories in your personal store. "
+                                      "It can't add, edit, or retract them.",
+    "connections.connect.point_provider": "Memories {name} reads become part of your conversation and may be sent to "
+                                          "the AI model provider {name} uses ({provider}). BIO CE can't control what "
+                                          "happens to them there.",
+    "connections.connect.point_auto_off": "Auto memory stays off: the host can only search and read until you turn it "
+                                          "on.",
+    "connections.connect.point_backup": "Your current MCP settings are backed up first. The backup can contain settings "
+                                        "or environment values for other servers and is stored locally without "
+                                        "encryption.",
+    "connections.connect.point_check": "BIO CE then runs a local read-only check against your database. No AI model is "
+                                       "called and no memory is written.",
+    "connections.connecting": "Connecting…",
+    "connections.desktop.title": "Connect the {name}?",
+    "connections.desktop.message": "BIO CE will add one MCP server entry named “bio-ce” to the Claude desktop app’s "
+                                   "settings file. The app’s other settings and servers stay as they are.",
+    "connections.desktop.settings_file": "Settings file: {path}",
+    "connections.desktop.settings_file_found": "BIO CE finds the settings file of your Claude desktop app.",
+    "connections.desktop.point_backup": "The file is backed up first. If the file can’t be read, BIO CE changes "
+                                        "nothing.",
+    "connections.desktop.point_read": "Claude chats will be able to search and read active memories in your personal "
+                                      "store. Memories read in a chat become part of the conversation and are sent to "
+                                      "{provider}. BIO CE can't control what happens to them there.",
+    "connections.desktop.point_auto_off": "Auto memory stays off: the app can only search and read until you turn it "
+                                          "on.",
+    "connections.desktop.point_check": "BIO CE then runs a local read-only check against your database. No AI model is "
+                                       "called.",
+    "connections.desktop.restart": "Quit the Claude desktop app completely (also from the system tray) and open it "
+                                   "again.",
+    "connections.connected.again": "{name} was already connected. BIO CE verified the read-only server again.",
+    "connections.connected.now": "{name} can now search and read your memories.",
+    "connections.connected.backup": "A backup of its previous MCP settings was saved.",
+    "connections.connected.skill_failed": "The memory skill was not installed: {error}",
+    "connections.connected.title": "{name} connected",
+    "connections.disconnect.remove_skill": "Also remove the BIO CE memory skill",
+    "connections.disconnect.remove_skill_edited": "Also remove the BIO CE memory skill (you edited it; a backup copy "
+                                                  "is kept)",
+    "connections.disconnect.title": "Disconnect {name}?",
+    "connections.disconnect.message": "BIO CE will remove only its own “bio-ce” entry from {name}. Other MCP servers "
+                                      "stay as they are.",
+    "connections.disconnect.point_backup": "The current MCP settings are backed up first.",
+    "connections.disconnect.point_memories": "Your memories are not changed. You can connect again at any time.",
+    "connections.disconnecting": "Disconnecting…",
+    "connections.disconnected.backup": "BIO CE removed its entry from {name}. A backup of the previous MCP settings was "
+                                       "saved.",
+    "connections.disconnected.already": "{name} was already disconnected.",
+    "connections.disconnected.title": "{name} disconnected",
+    # Auto memory and Pause all
+    "connections.auto.title": "Turn on Auto memory for {name}?",
+    "connections.auto.message": "{name} will be able to save and update memories on its own while you work.",
+    "connections.auto.point_support": "{name} may not use Auto memory on its own. {detail}",
+    "connections.auto.point_what": "It may store lasting preferences, confirmed decisions, project goals, and clear "
+                                   "corrections that you state. You can review, edit, and retract them here and on the "
+                                   "Memories page.",
+    "connections.auto.point_refused": "BIO CE refuses passwords, tokens, keys, and anything taken from files, web "
+                                      "pages, or tool output. Uncertain or conflicting changes and every retraction "
+                                      "wait for your review.",
+    "connections.auto.point_approval": "So that saving doesn't interrupt you, BIO CE lets {name} run BIO CE's own "
+                                       "memory tools without asking each time. All other tools keep their current "
+                                       "approval settings. Your settings file is backed up first.",
+    "connections.auto.point_provider": "Memories {name} reads or writes are part of your conversation and may be sent "
+                                       "to its AI model provider.",
+    "connections.auto.point_back": "You can switch back to Read only or Paused at any time; running sessions follow on "
+                                   "their next request.",
+    "connections.auto.confirm": "Turn on Auto memory",
+    "connections.auto.failed_title": "Couldn't change {name}",
+    "connections.pause.title": "Pause all AI access?",
+    "connections.pause.message": "Every connected host loses access to your memories until you choose a mode again.",
+    "connections.pause.point_sessions": "Running sessions are refused on their next request.",
+    "connections.pause.point_nothing": "Nothing is deleted or disconnected.",
+    "connections.pause.confirm": "Pause all",
+    "connections.pause.done": {"one": "Paused {count} connection.", "other": "Paused {count} connections."},
+    "connections.pause.done_title": "AI access paused",
+    # Diagnostics and failures
+    "connections.diagnose.attention": {"one": "{count} check need attention. See the details under the host.",
+                                       "other": "{count} checks need attention. See the details under the host."},
+    "connections.diagnose.title": "{name} diagnostics",
+    "connections.diagnose.passed": "Everything BIO CE can check locally looks right.",
+    "connections.diagnose.passed_title": "{name} diagnostics passed",
+    "connections.failed.connect": "Couldn't connect {name}",
+    "connections.failed.disconnect": "Couldn't disconnect {name}",
+    "connections.failed.diagnose": "Couldn't check {name}",
+    "connections.failed.hooks": "Couldn't update {name}'s hooks",
+    "connections.failed.code_mode": "Couldn't update Codex code mode",
+    "connections.failed.skill": "Couldn't update the memory skill",
+    "connections.failed.conflict": "{error} Nothing was changed.",
+    "connections.failed.other": "BIO CE couldn't finish talking to {name}. Check that {name} works in a terminal, then "
+                                "try again. Run diagnostics for details.",
+    # Recent AI activity and settings backups
+    "connections.activity.title": "Recent AI activity",
+    "connections.activity.note": "What hosts saved, updated, or tried to save. Select an entry to open the memory.",
+    "connections.activity.none": "No AI activity yet.",
+    "connections.activity.created": "Saved",
+    "connections.activity.updated": "Updated",
+    "connections.activity.queued": "Sent to review",
+    "connections.activity.duplicate": "Already stored",
+    "connections.activity.rejected": "Refused",
+    "connections.activity.denied": "Blocked (no permission)",
+    "connections.activity.rate_limited": "Paused (too many changes)",
+    "connections.activity.conflict": "Changed meanwhile",
+    "connections.activity.approved": "Approved by you",
+    "connections.activity.rejected_by_user": "Rejected by you",
+    "connections.activity.failed": "Couldn't apply",
+    "connections.backups.title": "Settings backups",
+    "connections.backups.note": "Before connecting or disconnecting, BIO CE copies the host’s MCP settings to your BIO "
+                                "CE folder. These copies can contain settings or environment values for other servers "
+                                "and are not encrypted. Delete them when you no longer need them.",
+    "connections.backups.open": "Open folder",
     # Add this part's keys right below this line, in this block only (other parts merge around it).
     #
     #

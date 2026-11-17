@@ -471,6 +471,336 @@ STRINGS: dict[str, object] = {
     "connections.servers.ended_title": "서버 끝냄",
     "connections.servers.end_failed": "쉬는 서버를 모두 끝내지는 못했습니다. 개수는 아직 실행 중인 서버입니다.",
     # ===== U5-A: Connections screen (src/bio_ce/ui/pages/connections.py) =====
+    # Page and header
+    "connections.title": "AI 연결",
+    "connections.subtitle": "AI 코딩 도구가 기억을 쓰고 키워 가도록",
+    "connections.refresh": "새로 고침",
+    "connections.refresh_tip": "AI 도구 다시 확인 (F5)",
+    "connections.pause_all": "모든 AI 접근 일시 중지",
+    "connections.pause_all_tip": "연결된 모든 AI 도구가 기억을 읽거나 바꾸지 못하게 함",
+    "connections.callout.title": "더 허용하기 전에는 읽기 전용",
+    "connections.callout.body": "연결된 AI 도구는 기억을 검색하고 읽을 수 있습니다. 자동 기억을 켜면 오래 쓸 기억을 저장하고 "
+                                "업데이트할 수도 있습니다. BIO CE는 비밀 정보와 문서에서 가져온 내용을 거부하고, 확실하지 "
+                                "않은 변경과 모든 철회 요청은 검토하도록 남겨 둡니다. BIO CE는 확인을 받은 뒤에만 AI 도구의 "
+                                "설정을 바꾸며, AI 모델을 직접 부르지 않습니다. AI 도구가 읽은 기억은 그 대화의 일부가 되며, "
+                                "그 AI 도구의 AI 모델 제공자(예: Codex는 OpenAI, Claude Code는 Anthropic)에게 그 제공자의 "
+                                "약관에 따라 보내질 수 있습니다.",
+    "connections.app_closed_note": "BIO CE 앱을 닫아도 됩니다. 연결된 AI 도구는 계속 기억을 씁니다.",
+    # Host cards
+    "connections.host.codex": "OpenAI의 코딩 에이전트입니다. 명령줄 도구와 데스크톱 앱이 같은 설정을 쓰므로 연결 하나로 둘 다 "
+                              "됩니다.",
+    "connections.host.claude": "Anthropic의 명령줄 코딩 에이전트입니다. Claude 앱(데스크톱 채팅 앱)은 아래에 따로 카드가 "
+                               "있습니다.",
+    "connections.host.claude_desktop": "Anthropic의 데스크톱 채팅 앱입니다. BIO CE가 앱의 설정 파일에 항목 하나를 "
+                                       "추가합니다. 연결하거나 연결을 끊은 뒤에는 앱을 종료했다가 다시 여세요.",
+    "connections.provider.codex": "보통 OpenAI, 또는 Codex에 설정한 다른 제공자",
+    "connections.provider.claude": "보통 Anthropic, 또는 Claude Code에 설정한 클라우드 제공자",
+    "connections.provider.claude_desktop": "Anthropic",
+    "connections.checking": "확인 중…",
+    "connections.auto_support": "이 AI 도구의 자동 기억",
+    "connections.row.access": "접근",
+    "connections.row.spaces": "공간",
+    "connections.row.saving": "저장 방식",
+    "connections.row.hooks": "세션 훅",
+    "connections.row.code_mode": "코드 모드",
+    "connections.row.skill": "기억 스킬",
+    "connections.mode.read_only": "읽기 전용",
+    "connections.mode.auto_memory": "자동 기억",
+    "connections.mode.paused": "일시 중지",
+    "connections.mode.read_only_tip": "읽기 전용: 검색하고 읽을 수만 있음",
+    "connections.mode.auto_memory_tip": "BIO CE 규칙에 따라 오래 쓸 기억도 저장하고 업데이트함",
+    "connections.mode.paused_tip": "다시 켤 때까지 읽기와 변경 없음",
+    "connections.mode.changed_title": "{name}: {mode}",
+    "connections.off": "꺼짐",
+    "connections.unknown": "알 수 없음",
+    "connections.action.connect": "연결",
+    "connections.action.reconnect": "다시 연결",
+    "connections.action.disconnect": "연결 끊기",
+    "connections.action.diagnose": "진단 실행",
+    "connections.action.diagnose_tip": "아무것도 바꾸지 않고 설정 확인",
+    "connections.action.install": "설치",
+    "connections.action.remove": "제거",
+    "connections.action.update": "업데이트",
+    "connections.action.replace": "바꾸기",
+    "connections.action.apply": "적용",
+    "connections.diagnostics": "진단",
+    # Card status messages
+    "connections.status.unchecked": "BIO CE가 {name}을(를) 확인하지 못했습니다. 새로 고침을 눌러 다시 해 보세요.",
+    "connections.status.desktop_missing": "이 Windows 사용자에게서 Claude 앱을 찾지 못했습니다. 앱을 설치하고 한 번 연 "
+                                          "다음 새로 고침을 누르세요.",
+    "connections.status.missing": "BIO CE가 “{command}” 명령을 찾지 못했습니다. {name}을(를) 설치하고, 새 터미널에서 "
+                                  "“{command} --version”이 되는지 확인한 다음 새로 고침을 누르세요.",
+    "connections.status.conflict": "{name}에 이미 “bio-ce”라는 다른 MCP 서버가 있거나 설정 파일을 읽을 수 없습니다. BIO "
+                                   "CE는 이것을 바꾸지 않습니다. 자세한 내용은 진단을 실행하세요.",
+    "connections.status.legacy": "{name}은(는) BIO CE v0.2로 연결되었습니다. 검색하고 읽을 수만 있으며, BIO CE가 일시 "
+                                 "중지하거나 권한을 거둘 수 없습니다. 접근을 관리하려면 다시 연결을 누르세요.",
+    "connections.status.auto_memory": "{name}은(는) 기억을 검색하고 읽으며, BIO CE 규칙에 따라 오래 쓸 기억을 저장하거나 "
+                                      "업데이트할 수 있습니다. 확실하지 않은 변경과 철회 요청은 검토를 기다립니다.",
+    "connections.status.paused": "{name}의 접근이 일시 중지되었습니다. 다른 모드를 고를 때까지 기억을 읽거나 바꿀 수 "
+                                 "없습니다.",
+    "connections.status.read_only": "{name}은(는) 기억을 검색하고 읽을 수 있습니다. 자동 기억은 꺼져 있습니다.",
+    "connections.status.installed": "{name}이(가) 설치되어 있습니다. 연결하면 기억을 검색하고 읽을 수 있습니다.",
+    # Spaces, Personal, saving mode
+    "connections.spaces.all": "일반과 모든 프로젝트 공간",
+    "connections.spaces.general_only": "일반만",
+    "connections.spaces.use_general_only": "일반만 쓰기",
+    "connections.spaces.use_all": "모든 프로젝트 공간 쓰기",
+    "connections.spaces.title": "{name}: 공간",
+    "connections.spaces.now_all": "이제 {name}이(가) 일반과 모든 프로젝트 공간을 쓸 수 있습니다.",
+    "connections.spaces.now_general": "이제 {name}은(는) 일반만 씁니다. 프로젝트 공간은 그대로 있습니다.",
+    "connections.summary": "모든 프로젝트 공간 사용: {projects}. 저장 방식: {saving}. 둘 다 이 카드에서 바꿀 수 있습니다.",
+    "connections.summary.all": "켬",
+    "connections.summary.general_only": "끔(일반만)",
+    "connections.summary.collect": "수집(수집함으로)",
+    "connections.summary.curated": "바로 저장",
+    "connections.personal.allow": "허용…",
+    "connections.personal.change": "변경…",
+    "connections.personal.read": "읽기 전용",
+    "connections.personal.read_write": "읽기와 저장",
+    "connections.personal.title": "{name}: 개인",
+    "connections.personal.off_message": "먼저 설정 → 공간에서 개인을 켜세요.",
+    "connections.personal.off_title": "개인 꺼짐",
+    "connections.personal.message": "개인에는 사용자 본인에 관한 기억이 있습니다. {name}은(는) 개인적인 일을 물을 때만 "
+                                    "개인을 읽고, 세션 훅은 개인을 쓰지 않습니다.",
+    "connections.personal.read_detail": "{name}이(가) 개인을 검색하고 읽을 수 있습니다.",
+    "connections.personal.write_detail": "{name}이(가) 남겨 달라고 한 개인 기억도 저장할 수 있습니다.",
+    "connections.personal.off_detail": "{name}은(는) 개인을 쓸 수 없습니다.",
+    "connections.personal.continue": "계속",
+    "connections.personal.allow_title": "{name}이(가) 개인을 읽게 할까요?",
+    "connections.personal.allow_message": "{name}이(가) 읽은 개인 기억은 대화의 일부가 되어 {name}이(가) 쓰는 AI "
+                                          "서비스({provider})에 보내집니다. 그곳에서 어떻게 되는지는 BIO CE가 통제할 수 "
+                                          "없습니다.",
+    "connections.personal.point_hooks": "세션 훅은 개인 기억을 대화에 넣지 않습니다.",
+    "connections.personal.point_off": "언제든 여기서 끌 수 있습니다.",
+    "connections.personal.consent": "이 AI 도구가 읽은 개인 기억이 그 AI 서비스에 보내진다는 것을 이해합니다.",
+    "connections.personal.allow_confirm": "허용",
+    "connections.personal.not_ticked": "바뀐 것이 없습니다. 이해했다면 확인란을 선택하세요.",
+    "connections.personal.now_read": "이제 {name}이(가) 개인을 읽을 수 있습니다.",
+    "connections.personal.now_write": "이제 {name}이(가) 개인을 읽고 저장할 수 있습니다.",
+    "connections.personal.now_off": "이제 {name}은(는) 개인을 쓸 수 없습니다.",
+    "connections.setting_failed": "BIO CE가 이 설정을 바꾸지 못했습니다.",
+    "connections.saving.collect": "수집: 오래 쓸 정보는 수집함으로",
+    "connections.saving.curated": "바로 저장: 말했거나 확인한 것만",
+    "connections.saving.to_collect": "수집으로 바꾸기",
+    "connections.saving.to_curated": "바로 저장으로 바꾸기",
+    "connections.saving.title": "{name}: 저장 방식",
+    "connections.saving.collect_title": "{name}: 수집 방식",
+    "connections.saving.curated_title": "{name}: 바로 저장 방식",
+    "connections.saving.collect_message": "이 AI 도구가 수집함으로 수집하게 할까요?",
+    "connections.saving.collect_point_what": "{name}이(가) 묻지 않고 오래 쓸 정보를 수집함에 저장합니다. 사용자가 말한 것, "
+                                             "스스로 추측한 것(추측으로 표시), 기억해 달라고 한 파일의 요약이 "
+                                             "들어갑니다.",
+    "connections.saving.collect_point_use": "수집함 항목은 AI 도구가 수집함을 따로 요청할 때만 쓰이며, 세션 훅은 쓰지 "
+                                            "않습니다. 남길 만한 것은 기억 → 수집함에서 기억으로 옮기세요.",
+    "connections.saving.collect_point_cleanup": "30일 동안 쓰이지 않은 항목은 버림 제안이 되고, 보관하지 않으면 7일 뒤에 "
+                                                "버립니다. 두 기간 모두 설정에서 바꿀 수 있습니다.",
+    "connections.saving.collect_point_review": "바로 저장된 기억의 변경은 여전히 검토를 기다립니다. 비밀 정보는 언제나 "
+                                               "거부합니다.",
+    "connections.saving.collect_point_skill": "BIO CE가 이 AI 도구에 기억 스킬을 설치했다면 수집 방식에 맞게 스킬을 다시 "
+                                              "씁니다.",
+    "connections.saving.curated_message": "바로 저장으로 되돌릴까요?",
+    "connections.saving.curated_point_what": "전처럼 말했거나 확인한 것만 저장합니다. 나머지는 모두 검토를 기다립니다.",
+    "connections.saving.curated_point_inbox": "이미 수집함에 있는 항목은 옮기거나 버릴 때까지 그대로 있습니다.",
+    "connections.saving.curated_point_skill": "BIO CE가 이 AI 도구에 기억 스킬을 설치했다면 바로 저장 방식에 맞게 스킬을 "
+                                              "다시 씁니다.",
+    "connections.saving.now_collect": "이제 {name}의 저장 방식은 수집입니다.",
+    "connections.saving.now_curated": "이제 {name}의 저장 방식은 바로 저장입니다.",
+    # Session hooks
+    "connections.hooks.on": "켜짐: 세션 시작과 프롬프트마다 기억을 불러옴",
+    "connections.hooks.add_title": "{name}에 BIO CE 세션 훅을 추가할까요?",
+    "connections.hooks.add_message": "BIO CE가 {name}의 사용자 설정에 훅 두 개를 추가해, 요청하지 않아도 기억을 불러오게 "
+                                     "합니다.",
+    "connections.hooks.point_start": "세션을 시작할 때 BIO CE가 기억 규칙과 작업 폴더에 관련된 기억을 넣습니다.",
+    "connections.hooks.point_prompt": "메시지를 보낼 때마다 BIO CE가 같은 낱말이 들어간 기억을 찾습니다. 메시지는 "
+                                      "저장하지도, 로그에 남기지도 않습니다.",
+    "connections.hooks.point_silent": "훅은 스스로 아무것도 저장하지 않으며, 접근이 일시 중지된 동안에는 아무것도 하지 "
+                                      "않습니다.",
+    "connections.hooks.point_backup": "지금의 설정 파일을 먼저 백업합니다.",
+    "connections.hooks.point_backup_codex": "지금의 설정 파일을 먼저 백업합니다. Codex는 신뢰한다고 표시한 새 훅만 "
+                                            "실행합니다. Codex를 열고 /hooks에서 BIO CE 항목 두 개를 검토하고 "
+                                            "승인하세요.",
+    "connections.hooks.add_confirm": "훅 추가",
+    "connections.hooks.updating": "훅 업데이트 중…",
+    "connections.hooks.added": "{name}이(가) 새 세션에서 BIO CE 기억을 불러옵니다.",
+    "connections.hooks.added_codex": "{name}이(가) 새 세션에서 BIO CE 기억을 불러옵니다. Codex를 열고 /hooks에서 BIO CE "
+                                     "훅을 승인하세요.",
+    "connections.hooks.removed": "BIO CE가 {name}에서 자기 훅을 제거했습니다.",
+    "connections.hooks.updated_title": "세션 훅 업데이트함",
+    # Codex code mode
+    "connections.code_mode.applied": "켜짐: Codex 코드 모드에 BIO CE 도구가 보임",
+    "connections.code_mode.user_set": "Codex 설정에서 직접 정함",
+    "connections.code_mode.connect_point": "Codex가 0.166 이상이면 BIO CE가 자기 항목에 옵션 하나를 더해 Codex 코드 "
+                                           "모드에 BIO CE 도구가 보이게 합니다. 결과를 확인하고, Codex가 받아들이지 "
+                                           "않으면 설정을 원래대로 돌려놓습니다.",
+    "connections.code_mode.title": "Codex 코드 모드에 BIO CE 도구를 보일까요?",
+    "connections.code_mode.message": "BIO CE가 Codex 설정의 자기 “bio-ce” 항목에 한 줄을 추가합니다: "
+                                     "omit_tools_from = [\"code_mode\"].",
+    "connections.code_mode.point_version": "Codex 0.166 이상이 필요합니다. BIO CE가 먼저 버전을 확인합니다.",
+    "connections.code_mode.point_backup": "Codex 설정 파일을 먼저 백업합니다. BIO CE가 Codex로 결과를 확인하고, Codex가 "
+                                          "받아들이지 않으면 이전 파일로 되돌려 놓습니다.",
+    "connections.code_mode.point_other": "다른 MCP 서버와 설정은 바꾸지 않습니다.",
+    "connections.code_mode.updating": "Codex 업데이트 중…",
+    "connections.code_mode.done_title": "Codex 코드 모드",
+    # Memory skill
+    "connections.skill.absent": "설치 안 됨",
+    "connections.skill.current": "설치됨",
+    "connections.skill.outdated": "설치됨 · 업데이트 있음",
+    "connections.skill.modified": "설치됨 · 직접 수정함",
+    "connections.skill.desktop": "Claude에서 직접 올림",
+    "connections.skill.save_zip": "스킬을 ZIP으로 저장…",
+    "connections.skill.preview": "미리 보기",
+    "connections.skill.preview_link": "기억 스킬 미리 보기…",
+    "connections.skill.viewer_title": "BIO CE 기억 스킬",
+    "connections.skill.location": "위치: {path}",
+    "connections.skill.desktop_note": "Claude 앱에는 BIO CE가 쓸 수 있는 스킬 폴더가 없습니다. 스킬을 ZIP으로 저장한 뒤 "
+                                      "Claude의 Customize → Skills에서 직접 올리세요. 스킬은 Claude 계정에 올라가고, 코드 "
+                                      "실행이 켜져 있어야 하며, 기억은 들어 있지 않고 BIO CE의 고정 문구만 들어 "
+                                      "있습니다.",
+    "connections.skill.zip_title": "기억 스킬을 ZIP으로 저장할까요?",
+    "connections.skill.zip_point": "BIO CE는 파일을 저장하기만 합니다. 올리는 것은 직접 하세요.",
+    "connections.skill.zip_confirm": "저장할 곳 고르기…",
+    "connections.skill.zip_save_title": "BIO CE 기억 스킬 저장",
+    "connections.skill.zip_exists": "이 이름의 파일이 이미 있습니다. 새 이름을 고르세요.",
+    "connections.skill.zip_failed": "BIO CE가 그곳에 ZIP을 저장하지 못했습니다.",
+    "connections.skill.not_saved": "저장 안 됨",
+    "connections.skill.zip_saved": "저장했습니다. Claude에서 Customize → Skills를 열고 이 ZIP을 올리세요.",
+    "connections.skill.zip_saved_title": "스킬 저장함",
+    "connections.skill.show_in_folder": "폴더에서 보기",
+    "connections.skill.connect_option": "{name}에게 언제 기억을 검색하고 저장할지 알려 주는 BIO CE 기억 스킬도 설치합니다. "
+                                        "위치: {path}",
+    "connections.skill.agents_option": "같은 안내를 Codex의 AGENTS.md에도 추가합니다(Codex가 스킬을 읽지 못할 때만 "
+                                       "필요). 위치: {path}",
+    "connections.skill.replace_title": "{name}에서 직접 수정한 기억 스킬을 바꿀까요?",
+    "connections.skill.rewrite_message": "기억 스킬을 직접 수정하셨으므로, 새 저장 방식에 맞게 다시 쓰기 전에 BIO CE가 "
+                                         "확인합니다.",
+    "connections.skill.point_edited_backup": "수정한 파일은 먼저 BIO CE 폴더에 백업합니다.",
+    "connections.skill.point_keep": "그대로 두려면 새 방식에 맞게 직접 고치세요.",
+    "connections.skill.keep_mine": "내 파일 그대로 두기",
+    "connections.skill.updating": "기억 스킬 업데이트 중…",
+    "connections.skill.remove_title": "{name}에서 기억 스킬을 제거할까요?",
+    "connections.skill.remove_message": "BIO CE가 {path} 파일을 삭제합니다.",
+    "connections.skill.point_backup_kept": "백업 사본은 BIO CE 폴더에 남깁니다.",
+    "connections.skill.point_stays": "기억과 연결은 그대로 있습니다.",
+    "connections.skill.update_title": "{name}의 기억 스킬을 업데이트할까요?",
+    "connections.skill.install_title": "{name}에 기억 스킬을 설치할까요?",
+    "connections.skill.install_message": "스킬은 {name}에게 언제 BIO CE를 검색하고 무엇을 저장할지 알려 줍니다. 위치는 "
+                                         "{path}입니다.",
+    "connections.skill.point_server": "무엇을 저장할 수 있는지는 여전히 BIO CE 서버가 정합니다. 스킬은 언제 쓸지만 알려 "
+                                      "줍니다.",
+    "connections.skill.result.installed": "{name}에 기억 스킬을 설치했습니다.",
+    "connections.skill.result.updated": "이제 {name}의 기억 스킬이 최신입니다.",
+    "connections.skill.result.unchanged": "{name}의 기억 스킬은 이미 최신이었습니다.",
+    "connections.skill.result.kept_modified": "{name}의 기억 스킬을 직접 수정하셨으므로 BIO CE가 그대로 두었습니다.",
+    "connections.skill.result.removed": "{name}에서 기억 스킬을 제거했습니다.",
+    "connections.skill.result.absent": "{name}에는 제거할 기억 스킬이 없었습니다.",
+    "connections.skill.result.other": "기억 스킬: {state}.",
+    # Connect and disconnect
+    "connections.connect.title": "{name}을(를) 연결할까요?",
+    "connections.connect.message": "BIO CE가 {name}의 자체 명령으로 사용자 설정에 “bio-ce”라는 MCP 서버 항목 하나를 "
+                                   "추가합니다.",
+    "connections.connect.point_read": "{name}이(가) 개인 저장소의 활성 기억을 검색하고 읽을 수 있게 됩니다. 기억을 "
+                                      "추가·수정·삭제할 수는 없습니다.",
+    "connections.connect.point_provider": "{name}이(가) 읽은 기억은 대화의 일부가 되며, {name}이(가) 쓰는 AI 모델 "
+                                          "제공자({provider})에게 보내질 수 있습니다. 그곳에서 어떻게 되는지는 BIO CE가 "
+                                          "통제할 수 없습니다.",
+    "connections.connect.point_auto_off": "자동 기억은 꺼진 채로 둡니다. 켜기 전까지 AI 도구는 검색하고 읽을 수만 "
+                                          "있습니다.",
+    "connections.connect.point_backup": "지금의 MCP 설정을 먼저 백업합니다. 백업에는 다른 서버의 설정이나 환경 값이 들어 "
+                                        "있을 수 있으며, 이 PC에 암호화되지 않은 채로 저장됩니다.",
+    "connections.connect.point_check": "그다음 BIO CE가 데이터베이스를 이 PC에서 읽기 전용으로 확인합니다. AI 모델은 "
+                                       "부르지 않고 기억도 쓰지 않습니다.",
+    "connections.connecting": "연결 중…",
+    "connections.desktop.title": "{name}을(를) 연결할까요?",
+    "connections.desktop.message": "BIO CE가 Claude 앱의 설정 파일에 “bio-ce”라는 MCP 서버 항목 하나를 추가합니다. 앱의 "
+                                   "다른 설정과 서버는 그대로 둡니다.",
+    "connections.desktop.settings_file": "설정 파일: {path}",
+    "connections.desktop.settings_file_found": "BIO CE가 Claude 앱의 설정 파일을 찾습니다.",
+    "connections.desktop.point_backup": "먼저 파일을 백업합니다. 파일을 읽을 수 없으면 BIO CE는 아무것도 바꾸지 않습니다.",
+    "connections.desktop.point_read": "Claude 채팅에서 개인 저장소의 활성 기억을 검색하고 읽을 수 있게 됩니다. 채팅에서 "
+                                      "읽은 기억은 대화의 일부가 되어 {provider}에 보내집니다. 그곳에서 어떻게 되는지는 "
+                                      "BIO CE가 통제할 수 없습니다.",
+    "connections.desktop.point_auto_off": "자동 기억은 꺼진 채로 둡니다. 켜기 전까지 앱은 검색하고 읽을 수만 있습니다.",
+    "connections.desktop.point_check": "그다음 BIO CE가 데이터베이스를 이 PC에서 읽기 전용으로 확인합니다. AI 모델은 "
+                                       "부르지 않습니다.",
+    "connections.desktop.restart": "Claude 앱을 완전히 종료한 뒤(시스템 트레이에서도) 다시 여세요.",
+    "connections.connected.again": "{name}은(는) 이미 연결되어 있었습니다. BIO CE가 읽기 전용 서버를 다시 확인했습니다.",
+    "connections.connected.now": "이제 {name}이(가) 기억을 검색하고 읽을 수 있습니다.",
+    "connections.connected.backup": "이전 MCP 설정의 백업을 저장했습니다.",
+    "connections.connected.skill_failed": "기억 스킬은 설치하지 못했습니다: {error}",
+    "connections.connected.title": "{name} 연결됨",
+    "connections.disconnect.remove_skill": "BIO CE 기억 스킬도 제거",
+    "connections.disconnect.remove_skill_edited": "BIO CE 기억 스킬도 제거(직접 수정한 스킬이므로 백업 사본을 남김)",
+    "connections.disconnect.title": "{name}의 연결을 끊을까요?",
+    "connections.disconnect.message": "BIO CE가 {name}에서 자기 “bio-ce” 항목만 제거합니다. 다른 MCP 서버는 그대로 "
+                                      "둡니다.",
+    "connections.disconnect.point_backup": "지금의 MCP 설정을 먼저 백업합니다.",
+    "connections.disconnect.point_memories": "기억은 바뀌지 않습니다. 언제든 다시 연결할 수 있습니다.",
+    "connections.disconnecting": "연결 끊는 중…",
+    "connections.disconnected.backup": "BIO CE가 {name}에서 자기 항목을 제거했습니다. 이전 MCP 설정의 백업을 "
+                                       "저장했습니다.",
+    "connections.disconnected.already": "{name}은(는) 이미 연결이 끊겨 있었습니다.",
+    "connections.disconnected.title": "{name} 연결 끊음",
+    # Auto memory and Pause all
+    "connections.auto.title": "{name}의 자동 기억을 켤까요?",
+    "connections.auto.message": "작업하는 동안 {name}이(가) 스스로 기억을 저장하고 업데이트할 수 있게 됩니다.",
+    "connections.auto.point_support": "{name}은(는) 스스로 자동 기억을 쓰지 않을 수 있습니다. {detail}",
+    "connections.auto.point_what": "사용자가 말한 오래 갈 선호, 확인된 결정, 프로젝트 목표, 분명한 정정을 저장할 수 "
+                                   "있습니다. 여기와 기억 화면에서 검토·수정·삭제할 수 있습니다.",
+    "connections.auto.point_refused": "BIO CE는 비밀번호, 토큰, 키와 파일·웹 페이지·도구 출력에서 가져온 내용을 "
+                                      "거부합니다. 확실하지 않거나 서로 충돌하는 변경과 모든 철회 요청은 검토를 "
+                                      "기다립니다.",
+    "connections.auto.point_approval": "저장 때문에 작업이 끊기지 않도록, BIO CE는 {name}이(가) BIO CE의 기억 도구를 "
+                                       "매번 묻지 않고 실행하게 합니다. 다른 도구는 지금의 승인 설정을 그대로 씁니다. "
+                                       "설정 파일은 먼저 백업합니다.",
+    "connections.auto.point_provider": "{name}이(가) 읽거나 쓴 기억은 대화의 일부이며, 그 AI 모델 제공자에게 보내질 수 "
+                                       "있습니다.",
+    "connections.auto.point_back": "언제든 읽기 전용이나 일시 중지로 바꿀 수 있습니다. 실행 중인 세션은 다음 요청부터 "
+                                   "따릅니다.",
+    "connections.auto.confirm": "자동 기억 켜기",
+    "connections.auto.failed_title": "{name}을(를) 바꾸지 못함",
+    "connections.pause.title": "모든 AI 접근을 일시 중지할까요?",
+    "connections.pause.message": "모드를 다시 고를 때까지 연결된 모든 AI 도구가 기억에 접근할 수 없습니다.",
+    "connections.pause.point_sessions": "실행 중인 세션은 다음 요청부터 거부됩니다.",
+    "connections.pause.point_nothing": "아무것도 지우거나 연결을 끊지 않습니다.",
+    "connections.pause.confirm": "모두 일시 중지",
+    "connections.pause.done": {"other": "연결 {count}개를 일시 중지했습니다."},
+    "connections.pause.done_title": "AI 접근 일시 중지함",
+    # Diagnostics and failures
+    "connections.diagnose.attention": {"other": "확인 {count}개에 조치가 필요합니다. AI 도구 카드 아래에서 자세한 내용을 "
+                                                "보세요."},
+    "connections.diagnose.title": "{name} 진단",
+    "connections.diagnose.passed": "BIO CE가 이 PC에서 확인할 수 있는 것은 모두 정상입니다.",
+    "connections.diagnose.passed_title": "{name} 진단 통과",
+    "connections.failed.connect": "{name}을(를) 연결하지 못함",
+    "connections.failed.disconnect": "{name}의 연결을 끊지 못함",
+    "connections.failed.diagnose": "{name}을(를) 확인하지 못함",
+    "connections.failed.hooks": "{name}의 훅을 업데이트하지 못함",
+    "connections.failed.code_mode": "Codex 코드 모드를 업데이트하지 못함",
+    "connections.failed.skill": "기억 스킬을 업데이트하지 못함",
+    "connections.failed.conflict": "{error} 바뀐 것은 없습니다.",
+    "connections.failed.other": "BIO CE가 {name}과(와) 통신을 마치지 못했습니다. 터미널에서 {name}이(가) 되는지 확인한 뒤 "
+                                "다시 해 보세요. 자세한 내용은 진단을 실행하세요.",
+    # Recent AI activity and settings backups
+    "connections.activity.title": "최근 AI 활동",
+    "connections.activity.note": "AI 도구가 저장했거나 업데이트했거나 저장하려 한 것입니다. 줄을 고르면 그 기억이 "
+                                 "열립니다.",
+    "connections.activity.none": "아직 AI 활동이 없습니다.",
+    "connections.activity.created": "저장함",
+    "connections.activity.updated": "업데이트함",
+    "connections.activity.queued": "검토로 보냄",
+    "connections.activity.duplicate": "이미 있음",
+    "connections.activity.rejected": "거부함",
+    "connections.activity.denied": "막힘(권한 없음)",
+    "connections.activity.rate_limited": "일시 중지(변경이 너무 많음)",
+    "connections.activity.conflict": "그사이 바뀜",
+    "connections.activity.approved": "직접 승인함",
+    "connections.activity.rejected_by_user": "직접 거절함",
+    "connections.activity.failed": "적용 못 함",
+    "connections.backups.title": "설정 백업",
+    "connections.backups.note": "연결하거나 연결을 끊기 전에 BIO CE는 AI 도구의 MCP 설정을 BIO CE 폴더에 복사합니다. 이 "
+                                "사본에는 다른 서버의 설정이나 환경 값이 들어 있을 수 있고 암호화되지 않습니다. 더 필요 "
+                                "없으면 지우세요.",
+    "connections.backups.open": "폴더 열기",
     # Add this part's keys right below this line, in this block only (other parts merge around it).
     #
     #

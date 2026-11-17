@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator, Mapping
 from tkinter import ttk
 import os
 from pathlib import Path
@@ -23,7 +24,6 @@ from bio_ce.connections import (
 )
 from bio_ce.control_store import (
     MODE_AUTO_MEMORY,
-    MODE_LABELS,
     MODE_PAUSED,
     MODE_READ_ONLY,
     AuditEntry,
@@ -40,41 +40,70 @@ from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS
 from bio_ce.ui.widgets import Button, Card, Pill, ScrollFrame, WrapLabel, caption_label, section_label
 
 
-HOST_DESCRIPTIONS = {
-    "codex": "OpenAI’s coding agent. The command-line tool and the desktop app use the same settings, so one "
-             "connection covers both.",
-    "claude": "Anthropic’s command-line coding agent. The Claude desktop chat app has its own card below.",
-    "claude_desktop": "Anthropic’s desktop chat app. BIO CE adds one entry to the app’s settings file; quit and "
-                      "reopen the app after connecting or disconnecting.",
-}
+class _Texts(Mapping):
+    """A table of texts built when it is read, so it follows the app's language (v0.4.4 U5)."""
+
+    def __init__(self, build: Callable[[], dict]) -> None:
+        self._build = build
+
+    def __getitem__(self, key):
+        return self._build()[key]
+
+    def __iter__(self) -> Iterator:
+        return iter(self._build())
+
+    def __len__(self) -> int:
+        return len(self._build())
+
+
+HOST_DESCRIPTIONS = _Texts(lambda: {
+    "codex": t("connections.host.codex"),
+    "claude": t("connections.host.claude"),
+    "claude_desktop": t("connections.host.claude_desktop"),
+})
 DESKTOP = "claude_desktop"
-DESKTOP_RESTART = "Quit the Claude desktop app completely (also from the system tray) and open it again."
-DESKTOP_SKILL_NOTE = ("The Claude desktop app has no skills folder BIO CE can use. Save the skill as a ZIP and upload "
-                      "it yourself in Claude: Customize → Skills. It goes to your Claude account, needs code "
-                      "execution turned on, and contains only BIO CE’s fixed text, never your memories.")
-APP_CLOSED_NOTE = "You can close the BIO CE app: connected AI tools keep using your memories."
-SKILL_LABELS = {
-    memory_skill.ABSENT: "Not installed",
-    memory_skill.CURRENT: "Installed",
-    memory_skill.OUTDATED: "Installed · update available",
-    memory_skill.MODIFIED: "Installed · edited by you",
-}
-SKILL_ACTIONS = {
-    memory_skill.ABSENT: "Install",
-    memory_skill.CURRENT: "Remove",
-    memory_skill.OUTDATED: "Update",
-    memory_skill.MODIFIED: "Replace",
-}
-CODE_MODE_LABELS = {
-    codex_options.APPLIED: "On: BIO CE’s tools are shown in Codex code mode",
-    codex_options.MISSING: "Off",
-    codex_options.USER_SET: "Set by you in Codex settings",
-}
-PROVIDER_EXAMPLES = {
-    "codex": "usually OpenAI, or another provider you configured in Codex",
-    "claude": "usually Anthropic, or the cloud provider you configured in Claude Code",
-    "claude_desktop": "Anthropic",
-}
+
+
+def desktop_restart() -> str:
+    return t("connections.desktop.restart")
+
+
+def desktop_skill_note() -> str:
+    return t("connections.skill.desktop_note")
+
+
+def app_closed_note() -> str:
+    return t("connections.app_closed_note")
+
+
+SKILL_LABELS = _Texts(lambda: {
+    memory_skill.ABSENT: t("connections.skill.absent"),
+    memory_skill.CURRENT: t("connections.skill.current"),
+    memory_skill.OUTDATED: t("connections.skill.outdated"),
+    memory_skill.MODIFIED: t("connections.skill.modified"),
+})
+SKILL_ACTIONS = _Texts(lambda: {
+    memory_skill.ABSENT: t("connections.action.install"),
+    memory_skill.CURRENT: t("connections.action.remove"),
+    memory_skill.OUTDATED: t("connections.action.update"),
+    memory_skill.MODIFIED: t("connections.action.replace"),
+})
+CODE_MODE_LABELS = _Texts(lambda: {
+    codex_options.APPLIED: t("connections.code_mode.applied"),
+    codex_options.MISSING: t("connections.off"),
+    codex_options.USER_SET: t("connections.code_mode.user_set"),
+})
+PROVIDER_EXAMPLES = _Texts(lambda: {
+    "codex": t("connections.provider.codex"),
+    "claude": t("connections.provider.claude"),
+    "claude_desktop": t("connections.provider.claude_desktop"),
+})
+# The access modes as this screen shows them (control_store.MODE_LABELS keeps the English names for the service).
+MODE_TEXTS = _Texts(lambda: {
+    MODE_READ_ONLY: t("connections.mode.read_only"),
+    MODE_AUTO_MEMORY: t("connections.mode.auto_memory"),
+    MODE_PAUSED: t("connections.mode.paused"),
+})
 # v0.4.4 §9.2: "End idle servers…" ends only servers with no request for this long. It runs only when the user
 # asks: whether a host starts a new server after one is ended (spike S-MCP) is not known yet, so nothing ends
 # servers on its own.
@@ -90,55 +119,52 @@ _OUTCOME_STYLE = {
 def settings_summary(settings: dict | None) -> str:
     """The space and saving settings a connection uses, for the Connect message ("Use all project spaces: on")."""
     settings = settings or {"all_projects": True, "save_mode": "curated"}
-    projects = "on" if settings.get("all_projects", True) else "off (General only)"
-    saving = "Collect (to your inbox)" if settings.get("save_mode") == "collect" else "Curated"
-    return f"Use all project spaces: {projects}. Saving: {saving}. You can change both on this card."
+    projects = t("connections.summary.all") if settings.get("all_projects", True) \
+        else t("connections.summary.general_only")
+    saving = t("connections.summary.collect") if settings.get("save_mode") == "collect" \
+        else t("connections.summary.curated")
+    return t("connections.summary", projects=projects, saving=saving)
 
 
 def host_message(host: str, status: HostStatus | None) -> str:
     name = host_name(host)
     command = HOST_COMMANDS[host]
     if status is None:
-        return f"BIO CE couldn't check {name}. Select Refresh to try again."
+        return t("connections.status.unchecked", name=name)
     if not status.installed and host == DESKTOP:
-        return ("BIO CE didn't find the Claude desktop app for this Windows user. Install it, open it once, then "
-                "select Refresh.")
+        return t("connections.status.desktop_missing")
     if not status.installed:
-        return (f"BIO CE looks for the “{command}” command and didn't find it. Install {name}, confirm that "
-                f"“{command} --version” works in a new terminal, then select Refresh.")
+        return t("connections.status.missing", command=command, name=name)
     if status.configuration_conflict:
-        return (f"{name} already has a different MCP server named “bio-ce”, or its settings file can't be "
-                "read. BIO CE won't change it. Run diagnostics for details.")
+        return t("connections.status.conflict", name=name)
     if status.connected and status.legacy:
-        return (f"{name} was connected by BIO CE v0.2: it can only search and read, and BIO CE can't pause or "
-                "revoke it. Select Reconnect to manage its access.")
+        return t("connections.status.legacy", name=name)
     if status.connected and status.mode == MODE_AUTO_MEMORY:
-        return (f"{name} can search and read your memories and save or update lasting ones under BIO CE’s rules. "
-                "Uncertain changes and retractions wait for your review.")
+        return t("connections.status.auto_memory", name=name)
     if status.connected and status.mode == MODE_PAUSED:
-        return f"{name}’s access is paused. It can’t read or change memories until you choose another mode."
+        return t("connections.status.paused", name=name)
     if status.connected:
-        return f"{name} can search and read your memories. Auto memory is off."
-    return f"{name} is installed. Connect it to let it search and read your memories."
+        return t("connections.status.read_only", name=name)
+    return t("connections.status.installed", name=name)
 
 
-ACTIVITY_LABELS = {
-    "created": ("Saved", "success"),
-    "updated": ("Updated", "success"),
-    "queued": ("Sent to review", "info"),
-    "duplicate": ("Already stored", "neutral"),
-    "rejected": ("Refused", "warning"),
-    "denied": ("Blocked (no permission)", "warning"),
-    "rate-limited": ("Paused (too many changes)", "warning"),
-    "conflict": ("Changed meanwhile", "warning"),
-    "approved": ("Approved by you", "success"),
-    "rejected-by-user": ("Rejected by you", "neutral"),
-    "failed": ("Couldn't apply", "danger"),
-}
+ACTIVITY_LABELS = _Texts(lambda: {
+    "created": (t("connections.activity.created"), "success"),
+    "updated": (t("connections.activity.updated"), "success"),
+    "queued": (t("connections.activity.queued"), "info"),
+    "duplicate": (t("connections.activity.duplicate"), "neutral"),
+    "rejected": (t("connections.activity.rejected"), "warning"),
+    "denied": (t("connections.activity.denied"), "warning"),
+    "rate-limited": (t("connections.activity.rate_limited"), "warning"),
+    "conflict": (t("connections.activity.conflict"), "warning"),
+    "approved": (t("connections.activity.approved"), "success"),
+    "rejected-by-user": (t("connections.activity.rejected_by_user"), "neutral"),
+    "failed": (t("connections.activity.failed"), "danger"),
+})
 
 
 class HostCard(Card):
-    def __init__(self, page: "ConnectionsPage", master: tk.Misc, host: str) -> None:
+    def __init__(self, page: ConnectionsPage, master: tk.Misc, host: str) -> None:
         theme = page.theme
         super().__init__(master, theme, padding=SPACE_L + 4)
         c = theme.colors
@@ -159,7 +185,7 @@ class HostCard(Card):
         names.pack(side="left", fill="x", expand=True, padx=(theme.px(SPACE_M + 2), 0))
         section_label(names, theme, host_name(host)).pack(fill="x")
         caption_label(names, theme, HOST_DESCRIPTIONS[host], muted=True).pack(fill="x")
-        self.pill = Pill(header, theme, "Checking…", "info")
+        self.pill = Pill(header, theme, t("connections.checking"), "info")
         self.pill.pack(side="right", anchor="n")
 
         self.message = WrapLabel(body, font=theme.font("body"), foreground=c.text_secondary)
@@ -171,7 +197,7 @@ class HostCard(Card):
         capability = tk.Frame(body, background=c.surface)
         capability.pack(fill="x", pady=(theme.px(SPACE_S + 2), 0))
         self.capability = capability
-        tk.Label(capability, text="Auto memory in this host", font=theme.font("caption_strong"),
+        tk.Label(capability, text=t("connections.auto_support"), font=theme.font("caption_strong"),
                  background=c.surface, foreground=c.text_muted, anchor="w").pack(side="left")
         self.support_pill = Pill(capability, theme, support.summary,
                                  {"available": "success", "limited": "warning"}.get(support.level, "neutral"))
@@ -182,84 +208,87 @@ class HostCard(Card):
         self.access = tk.Frame(body, background=c.surface)
         modes = tk.Frame(self.access, background=c.surface)
         modes.pack(fill="x")
-        tk.Label(modes, text="Access", font=theme.font("body_strong"), background=c.surface, foreground=c.text,
-                 width=12, anchor="w").pack(side="left")
+        tk.Label(modes, text=t("connections.row.access"), font=theme.font("body_strong"), background=c.surface,
+                 foreground=c.text, width=12, anchor="w").pack(side="left")
         self.mode_buttons: dict[str, Button] = {}
         tips = {
-            MODE_READ_ONLY: "Search and read only",
-            MODE_AUTO_MEMORY: "Also save and update lasting memories under BIO CE's rules",
-            MODE_PAUSED: "No reading or changes until you resume",
+            MODE_READ_ONLY: t("connections.mode.read_only_tip"),
+            MODE_AUTO_MEMORY: t("connections.mode.auto_memory_tip"),
+            MODE_PAUSED: t("connections.mode.paused_tip"),
         }
         for mode in (MODE_READ_ONLY, MODE_AUTO_MEMORY, MODE_PAUSED):
-            button = Button(modes, theme, MODE_LABELS[mode], tooltip=tips[mode],
+            button = Button(modes, theme, MODE_TEXTS[mode], tooltip=tips[mode],
                             command=lambda m=mode: page.set_mode(host, m))
             button.pack(side="left", padx=(0, theme.px(SPACE_XS)))
             self.mode_buttons[mode] = button
         spaces = tk.Frame(self.access, background=c.surface)
         spaces.pack(fill="x", pady=(theme.px(SPACE_S), 0))
-        tk.Label(spaces, text="Spaces", font=theme.font("body_strong"), background=c.surface,
+        tk.Label(spaces, text=t("connections.row.spaces"), font=theme.font("body_strong"), background=c.surface,
                  foreground=c.text, width=12, anchor="w").pack(side="left")
         self.spaces_label = tk.Label(spaces, text="", font=theme.font("body"), background=c.surface,
                                      foreground=c.text_secondary, anchor="w")
         self.spaces_label.pack(side="left")
-        self.spaces_button = Button(spaces, theme, "Use General only", variant="link",
+        self.spaces_button = Button(spaces, theme, t("connections.spaces.use_general_only"), variant="link",
                                     command=lambda: page.toggle_projects(host))
         self.spaces_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
         self.personal_row = tk.Frame(self.access, background=c.surface)
-        tk.Label(self.personal_row, text="Personal", font=theme.font("body_strong"), background=c.surface,
+        tk.Label(self.personal_row, text=t("space.personal"), font=theme.font("body_strong"), background=c.surface,
                  foreground=c.text, width=12, anchor="w").pack(side="left")
         self.personal_label = tk.Label(self.personal_row, text="", font=theme.font("body"), background=c.surface,
                                        foreground=c.text_secondary, anchor="w")
         self.personal_label.pack(side="left")
-        self.personal_button = Button(self.personal_row, theme, "Allow…", variant="link",
+        self.personal_button = Button(self.personal_row, theme, t("connections.personal.allow"), variant="link",
                                       command=lambda: page.change_personal(host))
         self.personal_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
         saving = tk.Frame(self.access, background=c.surface)
         saving.pack(fill="x", pady=(theme.px(SPACE_S), 0))
         self.saving_row = saving
-        tk.Label(saving, text="Saving", font=theme.font("body_strong"), background=c.surface,
+        tk.Label(saving, text=t("connections.row.saving"), font=theme.font("body_strong"), background=c.surface,
                  foreground=c.text, width=12, anchor="w").pack(side="left")
         self.saving_label = tk.Label(saving, text="", font=theme.font("body"), background=c.surface,
                                      foreground=c.text_secondary, anchor="w")
         self.saving_label.pack(side="left")
-        self.saving_button = Button(saving, theme, "Switch to Collect", variant="link",
+        self.saving_button = Button(saving, theme, t("connections.saving.to_collect"), variant="link",
                                     command=lambda: page.toggle_save_mode(host))
         self.saving_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
         hooks = tk.Frame(self.access, background=c.surface)
         if host != DESKTOP:
             hooks.pack(fill="x", pady=(theme.px(SPACE_S), 0))
-        tk.Label(hooks, text="Session hooks", font=theme.font("body_strong"), background=c.surface,
+        tk.Label(hooks, text=t("connections.row.hooks"), font=theme.font("body_strong"), background=c.surface,
                  foreground=c.text, width=12, anchor="w").pack(side="left")
         self.hooks_label = tk.Label(hooks, text="", font=theme.font("body"), background=c.surface,
                                     foreground=c.text_secondary, anchor="w")
         self.hooks_label.pack(side="left")
-        self.hooks_button = Button(hooks, theme, "Install", variant="link", command=lambda: page.toggle_hooks(host))
+        self.hooks_button = Button(hooks, theme, t("connections.action.install"), variant="link",
+                                   command=lambda: page.toggle_hooks(host))
         self.hooks_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
         self.code_mode_label: tk.Label | None = None
         self.code_mode_button: Button | None = None
         if host == "codex":
             code_mode = tk.Frame(self.access, background=c.surface)
             code_mode.pack(fill="x", pady=(theme.px(SPACE_S), 0))
-            tk.Label(code_mode, text="Code mode", font=theme.font("body_strong"), background=c.surface,
-                     foreground=c.text, width=12, anchor="w").pack(side="left")
+            tk.Label(code_mode, text=t("connections.row.code_mode"), font=theme.font("body_strong"),
+                     background=c.surface, foreground=c.text, width=12, anchor="w").pack(side="left")
             self.code_mode_label = tk.Label(code_mode, text="", font=theme.font("body"), background=c.surface,
                                             foreground=c.text_secondary, anchor="w")
             self.code_mode_label.pack(side="left")
-            self.code_mode_button = Button(code_mode, theme, "Apply", variant="link",
+            self.code_mode_button = Button(code_mode, theme, t("connections.action.apply"), variant="link",
                                            command=lambda: page.apply_code_mode(host))
         skill = tk.Frame(self.access, background=c.surface)
         skill.pack(fill="x", pady=(theme.px(SPACE_S), 0))
-        tk.Label(skill, text="Memory skill", font=theme.font("body_strong"), background=c.surface,
+        tk.Label(skill, text=t("connections.row.skill"), font=theme.font("body_strong"), background=c.surface,
                  foreground=c.text, width=12, anchor="w").pack(side="left")
         self.skill_label = tk.Label(skill, text="", font=theme.font("body"), background=c.surface,
                                     foreground=c.text_secondary, anchor="w")
         self.skill_label.pack(side="left")
-        self.skill_button = Button(skill, theme, "Install", variant="link", command=lambda: page.toggle_skill(host))
+        self.skill_button = Button(skill, theme, t("connections.action.install"), variant="link",
+                                   command=lambda: page.toggle_skill(host))
         if host == DESKTOP:
-            self.skill_button.set_text("Save skill as ZIP…")
+            self.skill_button.set_text(t("connections.skill.save_zip"))
             self.skill_button.set_command(lambda: page.save_skill_zip(host))
         self.skill_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
-        Button(skill, theme, "Preview", variant="link", command=lambda: page.preview_skill(host)).pack(
+        Button(skill, theme, t("connections.skill.preview"), variant="link",
+               command=lambda: page.preview_skill(host)).pack(
             side="left", padx=(theme.px(SPACE_XS), 0))
         # v0.4.4 §9.2: the BIO CE MCP servers this connection's host keeps running (one per conversation or session).
         self.servers_row = tk.Frame(self.access, background=c.surface)
@@ -273,12 +302,12 @@ class HostCard(Card):
         actions = tk.Frame(body, background=c.surface)
         actions.pack(fill="x", pady=(theme.px(SPACE_L), 0))
         self.actions = actions
-        self.primary = Button(actions, theme, "Connect", icon="connections", variant="primary",
+        self.primary = Button(actions, theme, t("connections.action.connect"), icon="connections", variant="primary",
                               command=lambda: page.connect_host(host))
         self.primary.pack(side="left")
-        self.diagnose_button = Button(actions, theme, "Run diagnostics", icon="diagnostics",
+        self.diagnose_button = Button(actions, theme, t("connections.action.diagnose"), icon="diagnostics",
                                       command=lambda: page.diagnose_host(host),
-                                      tooltip="Check the setup without changing anything")
+                                      tooltip=t("connections.action.diagnose_tip"))
         self.diagnose_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
         self.results = tk.Frame(body, background=c.surface)
         self.checks: tuple[DiagnosticCheck, ...] = ()
@@ -297,49 +326,56 @@ class HostCard(Card):
                 button.set_variant("primary" if status.mode == mode else "secondary")
             settings = self.page.connection_settings(self.host) or {}
             all_projects = bool(settings.get("all_projects", True))
-            self.spaces_label.configure(text="General and all project spaces" if all_projects else "General only")
-            self.spaces_button.set_text("Use General only" if all_projects else "Use all project spaces")
+            self.spaces_label.configure(text=t("connections.spaces.all") if all_projects
+                                        else t("connections.spaces.general_only"))
+            self.spaces_button.set_text(t("connections.spaces.use_general_only") if all_projects
+                                        else t("connections.spaces.use_all"))
             personal = self.page.personal_access(self.host)
             if personal is None:
                 self.personal_row.pack_forget()
             else:
                 self.personal_row.pack(fill="x", pady=(self.page.theme.px(SPACE_S), 0), before=self.saving_row)
                 read, write = personal
-                self.personal_label.configure(text="Read and save" if write else "Read only" if read else "Off")
-                self.personal_button.set_text("Change…" if read else "Allow…")
+                self.personal_label.configure(text=t("connections.personal.read_write") if write
+                                              else t("connections.personal.read") if read else t("connections.off"))
+                self.personal_button.set_text(t("connections.personal.change") if read
+                                              else t("connections.personal.allow"))
             collect = settings.get("save_mode") == "collect"
-            self.saving_label.configure(text="Collect: lasting information goes to your inbox" if collect
-                                        else "Curated: only what you stated or confirmed")
-            self.saving_button.set_text("Switch to Curated" if collect else "Switch to Collect")
-            self.hooks_label.configure(text="On: recalls memories at session start and per prompt"
-                                       if status.hooks_installed else "Off")
-            self.hooks_button.set_text("Remove" if status.hooks_installed else "Install")
+            self.saving_label.configure(text=t("connections.saving.collect") if collect
+                                        else t("connections.saving.curated"))
+            self.saving_button.set_text(t("connections.saving.to_curated") if collect
+                                        else t("connections.saving.to_collect"))
+            self.hooks_label.configure(text=t("connections.hooks.on") if status.hooks_installed
+                                       else t("connections.off"))
+            self.hooks_button.set_text(t("connections.action.remove") if status.hooks_installed
+                                       else t("connections.action.install"))
             if self.code_mode_label is not None and self.code_mode_button is not None:
-                self.code_mode_label.configure(text=CODE_MODE_LABELS.get(status.code_mode or "", "Unknown"))
+                self.code_mode_label.configure(text=CODE_MODE_LABELS.get(status.code_mode or "",
+                                                                         t("connections.unknown")))
                 if status.code_mode == codex_options.MISSING:
                     self.code_mode_button.pack(side="left", padx=(self.page.theme.px(SPACE_S), 0))
                 else:
                     self.code_mode_button.pack_forget()
             skill = status.skill or memory_skill.ABSENT
             if self.host == DESKTOP:
-                self.skill_label.configure(text="Upload it yourself in Claude")
+                self.skill_label.configure(text=t("connections.skill.desktop"))
             else:
-                self.skill_label.configure(text=SKILL_LABELS.get(skill, "Unknown"))
-                self.skill_button.set_text(SKILL_ACTIONS.get(skill, "Install"))
+                self.skill_label.configure(text=SKILL_LABELS.get(skill, t("connections.unknown")))
+                self.skill_button.set_text(SKILL_ACTIONS.get(skill, t("connections.action.install")))
         else:
             self.access.pack_forget()
         if status is not None and status.connected and status.legacy:
-            self.primary.set_text("Reconnect")
+            self.primary.set_text(t("connections.action.reconnect"))
             self.primary.set_variant("primary")
             self.primary.set_command(lambda: self.page.connect_host(self.host))
             self.primary.set_enabled(True)
         elif status is not None and status.connected:
-            self.primary.set_text("Disconnect")
+            self.primary.set_text(t("connections.action.disconnect"))
             self.primary.set_variant("secondary")
             self.primary.set_command(lambda: self.page.disconnect_host(self.host))
             self.primary.set_enabled(True)
         else:
-            self.primary.set_text("Connect")
+            self.primary.set_text(t("connections.action.connect"))
             self.primary.set_variant("primary")
             self.primary.set_command(lambda: self.page.connect_host(self.host))
             self.primary.set_enabled(status is not None and status.installed and not status.configuration_conflict)
@@ -383,7 +419,8 @@ class HostCard(Card):
             return
         self.results.pack(fill="x", pady=(theme.px(SPACE_L), 0))
         tk.Frame(self.results, height=1, background=c.border).pack(fill="x", pady=(0, theme.px(SPACE_M)))
-        tk.Label(self.results, text="Diagnostics", font=theme.font("caption_strong"), background=c.surface,
+        tk.Label(self.results, text=t("connections.diagnostics"), font=theme.font("caption_strong"),
+                 background=c.surface,
                  foreground=c.text_muted, anchor="w").pack(fill="x", pady=(0, theme.px(SPACE_XS)))
         for check in checks:
             icon, color_name = _OUTCOME_STYLE.get(check.outcome, ("info", "info"))
@@ -402,16 +439,21 @@ class HostCard(Card):
 class ConnectionsPage(Page):
     key = "connections"
     nav_key = "connections"
-    title = "AI connections"
-    subtitle = "Let AI coding tools use and grow your memories"
+    @property
+    def title(self) -> str:  # type: ignore[override]
+        return t("connections.title")
+
+    @property
+    def subtitle(self) -> str:  # type: ignore[override]
+        return t("connections.subtitle")
 
     def __init__(self, app, master) -> None:
         super().__init__(app, master)
         theme, c = self.theme, self.colors
-        Button(self.actions, theme, "Refresh", icon="refresh", command=self.refresh,
-               tooltip="Check the hosts again (F5)").pack(side="right")
-        Button(self.actions, theme, "Pause all AI access", variant="danger_subtle", command=self.pause_all,
-               tooltip="Stop every connected host from reading or changing memories").pack(
+        Button(self.actions, theme, t("connections.refresh"), icon="refresh", command=self.refresh,
+               tooltip=t("connections.refresh_tip")).pack(side="right")
+        Button(self.actions, theme, t("connections.pause_all"), variant="danger_subtle", command=self.pause_all,
+               tooltip=t("connections.pause_all_tip")).pack(
             side="right", padx=(0, theme.px(SPACE_S)))
 
         self.scroll = ScrollFrame(self, theme, max_width=960)
@@ -425,17 +467,11 @@ class ConnectionsPage(Page):
                  foreground=c.info).pack(side="left", anchor="n", padx=(0, theme.px(SPACE_M)), pady=theme.px(2))
         column = tk.Frame(callout.body, background=c.info_bg)
         column.pack(side="left", fill="x", expand=True)
-        tk.Label(column, text="Read only unless you allow more", font=theme.font("body_strong"),
+        tk.Label(column, text=t("connections.callout.title"), font=theme.font("body_strong"),
                  background=c.info_bg, foreground=c.text, anchor="w").pack(fill="x")
-        WrapLabel(column, "A connected host can search and read your memories. With Auto memory on, it can also save "
-                  "and update lasting ones; BIO CE refuses secrets and anything taken from documents, and keeps "
-                  "uncertain changes and every retraction for your review. BIO CE changes a host’s settings only "
-                  "after you confirm, and never calls an AI model itself. Memories a host reads become part of that "
-                  "conversation and "
-                  "may be sent to the host’s AI model provider (for example OpenAI for Codex or Anthropic for "
-                  "Claude Code) under that provider’s terms.", font=theme.font("body"), foreground=c.text_secondary,
+        WrapLabel(column, t("connections.callout.body"), font=theme.font("body"), foreground=c.text_secondary,
                   background=c.info_bg).pack(fill="x", pady=(theme.px(2), 0))
-        WrapLabel(column, APP_CLOSED_NOTE, font=theme.font("body_strong"), foreground=c.text,
+        WrapLabel(column, app_closed_note(), font=theme.font("body_strong"), foreground=c.text,
                   background=c.info_bg).pack(fill="x", pady=(theme.px(SPACE_S), 0))
 
         self.cards: dict[str, HostCard] = {}
@@ -452,10 +488,9 @@ class ConnectionsPage(Page):
         self.reviews_link = Button(activity_head, theme, t("connections.open_reviews"), variant="link",
                                    command=lambda: app.open_state(REVIEWS))
         self.reviews_link.pack(side="right")
-        section_label(activity_head, theme, "Recent AI activity").pack(side="left")
-        caption_label(self.activity_card.body, theme, "What hosts saved, updated, or tried to save. Select an "
-                      "entry to open the memory.", muted=True).pack(fill="x", pady=(theme.px(SPACE_XS),
-                                                                                     theme.px(SPACE_S)))
+        section_label(activity_head, theme, t("connections.activity.title")).pack(side="left")
+        caption_label(self.activity_card.body, theme, t("connections.activity.note"), muted=True).pack(
+            fill="x", pady=(theme.px(SPACE_XS), theme.px(SPACE_S)))
         self.activity_list = tk.Frame(self.activity_card.body, background=c.surface)
         self.activity_list.pack(fill="x")
 
@@ -482,12 +517,10 @@ class ConnectionsPage(Page):
         row.pack(fill="x")
         column = tk.Frame(row, background=c.surface)
         column.pack(side="left", fill="x", expand=True)
-        section_label(column, theme, "Settings backups").pack(fill="x")
-        WrapLabel(column, "Before connecting or disconnecting, BIO CE copies the host’s MCP settings to your BIO CE "
-                  "folder. These copies can contain settings or environment values for other servers and are not "
-                  "encrypted. Delete them when you no longer need them.", font=theme.font("body"),
+        section_label(column, theme, t("connections.backups.title")).pack(fill="x")
+        WrapLabel(column, t("connections.backups.note"), font=theme.font("body"),
                   foreground=c.text_secondary).pack(fill="x", pady=(theme.px(SPACE_XS), 0))
-        Button(row, theme, "Open folder", icon="folder", command=app.open_connection_backups).pack(
+        Button(row, theme, t("connections.backups.open"), icon="folder", command=app.open_connection_backups).pack(
             side="right", anchor="n", padx=(theme.px(SPACE_L), 0))
 
     def refresh(self) -> None:
@@ -582,7 +615,7 @@ class ConnectionsPage(Page):
         if refresh_badges is not None:
             refresh_badges()
         if not activity:
-            caption_label(self.activity_list, theme, "No AI activity yet.", muted=True).pack(fill="x")
+            caption_label(self.activity_list, theme, t("connections.activity.none"), muted=True).pack(fill="x")
         for entry in activity:
             label, kind = ACTIVITY_LABELS.get(entry.outcome, (entry.outcome, "neutral"))
             row = tk.Frame(self.activity_list, background=c.surface)
@@ -612,24 +645,22 @@ class ConnectionsPage(Page):
         manager = self.app.connection_manager
         path = manager.desktop_config_path() if hasattr(manager, "desktop_config_path") else None
         if not self.app.confirm(
-            title=f"Connect the {name}?",
-            message="BIO CE will add one MCP server entry named “bio-ce” to the Claude desktop app’s settings file. "
-                    "The app’s other settings and servers stay as they are.",
+            title=t("connections.desktop.title", name=name),
+            message=t("connections.desktop.message"),
             points=(
-                f"Settings file: {path}" if path else "BIO CE finds the settings file of your Claude desktop app.",
-                "The file is backed up first. If the file can’t be read, BIO CE changes nothing.",
-                f"Claude chats will be able to search and read active memories in your personal store. Memories "
-                f"read in a chat become part of the conversation and are sent to {PROVIDER_EXAMPLES[host]}. BIO "
-                "CE can't control what happens to them there.",
-                "Auto memory stays off: the app can only search and read until you turn it on.",
-                "BIO CE then runs a local read-only check against your database. No AI model is called.",
-                DESKTOP_RESTART,
+                t("connections.desktop.settings_file", path=path) if path
+                else t("connections.desktop.settings_file_found"),
+                t("connections.desktop.point_backup"),
+                t("connections.desktop.point_read", provider=PROVIDER_EXAMPLES[host]),
+                t("connections.desktop.point_auto_off"),
+                t("connections.desktop.point_check"),
+                desktop_restart(),
             ),
-            confirm_text="Connect",
+            confirm_text=t("connections.action.connect"),
         ):
             return
         card = self.cards[host]
-        card.set_busy("Connecting…")
+        card.set_busy(t("connections.connecting"))
         card.show_checks(())
         self.app.run_task(lambda: (manager.connect(host, approved=True), None),
                           lambda outcome: self._connected(host, *outcome),
@@ -638,11 +669,11 @@ class ConnectionsPage(Page):
     def save_skill_zip(self, host: str = DESKTOP) -> Path | None:
         """Save the memory skill as a ZIP for the user to upload in Claude (BIO CE never uploads it)."""
         manager = self.app.connection_manager
-        if not self.app.confirm(title="Save the memory skill as a ZIP?", message=DESKTOP_SKILL_NOTE,
-                                points=("BIO CE only saves the file. Uploading it is up to you.",),
-                                confirm_text="Choose where to save"):
+        if not self.app.confirm(title=t("connections.skill.zip_title"), message=desktop_skill_note(),
+                                points=(t("connections.skill.zip_point"),),
+                                confirm_text=t("connections.skill.zip_confirm")):
             return None
-        target = self.app.ask_save_path(title="Save the BIO CE memory skill", defaultextension=".zip",
+        target = self.app.ask_save_path(title=t("connections.skill.zip_save_title"), defaultextension=".zip",
                                         initialfile="bio-ce-memory.zip", filetypes=(("ZIP", "*.zip"),))
         if not target:
             return None
@@ -650,13 +681,13 @@ class ConnectionsPage(Page):
             with open(target, "xb") as handle:
                 handle.write(manager.skill_zip(host))
         except FileExistsError:
-            self.app.notify("warning", "A file with this name already exists. Choose a new name.", title="Not saved")
+            self.app.notify("warning", t("connections.skill.zip_exists"), title=t("connections.skill.not_saved"))
             return None
         except (OSError, MCPConnectionError):
-            self.app.notify("error", "BIO CE couldn't save the ZIP there.", title="Not saved")
+            self.app.notify("error", t("connections.skill.zip_failed"), title=t("connections.skill.not_saved"))
             return None
-        self.app.notify("success", "Saved. In Claude, open Customize → Skills and upload this ZIP.",
-                        title="Skill saved", action=("Show in folder", lambda: self.app.reveal_file(Path(target))))
+        self.app.notify("success", t("connections.skill.zip_saved"), title=t("connections.skill.zip_saved_title"),
+                        action=(t("connections.skill.show_in_folder"), lambda: self.app.reveal_file(Path(target))))
         return Path(target)
 
     def connect_host(self, host: str) -> None:
@@ -666,39 +697,31 @@ class ConnectionsPage(Page):
         name = host_name(host)
         manager = self.app.connection_manager
         skill_path = manager.memory_skill_path(host)
-        options = [("skill", f"Also install the BIO CE memory skill, which tells {name} when to search and save "
-                    f"memories. Location: {skill_path}", True)]
+        options = [("skill", t("connections.skill.connect_option", name=name, path=skill_path), True)]
         if host == "codex":
-            options.append(("agents", "Also add the same guidance to Codex’s AGENTS.md (only needed if Codex does "
-                            "not pick up the skill). Location: " + str(skill_path.parents[2] / "AGENTS.md"), False))
-        code_mode_point = (("If Codex is version 0.166 or later, BIO CE also adds one option to its own entry so "
-                            "Codex shows BIO CE’s tools in code mode. It checks the result and puts your settings "
-                            "back if Codex does not accept it.",) if host == "codex" else ())
+            options.append(("agents", t("connections.skill.agents_option",
+                                        path=str(skill_path.parents[2] / "AGENTS.md")), False))
+        code_mode_point = (t("connections.code_mode.connect_point"),) if host == "codex" else ()
         choices: dict[str, bool] = {key: default for key, _label, default in options}
         if not self.app.confirm(
-            title=f"Connect {name}?",
-            message=f"BIO CE will use {name}’s own command to add one MCP server entry named “bio-ce” "
-                    "to your user settings.",
+            title=t("connections.connect.title", name=name),
+            message=t("connections.connect.message", name=name),
             points=(
-                f"{name} will be able to search and read active memories in your personal store. It can't add, "
-                "edit, or retract them.",
-                f"Memories {name} reads become part of your conversation and may be sent to the AI model provider "
-                f"{name} uses ({PROVIDER_EXAMPLES[host]}). BIO CE can't control what happens to them there.",
-                "Auto memory stays off: the host can only search and read until you turn it on.",
-                "Your current MCP settings are backed up first. The backup can contain settings or environment "
-                "values for other servers and is stored locally without encryption.",
-                "BIO CE then runs a local read-only check against your database. No AI model is called and no "
-                "memory is written.",
+                t("connections.connect.point_read", name=name),
+                t("connections.connect.point_provider", name=name, provider=PROVIDER_EXAMPLES[host]),
+                t("connections.connect.point_auto_off"),
+                t("connections.connect.point_backup"),
+                t("connections.connect.point_check"),
                 *code_mode_point,
             ),
-            confirm_text="Connect",
+            confirm_text=t("connections.action.connect"),
             options=options,
             choices=choices,
-            links=(("Preview the memory skill…", lambda dialog: self._show_skill(host, dialog)),),
+            links=((t("connections.skill.preview_link"), lambda dialog: self._show_skill(host, dialog)),),
         ):
             return
         card = self.cards[host]
-        card.set_busy("Connecting…")
+        card.set_busy(t("connections.connecting"))
         card.show_checks(())
 
         def work():
@@ -724,22 +747,21 @@ class ConnectionsPage(Page):
         options = []
         if skill != memory_skill.ABSENT:
             edited = skill == memory_skill.MODIFIED
-            options.append(("remove_skill", "Also remove the BIO CE memory skill"
-                            + (" (you edited it; a backup copy is kept)" if edited else ""), not edited))
+            options.append(("remove_skill", t("connections.disconnect.remove_skill_edited") if edited
+                            else t("connections.disconnect.remove_skill"), not edited))
         choices: dict[str, bool] = {key: default for key, _label, default in options}
         if not self.app.confirm(
-            title=f"Disconnect {name}?",
-            message=f"BIO CE will remove only its own “bio-ce” entry from {name}. Other MCP servers stay "
-                    "as they are.",
-            points=("The current MCP settings are backed up first.",
-                    "Your memories are not changed. You can connect again at any time."),
-            confirm_text="Disconnect",
+            title=t("connections.disconnect.title", name=name),
+            message=t("connections.disconnect.message", name=name),
+            points=(t("connections.disconnect.point_backup"),
+                    t("connections.disconnect.point_memories")),
+            confirm_text=t("connections.action.disconnect"),
             options=options,
             choices=choices,
         ):
             return
         card = self.cards[host]
-        card.set_busy("Disconnecting…")
+        card.set_busy(t("connections.disconnecting"))
         card.show_checks(())
         remove_skill = bool(choices.get("remove_skill"))
         self.app.run_task(
@@ -756,34 +778,28 @@ class ConnectionsPage(Page):
         if status is not None and status.mode == mode:
             return
         if mode == MODE_AUTO_MEMORY and not self.app.confirm(
-            title=f"Turn on Auto memory for {name}?",
-            message=f"{name} will be able to save and update memories on its own while you work.",
+            title=t("connections.auto.title", name=name),
+            message=t("connections.auto.message", name=name),
             points=(
-                *((f"{name} may not use Auto memory on its own. {auto_memory_support(host).detail}",)
+                *((t("connections.auto.point_support", name=name, detail=auto_memory_support(host).detail),)
                   if auto_memory_support(host).level != "available" else ()),
-                "It may store lasting preferences, confirmed decisions, project goals, and clear corrections that "
-                "you state. You can review, edit, and retract them here and on the Memories page.",
-                "BIO CE refuses passwords, tokens, keys, and anything taken from files, web pages, or tool output. "
-                "Uncertain or conflicting changes and every retraction wait for your review.",
-                f"So that saving doesn't interrupt you, BIO CE lets {name} run BIO CE's own memory tools without "
-                "asking each time. All other tools keep their current approval settings. Your settings file is "
-                "backed up first.",
-                f"Memories {name} reads or writes are part of your conversation and may be sent to its AI model "
-                "provider.",
-                "You can switch back to Read only or Paused at any time; running sessions follow on their next "
-                "request.",
+                t("connections.auto.point_what"),
+                t("connections.auto.point_refused"),
+                t("connections.auto.point_approval", name=name),
+                t("connections.auto.point_provider", name=name),
+                t("connections.auto.point_back"),
             ),
-            confirm_text="Turn on Auto memory",
+            confirm_text=t("connections.auto.confirm"),
         ):
             return
         try:
             self.app.connection_manager.set_mode(host, mode)
         except MCPConnectionError as exc:
-            self.app.notify("error", str(exc), title=f"Couldn't change {name}")
+            self.app.notify("error", str(exc), title=t("connections.auto.failed_title", name=name))
             return
         self.app.hosts_changed()
         self.app.notify("success", host_message(host, self.app.host_statuses(refresh=False).get(host)),
-                        title=f"{name}: {MODE_LABELS[mode]}")
+                        title=t("connections.mode.changed_title", name=name, mode=MODE_TEXTS[mode]))
 
     def connection_settings(self, host: str) -> dict | None:
         manager = self.app.connection_manager
@@ -809,45 +825,43 @@ class ConnectionsPage(Page):
         name = host_name(host)
         current = self.personal_access(host)
         if current is None:
-            self.app.notify("info", "Turn on Personal in Settings → Spaces first.", title="Personal is off")
+            self.app.notify("info", t("connections.personal.off_message"), title=t("connections.personal.off_title"))
             return
         choice = self.app.ask_choice(
-            title=f"{name}: Personal",
-            message=(f"Personal holds memories about you. {name} reads it only when you ask about personal "
-                     "matters, and session hooks never use it."),
-            choices=[("read", "Read only", f"{name} can search and read Personal."),
-                     ("write", "Read and save", f"{name} can also save personal memories you ask it to keep."),
-                     ("off", "Off", f"{name} can't use Personal.")],
-            confirm_text="Continue")
+            title=t("connections.personal.title", name=name),
+            message=t("connections.personal.message", name=name),
+            choices=[("read", t("connections.personal.read"), t("connections.personal.read_detail", name=name)),
+                     ("write", t("connections.personal.read_write"),
+                      t("connections.personal.write_detail", name=name)),
+                     ("off", t("connections.off"), t("connections.personal.off_detail", name=name))],
+            confirm_text=t("connections.personal.continue"))
         if choice is None:
             return
         read, write = choice in ("read", "write"), choice == "write"
         if read and not current[0]:
             choices: dict[str, bool] = {}
             accepted = self.app.confirm(
-                title=f"Allow {name} to read Personal?",
-                message=(f"Personal memories {name} reads become part of your conversation and are sent to the AI "
-                         f"service {name} uses ({PROVIDER_EXAMPLES[host]}). BIO CE can't control what happens to "
-                         "them there."),
-                points=("Session hooks never add Personal memories to a conversation.",
-                        "You can turn this off here at any time."),
-                options=(("consent", "I understand that Personal memories this host reads are sent to its AI "
-                                     "service.", False),),
-                choices=choices, confirm_text="Allow")
+                title=t("connections.personal.allow_title", name=name),
+                message=t("connections.personal.allow_message", name=name, provider=PROVIDER_EXAMPLES[host]),
+                points=(t("connections.personal.point_hooks"),
+                        t("connections.personal.point_off")),
+                options=(("consent", t("connections.personal.consent"), False),),
+                choices=choices, confirm_text=t("connections.personal.allow_confirm"))
             if not accepted or not choices.get("consent"):
                 if accepted:
-                    self.app.notify("info", "Nothing changed: tick the box to confirm you understand.",
-                                    title=f"{name}: Personal")
+                    self.app.notify("info", t("connections.personal.not_ticked"),
+                                    title=t("connections.personal.title", name=name))
                 return
         try:
             self.app.connection_manager.set_personal_access(host, can_read=read, can_write=write)
         except Exception as exc:  # noqa: BLE001 - shown to the user
-            self.app.notify("error", str(exc) or "BIO CE couldn't change this setting.", title=f"{name}: Personal")
+            self.app.notify("error", str(exc) or t("connections.setting_failed"),
+                            title=t("connections.personal.title", name=name))
             return
-        self.app.notify("success", {"read": f"{name} can now read Personal.",
-                                    "write": f"{name} can now read and save in Personal.",
-                                    "off": f"{name} can no longer use Personal."}[choice],
-                        title=f"{name}: Personal")
+        self.app.notify("success", {"read": t("connections.personal.now_read", name=name),
+                                    "write": t("connections.personal.now_write", name=name),
+                                    "off": t("connections.personal.now_off", name=name)}[choice],
+                        title=t("connections.personal.title", name=name))
         self.app.hosts_changed()
 
     def toggle_projects(self, host: str) -> None:
@@ -858,10 +872,11 @@ class ConnectionsPage(Page):
         try:
             self.app.connection_manager.set_connection_settings(host, all_projects=wanted)
         except Exception as exc:  # noqa: BLE001 - shown to the user
-            self.app.notify("error", str(exc) or "BIO CE couldn't change this setting.", title=f"{name}: spaces")
+            self.app.notify("error", str(exc) or t("connections.setting_failed"),
+                            title=t("connections.spaces.title", name=name))
             return
-        self.app.notify("success", f"{name} can now use General and all project spaces." if wanted else
-                        f"{name} now uses General only. Project spaces stay as they are.", title=f"{name}: spaces")
+        self.app.notify("success", t("connections.spaces.now_all", name=name) if wanted else
+                        t("connections.spaces.now_general", name=name), title=t("connections.spaces.title", name=name))
         self.app.hosts_changed()
 
     def toggle_save_mode(self, host: str) -> None:
@@ -871,30 +886,30 @@ class ConnectionsPage(Page):
         name = host_name(host)
         if wanted == "collect":
             points = (
-                f"{name} saves lasting information to your inbox without asking: things you said, its own guesses "
-                "(marked as guesses), and summaries of files when you ask it to remember them.",
-                "Inbox items aren't used by hosts unless they ask for the inbox, and never by session hooks. You "
-                "move the ones worth keeping to your memories on Memories → Inbox.",
-                "Items unused for 30 days are proposed for discarding, and discarded 7 days later unless you keep "
-                "them. You can change both periods in Settings.",
-                "Changes to your curated memories still wait for your review. Secrets are always refused.",
-                "If BIO CE installed the memory skill for this host, it rewrites the skill for collect mode.",
+                t("connections.saving.collect_point_what", name=name),
+                t("connections.saving.collect_point_use"),
+                t("connections.saving.collect_point_cleanup"),
+                t("connections.saving.collect_point_review"),
+                t("connections.saving.collect_point_skill"),
             )
-            message, confirm = "Let this host collect into your inbox?", "Switch to Collect"
+            title = t("connections.saving.collect_title", name=name)
+            message, confirm = t("connections.saving.collect_message"), t("connections.saving.to_collect")
+            done = t("connections.saving.now_collect", name=name)
         else:
-            points = ("Only what you stated or confirmed is saved, as before. Everything else waits for your "
-                      "review.", "Items already in the inbox stay there until you move or discard them.",
-                      "If BIO CE installed the memory skill for this host, it rewrites the skill for curated mode.")
-            message, confirm = "Switch back to curated saving?", "Switch to Curated"
-        if not self.app.confirm(title=f"{name}: {confirm.split(' ', 2)[-1]} saving", message=message,
-                                points=points, confirm_text=confirm):
+            points = (t("connections.saving.curated_point_what"), t("connections.saving.curated_point_inbox"),
+                      t("connections.saving.curated_point_skill"))
+            title = t("connections.saving.curated_title", name=name)
+            message, confirm = t("connections.saving.curated_message"), t("connections.saving.to_curated")
+            done = t("connections.saving.now_curated", name=name)
+        if not self.app.confirm(title=title, message=message, points=points, confirm_text=confirm):
             return
         try:
             self.app.connection_manager.set_connection_settings(host, save_mode=wanted)
         except Exception as exc:  # noqa: BLE001 - shown to the user
-            self.app.notify("error", str(exc) or "BIO CE couldn't change this setting.", title=f"{name}: saving")
+            self.app.notify("error", str(exc) or t("connections.setting_failed"),
+                            title=t("connections.saving.title", name=name))
             return
-        self.app.notify("success", f"{name} now uses {wanted} saving.", title=f"{name}: saving")
+        self.app.notify("success", done, title=t("connections.saving.title", name=name))
         self._rewrite_skill_for_mode(host)
         self.app.hosts_changed()
 
@@ -907,16 +922,16 @@ class ConnectionsPage(Page):
         name = host_name(host)
         replacing = state == memory_skill.MODIFIED
         if replacing and not self.app.confirm(
-            title=f"Replace your edited memory skill in {name}?",
-            message="You edited the memory skill, so BIO CE asks before rewriting it for the new saving mode.",
-            points=("Your edited file is backed up to your BIO CE folder first.",
-                    "If you keep it, update it yourself so it matches the new mode."),
-            confirm_text="Replace", cancel_text="Keep my file", danger=True,
+            title=t("connections.skill.replace_title", name=name),
+            message=t("connections.skill.rewrite_message"),
+            points=(t("connections.skill.point_edited_backup"),
+                    t("connections.skill.point_keep")),
+            confirm_text=t("connections.action.replace"), cancel_text=t("connections.skill.keep_mine"), danger=True,
         ):
             return
         agents = status is not None and status.agents_block not in (None, memory_skill.ABSENT)
         manager = self.app.connection_manager
-        self.cards[host].set_busy("Updating the memory skill…")
+        self.cards[host].set_busy(t("connections.skill.updating"))
         self.app.run_task(lambda: manager.install_memory_skill(host, approved=True, replace_modified=replacing,
                                                                agents_md=agents),
                           lambda results: self._skill_done(host, results),
@@ -927,24 +942,22 @@ class ConnectionsPage(Page):
         status = self.cards[host].status
         installing = not (status is not None and status.hooks_installed)
         if installing:
-            trust = (" Codex runs new hooks only after you trust them: open Codex and use /hooks to review and "
-                     "approve the two BIO CE entries." if host == "codex" else "")
+            backup = t("connections.hooks.point_backup_codex") if host == "codex" \
+                else t("connections.hooks.point_backup")
             if not self.app.confirm(
-                title=f"Add BIO CE session hooks to {name}?",
-                message=f"BIO CE will add two hooks to {name}’s user settings so it can recall memories without "
-                        "being asked.",
+                title=t("connections.hooks.add_title", name=name),
+                message=t("connections.hooks.add_message", name=name),
                 points=(
-                    "At session start, BIO CE adds its memory rules and memories related to the working folder.",
-                    "With each message you send, BIO CE looks up memories that share words with it. Your message "
-                    "is not stored or logged.",
-                    "The hooks never save anything themselves and stay silent while access is paused.",
-                    "Your current settings file is backed up first." + trust,
+                    t("connections.hooks.point_start"),
+                    t("connections.hooks.point_prompt"),
+                    t("connections.hooks.point_silent"),
+                    backup,
                 ),
-                confirm_text="Add hooks",
+                confirm_text=t("connections.hooks.add_confirm"),
             ):
                 return
         card = self.cards[host]
-        card.set_busy("Updating hooks…")
+        card.set_busy(t("connections.hooks.updating"))
         manager = self.app.connection_manager
         self.app.run_task(
             (lambda: manager.install_hooks(host, approved=True)) if installing
@@ -955,36 +968,35 @@ class ConnectionsPage(Page):
 
     def apply_code_mode(self, host: str) -> None:
         if not self.app.confirm(
-            title="Show BIO CE’s tools in Codex code mode?",
-            message="BIO CE will add one line to its own “bio-ce” entry in Codex’s settings: "
-                    "omit_tools_from = [\"code_mode\"].",
+            title=t("connections.code_mode.title"),
+            message=t("connections.code_mode.message"),
             points=(
-                "This needs Codex 0.166 or later; BIO CE checks the version first.",
-                "Codex’s settings file is backed up first. BIO CE checks the result with Codex and puts the previous "
-                "file back if Codex does not accept it.",
-                "Other MCP servers and settings are not changed.",
+                t("connections.code_mode.point_version"),
+                t("connections.code_mode.point_backup"),
+                t("connections.code_mode.point_other"),
             ),
-            confirm_text="Apply",
+            confirm_text=t("connections.action.apply"),
         ):
             return
         card = self.cards[host]
-        card.set_busy("Updating Codex…")
+        card.set_busy(t("connections.code_mode.updating"))
         self.app.run_task(
             lambda: self.app.connection_manager.apply_codex_code_mode(approved=True),
             lambda result: self._code_mode_done(host, result),
-            lambda error: self._failed(host, error, "code mode"),
+            lambda error: self._failed(host, error, "code_mode"),
         )
 
     def _code_mode_done(self, host: str, result: CodeModeResult) -> None:
         self._finish(host)
         kind = "success" if result.state in ("applied", "already_applied") else "warning"
-        self.app.notify(kind, result.detail, title="Codex code mode")
+        self.app.notify(kind, result.detail, title=t("connections.code_mode.done_title"))
 
     def _show_skill(self, host: str, parent: tk.Misc | None = None) -> None:
         path = self.app.connection_manager.memory_skill_path(host)
         mode = (self.connection_settings(host) or {}).get("save_mode", memory_skill.CURATED)
-        body = f"Location: {path}\n\n{memory_skill.render(mode=mode)}"
-        TextViewerDialog(parent or self, self.theme, "BIO CE memory skill", body).show(modal=parent is not None)
+        body = t("connections.skill.location", path=path) + "\n\n" + memory_skill.render(mode=mode)
+        TextViewerDialog(parent or self, self.theme, t("connections.skill.viewer_title"), body).show(
+            modal=parent is not None)
 
     def preview_skill(self, host: str) -> None:
         self._show_skill(host)
@@ -997,64 +1009,68 @@ class ConnectionsPage(Page):
         path = manager.memory_skill_path(host)
         if state == memory_skill.CURRENT:
             if not self.app.confirm(
-                title=f"Remove the memory skill from {name}?",
-                message=f"BIO CE will delete {path}.",
-                points=("A backup copy is kept in your BIO CE folder.", "Your memories and the connection stay."),
-                confirm_text="Remove",
+                title=t("connections.skill.remove_title", name=name),
+                message=t("connections.skill.remove_message", path=path),
+                points=(t("connections.skill.point_backup_kept"), t("connections.skill.point_stays")),
+                confirm_text=t("connections.action.remove"),
             ):
                 return
             work = lambda: manager.remove_memory_skill(host, approved=True)
         else:
             replacing = state == memory_skill.MODIFIED
+            if replacing:
+                title = t("connections.skill.replace_title", name=name)
+            elif state == memory_skill.OUTDATED:
+                title = t("connections.skill.update_title", name=name)
+            else:
+                title = t("connections.skill.install_title", name=name)
             if not self.app.confirm(
-                title=(f"Replace your edited memory skill in {name}?" if replacing
-                       else f"{'Update' if state == memory_skill.OUTDATED else 'Install'} the memory skill for {name}?"),
-                message=f"The skill tells {name} when to search BIO CE and what to save. It goes to {path}.",
-                points=(("Your edited file is backed up to your BIO CE folder first.",) if replacing else ())
-                + ("BIO CE’s server still decides what may be stored; the skill only says when to use it.",),
-                confirm_text="Replace" if replacing else "Install",
+                title=title,
+                message=t("connections.skill.install_message", name=name, path=path),
+                points=((t("connections.skill.point_edited_backup"),) if replacing else ())
+                + (t("connections.skill.point_server"),),
+                confirm_text=t("connections.action.replace") if replacing else t("connections.action.install"),
                 danger=replacing,
-                links=(("Preview the memory skill…", lambda dialog: self._show_skill(host, dialog)),),
+                links=((t("connections.skill.preview_link"), lambda dialog: self._show_skill(host, dialog)),),
             ):
                 return
             work = lambda: manager.install_memory_skill(host, approved=True, replace_modified=replacing)
         card = self.cards[host]
-        card.set_busy("Updating the memory skill…")
+        card.set_busy(t("connections.skill.updating"))
         self.app.run_task(work, lambda results: self._skill_done(host, results),
                           lambda error: self._failed(host, error, "skill"))
 
     def _skill_done(self, host: str, results) -> None:
         self._finish(host)
-        self.app.notify("success", _skill_message(host_name(host), results[0]), title="Memory skill")
+        self.app.notify("success", _skill_message(host_name(host), results[0]), title=t("connections.row.skill"))
 
     def _hooks_done(self, host: str, installed: bool) -> None:
         self._finish(host)
         name = host_name(host)
         if installed:
-            message = f"{name} will recall BIO CE memories in new sessions."
-            if host == "codex":
-                message += " Open Codex and approve the BIO CE hooks with /hooks."
+            message = t("connections.hooks.added_codex", name=name) if host == "codex" \
+                else t("connections.hooks.added", name=name)
         else:
-            message = f"BIO CE removed its hooks from {name}."
-        self.app.notify("success", message, title="Session hooks updated")
+            message = t("connections.hooks.removed", name=name)
+        self.app.notify("success", message, title=t("connections.hooks.updated_title"))
 
     def pause_all(self) -> None:
         control = self.control
         if control is None or not self.app.confirm(
-            title="Pause all AI access?",
-            message="Every connected host loses access to your memories until you choose a mode again.",
-            points=("Running sessions are refused on their next request.", "Nothing is deleted or disconnected."),
-            confirm_text="Pause all",
+            title=t("connections.pause.title"),
+            message=t("connections.pause.message"),
+            points=(t("connections.pause.point_sessions"), t("connections.pause.point_nothing")),
+            confirm_text=t("connections.pause.confirm"),
             danger=True,
         ):
             return
         count = control.pause_all()
         self.app.hosts_changed()
-        self.app.notify("success", f"Paused {count} connection{'s' if count != 1 else ''}.", title="AI access paused")
+        self.app.notify("success", t("connections.pause.done", count=count), title=t("connections.pause.done_title"))
 
     def diagnose_host(self, host: str) -> None:
         card = self.cards[host]
-        card.set_busy("Checking…")
+        card.set_busy(t("connections.checking"))
         self.app.run_task(
             lambda: self.app.connection_manager.diagnose(host),
             lambda checks: self._diagnosed(host, checks),
@@ -1069,32 +1085,33 @@ class ConnectionsPage(Page):
         self._finish(host)
         name = host_name(host)
         if result.already_configured:
-            message = f"{name} was already connected. BIO CE verified the read-only server again."
+            message = t("connections.connected.again", name=name)
         else:
-            message = f"{name} can now search and read your memories."
+            message = t("connections.connected.now", name=name)
             if result.backup_file is not None:
-                message += " A backup of its previous MCP settings was saved."
+                message += " " + t("connections.connected.backup")
         message += " " + settings_summary(self.connection_settings(host))
         if result.code_mode is not None:
             message += " " + result.code_mode.detail
         if isinstance(skill, BaseException):
-            message += " The memory skill was not installed: " + str(skill)
+            message += " " + t("connections.connected.skill_failed", error=str(skill))
         elif skill is not None:
             message += " " + _skill_message(name, skill[0])
         if host == DESKTOP:
-            message += " " + DESKTOP_RESTART + " " + DESKTOP_SKILL_NOTE
-        message += " " + APP_CLOSED_NOTE
-        self.app.notify("success", message, title=f"{name} connected")
+            message += " " + desktop_restart() + " " + desktop_skill_note()
+        message += " " + app_closed_note()
+        self.app.notify("success", message, title=t("connections.connected.title", name=name))
 
     def _disconnected(self, host: str, result: ConnectionResult) -> None:
         self._finish(host)
         name = host_name(host)
         if result.backup_file is not None:
-            self.app.notify("success", f"BIO CE removed its entry from {name}. A backup of the previous MCP settings "
-                            "was saved." + (" " + DESKTOP_RESTART if host == DESKTOP else ""),
-                            title=f"{name} disconnected")
+            self.app.notify("success", t("connections.disconnected.backup", name=name)
+                            + (" " + desktop_restart() if host == DESKTOP else ""),
+                            title=t("connections.disconnected.title", name=name))
         else:
-            self.app.notify("info", f"{name} was already disconnected.", title=f"{name} disconnected")
+            self.app.notify("info", t("connections.disconnected.already", name=name),
+                            title=t("connections.disconnected.title", name=name))
 
     def _diagnosed(self, host: str, checks: tuple[DiagnosticCheck, ...]) -> None:
         self._finish(host)
@@ -1105,40 +1122,41 @@ class ConnectionsPage(Page):
         failures = [check for check in checks if check.outcome == "fail"]
         name = host_name(host)
         if failures:
-            self.app.notify("warning", f"{len(failures)} check{'s' if len(failures) != 1 else ''} need attention. "
-                            "See the details under the host.", title=f"{name} diagnostics")
+            self.app.notify("warning", t("connections.diagnose.attention", count=len(failures)),
+                            title=t("connections.diagnose.title", name=name))
         else:
-            self.app.notify("success", "Everything BIO CE can check locally looks right.",
-                            title=f"{name} diagnostics passed")
+            self.app.notify("success", t("connections.diagnose.passed"),
+                            title=t("connections.diagnose.passed_title", name=name))
 
     def _failed(self, host: str, error: BaseException, action: str) -> None:
         self._finish(host)
         name = host_name(host)
-        titles = {"connect": f"Couldn't connect {name}", "disconnect": f"Couldn't disconnect {name}",
-                  "diagnose": f"Couldn't check {name}", "hooks": f"Couldn't update {name}'s hooks",
-                  "code mode": "Couldn't update Codex code mode", "skill": "Couldn't update the memory skill"}
+        titles = {"connect": t("connections.failed.connect", name=name),
+                  "disconnect": t("connections.failed.disconnect", name=name),
+                  "diagnose": t("connections.failed.diagnose", name=name),
+                  "hooks": t("connections.failed.hooks", name=name),
+                  "code_mode": t("connections.failed.code_mode"), "skill": t("connections.failed.skill")}
         if isinstance(error, MCPConnectionConflict):
-            message = f"{error} Nothing was changed."
+            message = t("connections.failed.conflict", error=error)
             kind = "warning"
         elif isinstance(error, MCPConnectionError):
             message = str(error)
             kind = "error"
         else:
-            message = (f"BIO CE couldn't finish talking to {name}. Check that {name} works in a terminal, then try "
-                       "again. Run diagnostics for details.")
+            message = t("connections.failed.other", name=name)
             kind = "error"
         self.app.notify(kind, message, title=titles[action])
 
 
 def _skill_message(name: str, result: SkillResult) -> str:
     return {
-        "installed": f"The memory skill is installed for {name}.",
-        "updated": f"The memory skill for {name} is up to date now.",
-        "unchanged": f"The memory skill for {name} was already up to date.",
-        "kept_modified": f"You edited the memory skill for {name}, so BIO CE left it as it is.",
-        "removed": f"The memory skill was removed from {name}.",
-        "absent": f"{name} had no memory skill to remove.",
-    }.get(result.state, f"Memory skill: {result.state}.")
+        "installed": t("connections.skill.result.installed", name=name),
+        "updated": t("connections.skill.result.updated", name=name),
+        "unchanged": t("connections.skill.result.unchanged", name=name),
+        "kept_modified": t("connections.skill.result.kept_modified", name=name),
+        "removed": t("connections.skill.result.removed", name=name),
+        "absent": t("connections.skill.result.absent", name=name),
+    }.get(result.state, t("connections.skill.result.other", state=result.state))
 
 
-__all__ = ["APP_CLOSED_NOTE", "ConnectionsPage", "HostCard", "host_message", "settings_summary"]
+__all__ = ["ConnectionsPage", "HostCard", "app_closed_note", "host_message", "settings_summary"]
