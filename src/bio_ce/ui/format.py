@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import re
 
 from bio_ce.core.models import RevisionKind, ValidationError
+from bio_ce.ui.i18n import t
 
 
 TITLE_LIMIT = 512
@@ -16,26 +17,20 @@ CONTENT_LIMIT = 100_000
 SOURCE_LIMIT = 512
 DEFAULT_SOURCE = "user-input"
 
+# English names (hosts and logs); host_name() shows them in the app's language.
 HOST_NAMES = {"codex": "Codex (CLI · desktop app)", "claude": "Claude Code", "claude_desktop": "Claude desktop app"}
 HOST_COMMANDS = {"codex": "codex", "claude": "claude", "claude_desktop": "Claude desktop app"}
 HOSTS = ("codex", "claude", "claude_desktop")
 
-_FIELD_LABELS = {
-    "title": "Title",
-    "content": "Memory text",
-    "source_ref": "Source",
-    "source_type": "Source",
-}
+_FIELD_LABELS = {"title": "format.field.title", "content": "format.field.content", "source_ref": "format.field.source",
+                 "source_type": "format.field.source"}
 _FIELD_KEYS = {"source_type": "source_ref"}
-_REVISION_KIND_LABELS = {
-    RevisionKind.ASSERTION: "Created",
-    RevisionKind.REVISION: "Edited",
-    RevisionKind.RETRACTION: "Retracted",
-}
+_REVISION_KIND_LABELS = {RevisionKind.ASSERTION: "format.revision.created", RevisionKind.REVISION: "format.revision.edited",
+                         RevisionKind.RETRACTION: "format.revision.retracted"}
 
 
 def host_name(host: str) -> str:
-    return HOST_NAMES.get(host, host)
+    return t(f"format.host.{host}") if host in HOST_NAMES else host
 
 
 def parse_timestamp(value: str | None) -> datetime | None:
@@ -50,11 +45,11 @@ def parse_timestamp(value: str | None) -> datetime | None:
     return parsed
 
 
-def format_timestamp(value: str | None, *, empty: str = "Not set") -> str:
+def format_timestamp(value: str | None, *, empty: str | None = None) -> str:
     """Render a stored UTC timestamp in local time, to the minute."""
     parsed = parse_timestamp(value)
     if parsed is None:
-        return empty if not value else value
+        return (t("format.not_set") if empty is None else empty) if not value else value
     return parsed.astimezone().strftime("%Y-%m-%d %H:%M")
 
 
@@ -67,18 +62,18 @@ def relative_time(value: str | None, *, now: datetime | None = None) -> str:
     if seconds < 0:
         return format_timestamp(value)
     if seconds < 60:
-        return "Just now"
+        return t("time.just_now")
     minutes = int(seconds // 60)
     if minutes < 60:
-        return f"{minutes} min ago"
+        return t("time.minutes", count=minutes)
     hours = minutes // 60
     if hours < 24:
-        return f"{hours} hr ago"
+        return t("time.hours", count=hours)
     days = hours // 24
     if days == 1:
-        return "Yesterday"
+        return t("time.yesterday")
     if days < 7:
-        return f"{days} days ago"
+        return t("time.days", count=days)
     return parsed.astimezone().strftime("%Y-%m-%d")
 
 
@@ -100,6 +95,7 @@ def middle_ellipsis(text: str, limit: int) -> str:
 
 
 def plural(count: int, singular: str, plural_form: str | None = None) -> str:
+    """English only; screen texts use t() with a plural key instead (v0.4.4 U5)."""
     word = singular if count == 1 else (plural_form or f"{singular}s")
     return f"{count:,} {word}"
 
@@ -109,14 +105,15 @@ def file_size(size: int) -> str:
     for unit in ("bytes", "KB", "MB", "GB"):
         if value < 1024 or unit == "GB":
             if unit == "bytes":
-                return f"{int(value):,} bytes"
+                return t("format.bytes", count=int(value), size=f"{int(value):,}")
             return f"{value:.1f} {unit}"
         value /= 1024
-    return f"{size} bytes"
+    return t("format.bytes", count=size, size=str(size))
 
 
 def revision_kind_label(kind: RevisionKind) -> str:
-    return _REVISION_KIND_LABELS.get(kind, str(kind).title())
+    key = _REVISION_KIND_LABELS.get(kind)
+    return t(key) if key else str(kind).title()
 
 
 def validation_feedback(error: ValidationError) -> tuple[str | None, str]:
@@ -128,22 +125,22 @@ def validation_feedback(error: ValidationError) -> tuple[str | None, str]:
     message = str(error)
     match = re.match(r"(\w+) (must not be empty|exceeds (\d+) characters|contains a control character)", message)
     if not match:
-        return None, "BIO CE could not save this memory because a value is not valid. Check the fields and try again."
+        return None, t("format.invalid")
     raw_field = match.group(1)
     field = _FIELD_KEYS.get(raw_field, raw_field)
     if field not in {"title", "content", "source_ref"}:
-        return None, "BIO CE could not save this memory because a value is not valid. Check the fields and try again."
-    label = _FIELD_LABELS.get(raw_field, raw_field)
+        return None, t("format.invalid")
+    label = t(_FIELD_LABELS[raw_field]) if raw_field in _FIELD_LABELS else raw_field
     problem = match.group(2)
     if problem == "must not be empty":
         if field == "title":
-            return field, "Add a short title so you can find this memory later."
+            return field, t("format.title_empty")
         if field == "source_ref":
-            return field, f"Add a source, or use “{DEFAULT_SOURCE}”."
-        return field, f"{label} can’t be empty."
+            return field, t("format.source_empty", default=DEFAULT_SOURCE)
+        return field, t("format.empty", label=label)
     if problem.startswith("exceeds"):
-        return field, f"{label} is too long. The limit is {int(match.group(3)):,} characters."
-    return field, f"{label} contains an unsupported control character. Remove it and try again."
+        return field, t("format.too_long", label=label, limit=f"{int(match.group(3)):,}")
+    return field, t("format.control_char", label=label)
 
 
 __all__ = [

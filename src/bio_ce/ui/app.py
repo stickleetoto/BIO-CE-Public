@@ -222,7 +222,7 @@ class BIOCEDesktop:
         self.brand_text.pack(side="left", padx=(theme.px(SPACE_M - 2), 0))
         tk.Label(self.brand_text, text="BIO CE", font=theme.font("brand"), background=c.sidebar,
                  foreground=c.text, anchor="w").pack(fill="x")
-        tk.Label(self.brand_text, text="Community Edition", font=theme.font("caption"), background=c.sidebar,
+        tk.Label(self.brand_text, text=t("app.edition"), font=theme.font("caption"), background=c.sidebar,
                  foreground=c.text_muted, anchor="w").pack(fill="x")
 
         self.nav: dict[str, NavItem] = {}
@@ -240,14 +240,14 @@ class BIOCEDesktop:
                  foreground=c.success).pack(side="left", anchor="n", pady=(theme.px(2), 0))
         self.sidebar_footer_text = tk.Frame(row, background=c.sidebar)
         self.sidebar_footer_text.pack(side="left", fill="x", padx=(theme.px(SPACE_S), 0))
-        tk.Label(self.sidebar_footer_text, text="Local only", font=theme.font("caption_strong"),
+        tk.Label(self.sidebar_footer_text, text=t("app.local_only"), font=theme.font("caption_strong"),
                  background=c.sidebar, foreground=c.text_secondary, anchor="w").pack(fill="x")
-        tk.Label(self.sidebar_footer_text, text="You control AI access", font=theme.font("caption"),
+        tk.Label(self.sidebar_footer_text, text=t("app.you_control"), font=theme.font("caption"),
                  background=c.sidebar, foreground=c.text_muted, anchor="w").pack(fill="x")
         self.engine_label = tk.Label(self.sidebar_footer_text, text="", font=theme.font("caption"),
                                      background=c.sidebar, foreground=c.text_muted, anchor="w", justify="left")
         self.engine_label.pack(fill="x", pady=(theme.px(SPACE_S), 0))
-        tk.Label(self.sidebar_footer_text, text=f"Version {bio_ce.display_version()}", font=theme.font("caption"),
+        tk.Label(self.sidebar_footer_text, text=t("app.version", version=bio_ce.display_version()), font=theme.font("caption"),
                  background=c.sidebar, foreground=c.text_muted, anchor="w").pack(fill="x", pady=(theme.px(SPACE_S), 0))
 
     def _on_resize(self, event) -> None:
@@ -439,12 +439,12 @@ class BIOCEDesktop:
     def _engine_label_text(self) -> str:
         binding = self.engine_selection.binding
         if binding is None:
-            return "No engine connected"
+            return t("app.engine.none")
         name = engine_name(binding.engine_id, self.engine_status)
         if self.engine_status is None or not self.engine_status.ready:
             state = self.engine_status.state.value.replace("_", " ") if self.engine_status else "error"
             return f"{name}: {state}"
-        return f"Engine: {name}"
+        return t("app.engine.name", name=name)
 
     def engine_statuses(self) -> tuple[EngineStatus, ...]:
         return tuple(self._engine_statuses.values())
@@ -453,13 +453,13 @@ class BIOCEDesktop:
         return banner(self.engine_selection, self.engine_status)
 
     def allowed(self, action: str) -> ActionState:
-        return self._actions.get(action, ActionState(action, False, "This action is not available."))
+        return self._actions.get(action, ActionState(action, False, t("app.not_available")))
 
     def require_action(self, action: str) -> bool:
         """True when the active engine allows ``action``; otherwise tell the user why not."""
         state = self.allowed(action)
         if not state.enabled:
-            self.notify("warning", state.note or "This action is not available.", title="Not available")
+            self.notify("warning", state.note or t("app.not_available"), title=t("app.not_available_title"))
         return state.enabled
 
     def gate(self, button, action: str) -> None:
@@ -611,7 +611,7 @@ class BIOCEDesktop:
         try:
             control.set_personal_enabled(enabled)
         except Exception as exc:  # noqa: BLE001 - shown to the user
-            self.notify("error", str(exc) or "BIO CE couldn't change Personal.", title="Personal")
+            self.notify("error", str(exc) or t("app.personal_failed"), title=t("space.personal"))
             return False
         if not enabled and self._space_id == PERSONAL_SPACE.space_id:
             general = next((space for space in self.spaces() if space.is_general), None)
@@ -643,36 +643,36 @@ class BIOCEDesktop:
         options = ExportOptions(**chosen)
         personal = "personal" in options.space_ids
         if personal and not self.confirm(
-            title="Export personal memories?",
-            message="The file will contain your Personal memories in plain text.",
-            points=(UNENCRYPTED_NOTICE,), confirm_text="Include Personal"):
+            title=t("hub.selection.personal_title"),
+            message=t("hub.selection.personal_message"),
+            points=(t("app.unencrypted"),), confirm_text=t("hub.selection.personal_button")):
             return None
         try:
             result = self.service.export_text(self.spaces(), options, personal_allowed=personal and
                                               self.personal_enabled())
         except ExportRefused as exc:
-            self.notify("warning", str(exc), title="Not exported")
+            self.notify("warning", str(exc), title=t("hub.selection.not_exported"))
             return None
         except Exception:  # noqa: BLE001 - shown to the user
-            self.notify("error", "BIO CE couldn't read the memories to export.", title="Not exported")
+            self.notify("error", t("app.export.read_failed"), title=t("hub.selection.not_exported"))
             return None
         from datetime import date as _date
-        path = self.ask_save_path(title="Export memories", defaultextension=".md",
+        path = self.ask_save_path(title=t("app.export.title"), defaultextension=".md",
                                   initialfile=f"bio-ce-export-{_date.today().isoformat()}.md",
-                                  filetypes=(("Markdown", "*.md"),))
+                                  filetypes=((t("hub.selection.file_type"), "*.md"),))
         if not path:
             return None
         try:
             written = write_export(path, result.text)
         except ExportRefused as exc:
-            self.notify("warning", str(exc), title="Not exported")
+            self.notify("warning", str(exc), title=t("hub.selection.not_exported"))
             return None
         except OSError:
-            self.notify("error", "BIO CE couldn't write the file there.", title="Not exported")
+            self.notify("error", t("app.export.write_failed"), title=t("hub.selection.not_exported"))
             return None
-        self.notify("success", f"Exported {result.count} {'memory' if result.count == 1 else 'memories'}. "
-                    + UNENCRYPTED_NOTICE, title="Exported",
-                    action=("Show in folder", lambda: self.reveal_file(written)))
+        self.notify("success", t("hub.selection.exported", count=result.count) + " " + t("app.unencrypted"),
+                    title=t("hub.selection.exported_title"),
+                    action=(t("hub.selection.show_folder"), lambda: self.reveal_file(written)))
         return written
 
     def move_memories(self, memory_ids: list[str], target, *, inbox: bool = False, source=None,
@@ -882,26 +882,24 @@ class BIOCEDesktop:
 
     def open_data_folder(self) -> None:
         if not self.open_path(self.paths.user_database.parent):
-            self.notify("error", "BIO CE couldn't open the data folder in File Explorer.", title="Folder unavailable")
+            self.notify("error", t("app.folder.data_failed"), title=t("app.folder.unavailable"))
 
     def open_connection_backups(self) -> None:
         folder = self.paths.root / "connections" / "backups"
         if not folder.is_dir():
-            self.notify("info", "There are no settings backups yet. BIO CE creates one each time you connect or "
-                        "disconnect a host.")
+            self.notify("info", t("app.folder.no_backups"))
             return
         if not self.open_path(folder):
-            self.notify("error", "BIO CE couldn't open the backups folder in File Explorer.",
-                        title="Folder unavailable")
+            self.notify("error", t("app.folder.backups_failed"), title=t("app.folder.unavailable"))
 
     def backup_database(self) -> Path | None:
         if not self.require_action("backup"):
             return None
         destination = self.ask_save_path(
-            title="Save BIO CE backup",
+            title=t("app.backup.save_title"),
             defaultextension=".sqlite3",
             initialfile="bio-ce-backup.sqlite3",
-            filetypes=(("BIO CE backup", "*.sqlite3"), ("All files", "*.*")),
+            filetypes=((t("app.backup.file_type"), "*.sqlite3"), (t("app.all_files"), "*.*")),
         )
         if not destination:
             return None
@@ -910,44 +908,36 @@ class BIOCEDesktop:
         try:
             created = self.service.create_backup(destination)
         except BackupError as exc:
-            self.notify("error", str(exc), title="Backup not created")
+            self.notify("error", str(exc), title=t("app.backup.not_created"))
             return None
         except Exception:
-            self.notify("error", "BIO CE couldn't write the backup file. Check that the folder exists and you can "
-                        "save files there.", title="Backup not created")
+            self.notify("error", t("app.backup.write_failed"), title=t("app.backup.not_created"))
             return None
         finally:
             self.root.configure(cursor="")
         pair = pair_path(created)
-        saved = (f"Saved {created.name} and {pair.name} in {created.parent}. Keep the two files together and "
-                 "private, and don't share them: they contain your memories and your connection records."
-                 if pair.exists() else f"Saved to {created}. Keep this file private; it contains your memories.")
-        self.notify("success", saved, title="Backup created",
-                    action=("Show in folder", lambda: self.reveal_file(created)))
+        saved = (t("app.backup.saved_pair", name=created.name, pair=pair.name, folder=created.parent)
+                 if pair.exists() else t("app.backup.saved_one", path=created))
+        self.notify("success", saved, title=t("app.backup.created"),
+                    action=(t("hub.selection.show_folder"), lambda: self.reveal_file(created)))
         return created
 
     def restore_database(self) -> bool:
         if not self.require_action("restore"):
             return False
         source = self.ask_open_path(
-            title="Choose a BIO CE backup to restore",
-            filetypes=(("BIO CE backup", "*.sqlite3"), ("All files", "*.*")),
+            title=t("app.restore.choose"),
+            filetypes=((t("app.backup.file_type"), "*.sqlite3"), (t("app.all_files"), "*.*")),
         )
         if not source:
             return False
         if not self.confirm(
-            title="Replace all current memories?",
-            message="Every memory currently in BIO CE will be replaced by the contents of this backup.",
+            title=t("app.restore.title"),
+            message=t("app.restore.message"),
             quote=Path(source).name,
-            points=(
-                "BIO CE checks the backup before changing anything. If the check fails, nothing is replaced.",
-                "Connections, permissions, and the activity log stay as they are now; a backup never brings back a "
-                "connection you removed.",
-                "Close connected AI hosts first; BIO CE can't restore while another program is reading the database.",
-                "BIO CE first saves your current memories as a backup in the backups folder of its data folder "
-                "(auto-before-restore-…), so you can go back.",
-            ),
-            confirm_text="Replace memories",
+            points=(t("app.restore.point_check"), t("app.restore.point_connections"), t("app.restore.point_close"),
+                    t("app.restore.point_safety")),
+            confirm_text=t("app.restore.button"),
             danger=True,
         ):
             return False
@@ -959,11 +949,10 @@ class BIOCEDesktop:
         try:
             report = self.service.restore_backup(source, control=getattr(self.connection_manager, "control", None))
         except BackupError as exc:
-            self.notify("error", f"{exc} Your current memories were not changed.", title="Restore failed")
+            self.notify("error", f"{exc} " + t("app.restore.unchanged"), title=t("app.restore.failed"))
             return False
         except Exception:
-            self.notify("error", "BIO CE couldn't replace the database. Your current memories and the backup file "
-                        "were kept.", title="Restore failed")
+            self.notify("error", t("app.restore.replace_failed"), title=t("app.restore.failed"))
             return False
         finally:
             self.root.configure(cursor="")
@@ -971,23 +960,20 @@ class BIOCEDesktop:
         self.memories.close_drawer(force=True)
         self.data_changed()
         self.refresh_badges()
-        message = "The backup is now your active memory database."
+        message = t("app.restore.done")
         if report.get("pair") != PAIR_MATCHED:
-            message += (" Only memories were restored: the connection records file next to the backup was missing "
-                        "or didn't belong to it.")
+            message += " " + t("app.restore.memories_only")
         restored = [name for name in report.get("restored_spaces", ()) if name.startswith("project:")]
         if restored:
-            message += f" Project spaces brought back: {len(restored)}."
+            message += " " + t("app.restore.spaces_back", count=len(restored))
         if report.get("reviews_failed"):
-            message += (f" {report['reviews_failed']} review item(s) pointed at memories that aren't in the backup "
-                        "and were closed.")
-        self.notify("success", message, title="Backup restored")
+            message += " " + t("app.restore.reviews_closed", count=report["reviews_failed"])
+        self.notify("success", message, title=t("app.restore.restored"))
         return True
 
     def close(self) -> None:
         if self.tasks.busy:
-            self.notify("warning", "A host connection change is still running. Wait for it to finish, then close "
-                        "BIO CE.", title="Please wait")
+            self.notify("warning", t("app.close.busy"), title=t("app.close.wait"))
             return
         if not self.memories.confirm_leave():
             return
