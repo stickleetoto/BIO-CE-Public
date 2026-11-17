@@ -26,7 +26,7 @@ def run(body: str, limit: str) -> tuple[int, float, str]:
         started = time.monotonic()
         done = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-p",
                                "tests.time_limit", str(test)], cwd=REPO, env=env, capture_output=True, text=True,
-                              timeout=120)
+                              encoding="utf-8", errors="replace", timeout=120)  # not the console code page
         seconds = time.monotonic() - started
         trace = log.read_text(encoding="utf-8") if log.exists() else ""
         return done.returncode, seconds, done.stdout + done.stderr + trace
