@@ -75,7 +75,7 @@ STRINGS: dict[str, object] = {
     "hub.tab.inbox": "Inbox",
     "hub.tab.suggestions": "Suggestions",
     "hub.tab.reviews": "Reviews",
-    "hub.tab.retracted": "Retracted",
+    "hub.tab.retracted": "Deleted memories",
     "hub.results": {"one": "{count} result for “{query}”", "other": "{count} results for “{query}”"},
     "hub.show_more": {"one": "Show {count} more", "other": "Show {count} more"},
     "hub.select_first": "Select a card first.",
@@ -192,8 +192,9 @@ STRINGS: dict[str, object] = {
     "hub.delete.title": "Deleted",
     "hub.delete.one": "Deleted “{title}”.",
     "hub.delete.many": {"one": "Deleted {count} memory.", "other": "Deleted {count} memories."},
-    "hub.delete.not_erase": "Hosts no longer see it; earlier revisions stay in the database file (not a secure "
-                            "erase: use Forget completely for that).",
+    # Owner decision 2026-11-17: deleting keeps the memory, so the notice says where it stays and how to erase it.
+    "hub.delete.not_erase": "AI tools no longer see it, but it stays in Deleted memories. To erase it, use Forget "
+                            "completely.",
     "hub.delete.kept": {"one": "The inbox item it was made from, kept so that could be undone, goes with it.",
                         "other": "The {count} inbox items it was made from, kept so that could be undone, go with "
                                  "it."},
@@ -208,7 +209,9 @@ STRINGS: dict[str, object] = {
     "hub.discard.many": {"one": "Discarded {count} item.", "other": "Discarded {count} items."},
     "hub.discard.kept": {"one": "The item merged into it, kept so the merge could be undone, goes with it.",
                          "other": "The {count} items merged into it, kept so the merge could be undone, go with it."},
-    "hub.discard.erase": "BIO CE erases them as far as the app can; backups made earlier still contain them.",
+    # Owner decision 2026-11-17: discarding really erases, so the notice says it can't be undone after the 8 s.
+    "hub.discard.erase": "Unless you select Undo, they are erased in 8 seconds and can't be undone after that. BIO CE "
+                         "erases them as far as the app can; backups made earlier still contain them.",
     "hub.discard.failed": "BIO CE couldn't discard these items. Nothing was deleted.",
     "hub.discard.failed_title": "Not discarded",
     "hub.discard.finishing": {"one": "Discarded {count} item. A connected AI host is still reading the database, so "
@@ -506,4 +509,28 @@ STRINGS: dict[str, object] = {
     "connections.servers.ended": {"one": "Ended {count} idle server.", "other": "Ended {count} idle servers."},
     "connections.servers.ended_title": "Servers ended",
     "connections.servers.end_failed": "BIO CE couldn't end every idle server. The count shows what still runs.",
+    # ===== U5-A: Connections screen (src/bio_ce/ui/pages/connections.py) =====
+    # Add this part's keys right below this line, in this block only (other parts merge around it).
+    #
+    #
+    #
+    # ===== end of U5-A =====
+    # ===== U5-B: Settings and dialogs (src/bio_ce/ui/pages/settings.py, dialogs.py, pages/__init__.py) =====
+    # Add this part's keys right below this line, in this block only (other parts merge around it).
+    #
+    #
+    #
+    # ===== end of U5-B =====
+    # ===== U5-C: Import, Dashboard, widgets (pages/importing.py, pages/dashboard.py, widgets.py, tree_text.py) =====
+    # Add this part's keys right below this line, in this block only (other parts merge around it).
+    #
+    #
+    #
+    # ===== end of U5-C =====
+    # ===== U5-L: App shell, formatting, service messages (app.py, format.py, theme.py, tasks.py, the rest) =====
+    # Add this part's keys right below this line, in this block only (other parts merge around it).
+    #
+    #
+    #
+    # ===== end of U5-L =====
 }

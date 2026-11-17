@@ -343,7 +343,7 @@ class HubUiTests(unittest.TestCase):
     def test_retracted_memories_are_found_and_can_only_be_forgotten(self):
         hub = self.hub
         self.assertTrue(hub.retracted_tab.winfo_manager())
-        self.assertEqual(hub.retracted_tab.text, "Retracted 1")
+        self.assertEqual(hub.retracted_tab.text, "Deleted memories 1")
         hub.show_state(RETRACTED)
         self.assertEqual([item.title for item in hub.items], ["Old phone"])
         card = self.card(self.gone_id, RETRACTED)

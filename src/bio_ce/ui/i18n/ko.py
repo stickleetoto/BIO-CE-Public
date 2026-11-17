@@ -50,7 +50,7 @@ STRINGS: dict[str, object] = {
     "shortcut.save": "수정 중인 기억 저장",
     "shortcut.enter": "포커스가 있는 카드 열기, 제목 칸에서는 저장",
     "shortcut.escape": "서랍 닫기, 수정 취소, 검색 지우기, 대화상자 닫기",
-    "shortcut.history": "열린 기억의 판 기록 보기",
+    "shortcut.history": "열린 기억의 버전 기록 보기",
     "shortcut.select": "카드 여러 개 선택(공간으로 끌어다 놓거나 M, Delete)",
     "shortcut.arrows": "카드 사이 이동",
     "shortcut.menu": "포커스가 있는 카드의 메뉴 열기(오른쪽 클릭과 같음)",
@@ -98,7 +98,7 @@ STRINGS: dict[str, object] = {
     # Empty states
     "hub.empty.title": "아직 기억이 없습니다",
     "hub.empty.message": "저장한 기억은 이 PC에만 있습니다. AI 도구가 기억해 두었으면 하는 메모·결정·선호를 추가하고, "
-                         "연결 화면에서 호스트를 연결하세요.",
+                         "연결 화면에서 AI 도구를 연결하세요.",
     "hub.empty.restore": "백업 복원…",
     "hub.empty.no_match": "찾는 기억이 없습니다",
     "hub.empty.no_match_message": "다른 낱말로 찾아보세요. 이 탭에 보이는 것의 제목과 본문에서 찾습니다.",
@@ -106,7 +106,7 @@ STRINGS: dict[str, object] = {
     "hub.empty.space": "이 공간에는 아직 아무것도 없습니다",
     "hub.empty.space_message": "여기에 기억을 추가하거나 다른 공간에서 옮겨 오세요.",
     "hub.empty.inbox": "수집함이 비어 있습니다",
-    "hub.empty.inbox_message": "기다리는 항목이 없습니다. 수집 방식의 호스트가 여기에 저장합니다. 연결 화면에서 호스트의 "
+    "hub.empty.inbox_message": "기다리는 항목이 없습니다. 수집 방식의 AI 도구가 여기에 저장합니다. 연결 화면에서 AI 도구의 "
                                "저장 방식을 수집으로 바꾸세요. 가져온 기억도 여기로 옵니다.",
     "hub.empty.open_connections": "연결 열기",
     # Drawer
@@ -115,29 +115,29 @@ STRINGS: dict[str, object] = {
     "hub.drawer.move": "이동 ▾",
     "hub.drawer.move_tip": "다른 공간으로 이동 (M). 먼저 백업을 만듭니다",
     "hub.drawer.history": "기록",
-    "hub.drawer.history_tip": "모든 판 보기 (Ctrl+H)",
-    "hub.drawer.history_count": {"other": "기록 (판 {count}개)"},
+    "hub.drawer.history_tip": "모든 버전 보기 (Ctrl+H)",
+    "hub.drawer.history_count": {"other": "기록 (버전 {count}개)"},
     "hub.drawer.delete_tip": "삭제 (Delete). 8초 동안 실행 취소할 수 있습니다",
     "hub.drawer.details": "세부 정보",
     "hub.drawer.memory_id": "기억 ID",
-    "hub.drawer.revision_id": "판 ID",
+    "hub.drawer.revision_id": "버전 ID",
     "hub.drawer.source": "출처",
     "hub.drawer.recorded": "기록 시각",
     "hub.drawer.valid_from": "유효 시작",
     "hub.drawer.valid_until": "유효 끝",
     "hub.drawer.copy": "{name} 복사",
     "hub.drawer.copied": "{name}을(를) 클립보드에 복사했습니다.",
-    "hub.drawer.revision": "판 {number}",
+    "hub.drawer.revision": "버전 {number}",
     "hub.drawer.updated": "{when} 수정",
     "hub.drawer.source_short": "출처: {source}",
     "hub.drawer.no_text": "제목만 있고 본문이 없는 기억입니다.",
-    "hub.drawer.revision_line": "판 {number} · {kind} · {when}",
-    "hub.drawer.current": "지금 판",
+    "hub.drawer.revision_line": "버전 {number} · {kind} · {when}",
+    "hub.drawer.current": "지금 버전",
     "hub.drawer.undo_suggestion": "이 제안 되돌리기…",
     "hub.drawer.full_history": "전체 기록 열기…",
     "hub.drawer.history_failed": "이 기억의 기록을 읽지 못했습니다. 새로 고친 뒤 다시 해 보세요.",
     "hub.drawer.history_failed_title": "기록을 볼 수 없음",
-    "hub.drawer.danger_note": "위험 영역 · 이전 판까지 모두 지움, 되돌릴 수 없음",
+    "hub.drawer.danger_note": "위험 영역 · 완전히 잊으면 이 기억과 이전 버전까지 모두 지우며, 되돌릴 수 없음",
     "hub.drawer.forget": "완전히 잊기…",
     "hub.drawer.not_found": "이 기억은 더 이상 없습니다. 삭제되었거나 백업에서 복원되었을 수 있습니다.",
     "hub.drawer.not_found_title": "기억을 찾을 수 없음",
@@ -158,37 +158,38 @@ STRINGS: dict[str, object] = {
     "hub.editor.cancel_tip": "저장하지 않고 돌아가기 (Esc)",
     "hub.editor.new_dirty": "새 기억 · 아직 저장하지 않음",
     "hub.editor.new_clean": "새 기억 · 저장할 내용 없음",
-    "hub.editor.edit_dirty": "판 {number} 수정 중 · 저장하지 않은 변경 있음",
-    "hub.editor.edit_clean": "판 {number} 수정 중 · 변경 없음",
+    "hub.editor.edit_dirty": "버전 {number} 수정 중 · 저장하지 않은 변경 있음",
+    "hub.editor.edit_clean": "버전 {number} 수정 중 · 변경 없음",
     "hub.editor.check": "기억을 확인하세요",
     "hub.editor.conflict": "연 뒤에 이 기억이 바뀌거나 삭제되어 덮어쓰지 않았습니다. 쓰신 내용은 그대로 있습니다. 필요한 "
-                           "부분을 복사한 뒤 최신 판을 불러오세요.",
+                           "부분을 복사한 뒤 최신 버전을 불러오세요.",
     "hub.editor.conflict_title": "다른 곳에서 바뀐 기억",
-    "hub.editor.reload": "최신 판 불러오기",
+    "hub.editor.reload": "최신 버전 불러오기",
     "hub.editor.engine_down": "기억 엔진에 연결할 수 없어 저장하지 않았습니다. 쓰신 내용은 그대로 있으니 다시 해 보세요.",
     "hub.editor.failed": "이 기억을 저장하지 못했습니다. 쓰신 내용은 그대로 있으니 다시 해 보세요.",
     "hub.editor.failed_title": "저장하지 못함",
     "hub.editor.gone": "이 기억은 삭제되어 더 이상 수정할 수 없습니다.",
     "hub.editor.gone_title": "기억을 쓸 수 없음",
-    "hub.editor.reload_failed": "최신 판을 불러오지 못했습니다. 다시 해 보세요.",
+    "hub.editor.reload_failed": "최신 버전을 불러오지 못했습니다. 다시 해 보세요.",
     "hub.editor.reload_failed_title": "불러오지 못함",
     "hub.editor.discard_title": "변경 내용을 버릴까요?",
-    "hub.editor.discard_reload": "불러오면 입력란의 글이 마지막으로 저장된 판으로 바뀝니다.",
+    "hub.editor.discard_reload": "불러오면 입력란의 글이 마지막으로 저장된 버전으로 바뀝니다.",
     "hub.editor.discard_reload_button": "버리고 불러오기",
     "hub.editor.discard_edit": "이 기억의 수정 내용을 저장하지 않았습니다.",
     "hub.editor.discard_new": "이 새 기억을 저장하지 않았습니다.",
     "hub.editor.discard_button": "버리기",
     "hub.editor.keep_editing": "계속 수정",
-    "hub.editor.reloaded": "“{title}”의 판 {number}을(를) 불러왔습니다.",
+    "hub.editor.reloaded": "“{title}”의 버전 {number}을(를) 불러왔습니다.",
     "hub.saved.new": "기억을 저장했습니다",
-    "hub.saved.revision": "판 {number}을(를) 저장했습니다",
+    "hub.saved.revision": "버전 {number}을(를) 저장했습니다",
     "hub.saved.where": "“{title}”을(를) 이 PC의 {space} 공간에 저장했습니다.",
     # Delete, discard
     "hub.delete.title": "삭제함",
     "hub.delete.one": "“{title}”을(를) 삭제했습니다.",
     "hub.delete.many": {"other": "기억 {count}개를 삭제했습니다."},
-    "hub.delete.not_erase": "호스트는 더 이상 보지 못하지만 이전 판은 데이터베이스 파일에 남습니다(완전 삭제가 아님. "
-                            "완전히 지우려면 완전히 잊기).",
+    # Owner decision 2026-11-17: deleting keeps the memory, so the notice says where it stays and how to erase it.
+    "hub.delete.not_erase": "AI 도구는 더 이상 보지 못하지만 삭제한 기억에 남습니다. 완전히 지우려면 ‘완전히 잊기’를 "
+                            "쓰세요.",
     "hub.delete.kept": {"other": "이 기억을 만들 때 되돌릴 수 있게 보관한 수집함 항목 {count}개도 함께 지웁니다."},
     "hub.delete.changed": {"other": "고른 뒤에 바뀐 기억 {count}개는 삭제하지 않았습니다."},
     "hub.delete.changed_title": "바뀐 기억",
@@ -199,10 +200,12 @@ STRINGS: dict[str, object] = {
     "hub.discard.one": "“{title}”을(를) 버렸습니다.",
     "hub.discard.many": {"other": "항목 {count}개를 버렸습니다."},
     "hub.discard.kept": {"other": "합칠 때 되돌릴 수 있게 보관한 항목 {count}개도 함께 지웁니다."},
-    "hub.discard.erase": "BIO CE는 앱이 할 수 있는 만큼 지웁니다. 전에 만든 백업에는 남아 있습니다.",
+    # Owner decision 2026-11-17: discarding really erases, so the notice says it can't be undone after the 8 s.
+    "hub.discard.erase": "실행 취소를 누르지 않으면 8초 뒤 지우며, 그 뒤에는 되돌릴 수 없습니다. BIO CE는 앱이 할 수 "
+                         "있는 만큼 지웁니다. 전에 만든 백업에는 남아 있습니다.",
     "hub.discard.failed": "이 항목들을 버리지 못했습니다. 아무것도 지우지 않았습니다.",
     "hub.discard.failed_title": "버리지 못함",
-    "hub.discard.finishing": {"other": "항목 {count}개를 버렸습니다. 연결된 AI 호스트가 아직 데이터베이스를 읽고 있어, "
+    "hub.discard.finishing": {"other": "항목 {count}개를 버렸습니다. 연결된 AI 도구가 아직 데이터베이스를 읽고 있어, "
                                        "놓으면 빈 공간 정리를 마칩니다."},
     "hub.discard.finishing_title": "정리 마무리 중",
     # Move
@@ -285,7 +288,7 @@ STRINGS: dict[str, object] = {
     "hub.copied_title": "복사함",
     "hub.inbox.saved": "{when} 저장",
     "hub.inbox.by_host": "{host}",
-    "hub.inbox.guess": "호스트의 추측이며 직접 말한 내용이 아님",
+    "hub.inbox.guess": "AI 도구의 추측이며 직접 말한 내용이 아님",
     "hub.inbox.external": "물어본 파일이나 페이지에서 가져온 내용",
     "hub.inbox.another_ai": "다른 AI",
     "hub.inbox.said_on": "말한 날 {date}",
@@ -294,7 +297,7 @@ STRINGS: dict[str, object] = {
     "hub.inbox.unknown": "알 수 없음",
     "hub.inbox.import_line": "{source}에서 가져옴 · {said} · 가져온 날 {imported}",
     "hub.cleanup.title": "버림 제안",
-    "hub.cleanup.note": "한동안 쓰이지 않았거나 호스트가 지우자고 한 항목입니다. 보관하지 않으면 표시된 날에 버립니다.",
+    "hub.cleanup.note": "한동안 쓰이지 않았거나 AI 도구가 지우자고 한 항목입니다. 보관하지 않으면 표시된 날에 버립니다.",
     "hub.cleanup.row": {"other": "항목 {count}개 · {due}에 버림"},
     "hub.cleanup.soon": "곧",
     "hub.cleanup.keep": "보관",
@@ -306,9 +309,9 @@ STRINGS: dict[str, object] = {
                                       "수집함 탭에서 보관하세요."},
     "hub.cleanup.proposed_title": "수집함 정리",
     # Retracted memories
-    "hub.retracted.tip": "삭제한 기억: 호스트는 보지 못하지만 파일에는 남아 있습니다. 여기서 완전히 잊을 수 있습니다.",
+    "hub.retracted.tip": "삭제한 기억: AI 도구는 보지 못하지만 파일에는 남아 있습니다. 여기서 완전히 잊을 수 있습니다.",
     "hub.retracted.when": "{when} 삭제",
-    "hub.retracted.note": "삭제함: 호스트와 검색에는 더 이상 보이지 않지만 데이터베이스 파일에는 남아 있습니다. "
+    "hub.retracted.note": "삭제함: AI 도구와 검색에는 더 이상 보이지 않지만 데이터베이스 파일에는 남아 있습니다. "
                           "완전히 잊기로 지웁니다.",
     "hub.retracted.empty": "삭제한 기억이 없습니다",
     "hub.retracted.empty_message": "삭제한 기억은 완전히 잊을 때까지 데이터베이스 파일에 남습니다. 이 공간에는 없습니다.",
@@ -316,7 +319,7 @@ STRINGS: dict[str, object] = {
     # Forget completely
     "hub.forget.title": "이 기억을 완전히 잊을까요?",
     "hub.forget.message": "숨기는 대신 BIO CE 파일에서 지웁니다.",
-    "hub.forget.point_files": "이 기억과 모든 이전 판, AI가 낸 관련 검토가 BIO CE 파일에서 지워집니다.",
+    "hub.forget.point_files": "이 기억과 모든 이전 버전, AI 도구가 낸 관련 검토가 BIO CE 파일에서 지워집니다.",
     "hub.forget.point_kept": {"other": "이 기억 때문에 보관된 수집함 항목 {count}개도 지워집니다."},
     "hub.forget.point_no_undo": "되돌릴 수 없습니다.",
     "hub.forget.point_backups": "이미 만든 백업과 내보낸 파일에는 남습니다.",
@@ -325,7 +328,7 @@ STRINGS: dict[str, object] = {
     "hub.forget.button": "완전히 잊기",
     "hub.forget.done": "“{title}”을(를) BIO CE 파일에서 지웠습니다.",
     "hub.forget.done_title": "잊음",
-    "hub.forget.pending": "“{title}”은(는) BIO CE에서 사라졌습니다. 연결된 AI 호스트가 아직 데이터베이스를 읽고 있어, "
+    "hub.forget.pending": "“{title}”은(는) BIO CE에서 사라졌습니다. 연결된 AI 도구가 아직 데이터베이스를 읽고 있어, "
                           "놓으면 지우기를 마칩니다.",
     "hub.forget.pending_title": "정리 마무리 중",
     "hub.forget.failed": "이 기억을 잊지 못했습니다. 아무것도 바뀌지 않았습니다.",
@@ -340,7 +343,7 @@ STRINGS: dict[str, object] = {
     "hub.sugg.from_import": "{when} 가져오기에서",
     "hub.sugg.approve_all": "보이는 것 모두 승인…",
     "hub.sugg.reject_all": "보이는 것 모두 거절…",
-    "hub.sugg.intro": "BIO CE가 수집함을 비교해 반복된 것 합치기, 호스트가 계속 쓰는 것 남기기, 기억에 더할 내용으로 "
+    "hub.sugg.intro": "BIO CE가 수집함을 비교해 반복된 것 합치기, AI 도구가 계속 쓰는 것 남기기, 기억에 더할 내용으로 "
                       "바꾸기를 제안합니다. AI 모델을 부르지 않으며, 승인하기 전에는 아무것도 바뀌지 않습니다.",
     "hub.sugg.empty_title": "제안이 없습니다",
     "hub.sugg.empty_message": "지금은 정리할 것이 없습니다. 매일, 그리고 가져오기 뒤에 다시 찾습니다.",
@@ -361,7 +364,7 @@ STRINGS: dict[str, object] = {
     "hub.sugg.approved_title": "제안 승인함",
     "hub.sugg.undo_title": {"other": "승인한 제안 {count}개를 되돌릴까요?"},
     "hub.sugg.undo_message": "바뀐 것은 이전 글로 돌아가고, 쓰인 수집함 항목은 원래대로 돌아옵니다.",
-    "hub.sugg.undo_point_history": "되돌린 판은 기록에 남습니다.",
+    "hub.sugg.undo_point_history": "되돌린 버전은 기록에 남습니다.",
     "hub.sugg.undo_point_retract": "제안이 만든 기억은 삭제됩니다.",
     "hub.sugg.undo_point_again": "같은 제안을 다시 하지 않습니다.",
     "hub.sugg.undo_failed": "이 제안을 되돌리지 못했습니다. 더 바뀐 것은 없습니다.",
@@ -383,9 +386,9 @@ STRINGS: dict[str, object] = {
     "hub.sugg.reject_all_message": "수집함 항목은 그대로 있습니다. 같은 묶음은 다시 제안하지 않습니다.",
     "hub.sugg.reject_all_button": "모두 거절",
     # Reviews tab
-    "hub.review.intro": "AI가 바꾸자고 한 것 · 승인하기 전에는 아무것도 바뀌지 않습니다",
+    "hub.review.intro": "AI 도구가 바꾸자고 한 것 · 승인하기 전에는 아무것도 바뀌지 않습니다",
     "hub.review.empty_title": "검토할 것이 없습니다",
-    "hub.review.empty_message": "호스트가 불확실한 변경을 제안하거나 기억을 지우자고 하면 여기서 기다립니다.",
+    "hub.review.empty_message": "AI 도구가 불확실한 변경을 제안하거나 기억을 지우자고 하면 여기서 기다립니다.",
     "hub.review.kind_create": "새 기억",
     "hub.review.kind_update": "변경",
     "hub.review.kind_retract": "철회 요청",
@@ -406,8 +409,8 @@ STRINGS: dict[str, object] = {
     "hub.review.retract": "기억 철회",
     "hub.review.reject": "거절",
     "hub.review.retract_title": "이 기억을 철회할까요?",
-    "hub.review.retract_message": "{host}이(가) 철회를 요청했습니다. BIO CE와 AI 호스트가 더 이상 찾거나 읽지 못합니다.",
-    "hub.review.retract_point": "이전 판은 데이터베이스 파일에 남습니다. 철회는 완전 삭제가 아니며, 이 승인은 알림에서 "
+    "hub.review.retract_message": "{host}이(가) 철회를 요청했습니다. BIO CE와 AI 도구가 더 이상 찾거나 읽지 못합니다.",
+    "hub.review.retract_point": "이전 버전은 데이터베이스 파일에 남습니다. 철회는 완전 삭제가 아니며, 이 승인은 알림에서 "
                                 "실행 취소할 수 없습니다.",
     "hub.review.saved": "검토 후 저장함",
     "hub.review.updated": "검토 후 바꿈",
@@ -416,7 +419,7 @@ STRINGS: dict[str, object] = {
     "hub.review.failed": "변경을 적용하지 못했습니다. 아무것도 바뀌지 않았습니다.",
     "hub.review.failed_title": "변경을 적용하지 못함",
     "hub.review.secret": "비밀번호, 토큰, 키가 들어 있어 저장하지 않습니다.",
-    "hub.review.undo_update_done": "기억이 이전 글로 돌아갔습니다(새 판으로, 기록에 둘 다 남음).",
+    "hub.review.undo_update_done": "기억이 이전 글로 돌아갔습니다(새 버전으로, 기록에 둘 다 남음).",
     "hub.review.undo_create_done": "이 승인으로 만든 기억을 다시 삭제했습니다.",
     "hub.review.undo_failed": "그 뒤에 기억이 바뀌어 되돌리지 않았습니다.",
     "hub.review.not_undone": "되돌리지 못함",
@@ -453,13 +456,13 @@ STRINGS: dict[str, object] = {
     "connections.servers.last_request": "{servers} · 마지막 요청 {when}",
     "connections.servers.title": "BIO CE 서버",
     "connections.servers.note": "연결된 AI 도구는 대화나 세션마다 BIO CE 서버를 하나씩 띄우고, 그것이 열려 있는 동안 "
-                                "유지합니다. 서버는 호스트가 닫을 때 끝나며, BIO CE가 스스로 끝내지는 않습니다.",
+                                "유지합니다. 서버는 AI 도구가 닫을 때 끝나며, BIO CE가 스스로 끝내지는 않습니다.",
     "connections.servers.total": {"other": "모두 {count}개 실행 중"},
     "connections.servers.end_idle": "쉬는 서버 끝내기…",
     "connections.servers.none_idle": "{hours}시간 이상 요청이 없던 BIO CE 서버가 없습니다. 아무것도 끝내지 않았습니다.",
     "connections.servers.end_title": {"other": "쉬는 서버 {count}개를 끝낼까요?"},
     "connections.servers.end_message": "이 BIO CE 서버들은 {hours}시간 이상 요청이 없었습니다.",
-    "connections.servers.end_point_fail": "이 서버를 쓰던 대화는 호스트가 새 서버를 띄울 때까지 다음 기억 호출이 "
+    "connections.servers.end_point_fail": "이 서버를 쓰던 대화는 AI 도구가 새 서버를 띄울 때까지 다음 기억 호출이 "
                                           "실패할 수 있습니다.",
     "connections.servers.end_point_keep": "최근 {hours}시간 안에 요청이 있던 서버는 계속 실행됩니다. 기억은 바뀌지 "
                                           "않습니다.",
@@ -467,4 +470,28 @@ STRINGS: dict[str, object] = {
     "connections.servers.ended": {"other": "쉬는 서버 {count}개를 끝냈습니다."},
     "connections.servers.ended_title": "서버 끝냄",
     "connections.servers.end_failed": "쉬는 서버를 모두 끝내지는 못했습니다. 개수는 아직 실행 중인 서버입니다.",
+    # ===== U5-A: Connections screen (src/bio_ce/ui/pages/connections.py) =====
+    # Add this part's keys right below this line, in this block only (other parts merge around it).
+    #
+    #
+    #
+    # ===== end of U5-A =====
+    # ===== U5-B: Settings and dialogs (src/bio_ce/ui/pages/settings.py, dialogs.py, pages/__init__.py) =====
+    # Add this part's keys right below this line, in this block only (other parts merge around it).
+    #
+    #
+    #
+    # ===== end of U5-B =====
+    # ===== U5-C: Import, Dashboard, widgets (pages/importing.py, pages/dashboard.py, widgets.py, tree_text.py) =====
+    # Add this part's keys right below this line, in this block only (other parts merge around it).
+    #
+    #
+    #
+    # ===== end of U5-C =====
+    # ===== U5-L: App shell, formatting, service messages (app.py, format.py, theme.py, tasks.py, the rest) =====
+    # Add this part's keys right below this line, in this block only (other parts merge around it).
+    #
+    #
+    #
+    # ===== end of U5-L =====
 }
