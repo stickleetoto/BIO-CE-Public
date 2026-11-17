@@ -155,7 +155,7 @@ class MemoriesActionsFitTests(unittest.TestCase):
         menu = self.hub.context_menu([card.item])
         labels = [menu.entrycget(index, "label") for index in range(menu.index("end") + 1)
                   if menu.type(index) in ("command", "cascade")]
-        self.assertEqual(labels, ["Edit", "History", "Move to", "Delete", "Forget completely…"])
+        self.assertEqual(labels, ["Edit", "History", "Move to", "Copy", "Delete", "Forget completely…"])
         submenu = self.hub.nametowidget(menu.entrycget(labels.index("Move to"), "menu"))
         spaces = [submenu.entrycget(index, "label") for index in range(submenu.index("end") + 1)]
         self.assertEqual(spaces, ["General"])  # the space it is in (Personal) is not offered
