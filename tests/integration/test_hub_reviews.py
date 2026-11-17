@@ -98,7 +98,9 @@ class HubReviewTests(unittest.TestCase):
         texts = [w for w in _walk(self.view) if w.winfo_class() == "Text"]
         tagged = {tag for text in texts for tag in ("add", "del") if text.tag_ranges(tag)}
         self.assertEqual(tagged, {"add", "del"}, "the differences are marked")
-        self.assertIn("Not changed yet", same.status_text)
+        # "Nothing changes before you approve" is said once above the cards, not on each card (POLISH decision 3).
+        self.assertIn("nothing changes before you approve", self.view.intro_label.cget("text"))
+        self.assertNotIn("Not changed yet", same.status_text)
 
     def test_add_as_new_keeps_the_current_memory(self):
         self.assertTrue(self.view.approve(self.item(self.different), as_new=True))

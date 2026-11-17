@@ -374,6 +374,8 @@ STRINGS: dict[str, object] = {
     "hub.sugg.from_import": "From the import of {when}",
     "hub.sugg.approve_all": "Approve all shown…",
     "hub.sugg.reject_all": "Reject all shown…",
+    "hub.more": "More",
+    "hub.sugg.intro_short": "Suggestions to tidy the inbox. Nothing changes until you approve.",
     "hub.sugg.intro": "BIO CE compares what is in the inbox and suggests merging repeats, keeping items your hosts "
                       "keep using, and updating memories an item adds to. It never calls an AI model, and nothing "
                       "changes until you approve.",
@@ -431,10 +433,8 @@ STRINGS: dict[str, object] = {
     "hub.review.kind_create": "New memory",
     "hub.review.kind_update": "Change",
     "hub.review.kind_retract": "Retraction request",
-    "hub.review.line": "{host} · {when} · {space} · reason: {reason}",
-    "hub.review.pending_create": "Not saved yet. Nothing is stored until you approve it.",
-    "hub.review.pending_update": "Not changed yet. The memory stays as it is until you approve this.",
-    "hub.review.pending_retract": "Not retracted yet. The memory stays visible until you approve this.",
+    "hub.review.line": "{host} · {when} · {space}",
+    "hub.review.reason": "Reason: {reason}",
     "hub.review.current": "Current memory",
     "hub.review.proposed": "Proposed",
     "hub.review.different_title": "This may be a different fact.",
@@ -1224,8 +1224,6 @@ STRINGS: dict[str, object] = {
     "dashboard.empty_add": "Add your first memory",
     "dashboard.hosts": "AI hosts",
     "dashboard.manage": "Manage",
-    "dashboard.hosts_note": "Connected hosts can search and read memories. With Auto memory on they can also save "
-                            "lasting ones; retractions always wait for you.",
     "dashboard.privacy": "BIO CE never records conversations. Memories are saved when you select Save or when a host "
                          "you gave Auto memory saves a lasting fact, and they stay on this PC.",
     "dashboard.host.unavailable": "Unavailable",
@@ -1272,9 +1270,7 @@ STRINGS: dict[str, object] = {
     #
     #
     "app.edition": "Community Edition",
-    "app.local_only": "Local only",
-    "app.you_control": "You control AI access",
-    "app.version": "Version {version}",
+    "app.footer_line": "Local only · Version {version}",
     "app.engine.none": "No engine connected",
     "app.engine.name": "Engine: {name}",
     "app.not_available": "This action is not available.",

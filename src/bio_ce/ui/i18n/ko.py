@@ -350,6 +350,8 @@ STRINGS: dict[str, object] = {
     "hub.sugg.from_import": "{when} 가져오기에서",
     "hub.sugg.approve_all": "보이는 것 모두 승인…",
     "hub.sugg.reject_all": "보이는 것 모두 거절…",
+    "hub.more": "자세히",
+    "hub.sugg.intro_short": "수집함을 정리하자는 제안입니다. 승인하기 전에는 아무것도 바뀌지 않습니다.",
     "hub.sugg.intro": "BIO CE가 수집함을 비교해 반복된 것 합치기, AI 도구가 계속 쓰는 것 남기기, 기억에 더할 내용으로 "
                       "바꾸기를 제안합니다. AI 모델을 부르지 않으며, 승인하기 전에는 아무것도 바뀌지 않습니다.",
     "hub.sugg.empty_title": "제안이 없습니다",
@@ -399,10 +401,8 @@ STRINGS: dict[str, object] = {
     "hub.review.kind_create": "새 기억",
     "hub.review.kind_update": "변경",
     "hub.review.kind_retract": "철회 요청",
-    "hub.review.line": "{host} · {when} · {space} · 이유: {reason}",
-    "hub.review.pending_create": "아직 저장하지 않았습니다. 승인하기 전에는 저장되지 않습니다.",
-    "hub.review.pending_update": "아직 바꾸지 않았습니다. 승인하기 전에는 기억이 그대로입니다.",
-    "hub.review.pending_retract": "아직 철회하지 않았습니다. 승인하기 전에는 기억이 보입니다.",
+    "hub.review.line": "{host} · {when} · {space}",
+    "hub.review.reason": "이유: {reason}",
     "hub.review.current": "지금 기억",
     "hub.review.proposed": "바꾸자는 내용",
     "hub.review.different_title": "다른 사실일 수 있습니다.",
@@ -1159,8 +1159,6 @@ STRINGS: dict[str, object] = {
     "dashboard.empty_add": "첫 기억 추가",
     "dashboard.hosts": "AI 도구",
     "dashboard.manage": "관리",
-    "dashboard.hosts_note": "연결된 AI 도구는 기억을 검색하고 읽을 수 있습니다. 자동 기억을 켜면 오래 둘 기억도 저장할 "
-                            "수 있고, 철회 요청은 늘 사용자의 확인을 기다립니다.",
     "dashboard.privacy": "BIO CE는 대화를 기록하지 않습니다. 기억은 저장을 누르거나, 자동 기억을 허락한 AI 도구가 오래 "
                          "둘 사실을 저장할 때만 저장되며, 이 PC에만 남습니다.",
     "dashboard.host.unavailable": "확인할 수 없음",
@@ -1207,9 +1205,7 @@ STRINGS: dict[str, object] = {
     #
     #
     "app.edition": "Community Edition",
-    "app.local_only": "이 PC에만 저장",
-    "app.you_control": "AI 접근은 직접 정함",
-    "app.version": "버전 {version}",
+    "app.footer_line": "이 PC에만 저장 · 버전 {version}",
     "app.engine.none": "연결된 엔진 없음",
     "app.engine.name": "엔진: {name}",
     "app.not_available": "지금은 쓸 수 없는 동작입니다.",

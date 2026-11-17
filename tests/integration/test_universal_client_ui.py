@@ -189,7 +189,8 @@ class UniversalClientTests(unittest.TestCase):
         app = self.open(FakeManagedConnections(self.paths.user_database))
         app.open_state(REVIEWS)
         cards = app.memories.reviews.review_cards
-        self.assertIn("Not saved yet", cards[0].status_text)
+        self.assertIn("nothing changes before you approve", app.memories.reviews.intro_label.cget("text"))
+        self.assertIn("Codex", cards[0].status_text)  # "tool · when · space"
         self.assertTrue(all(button.enabled for button in cards[0].buttons))
         app.close()
         self.service = DesktopMemoryService(self.paths.user_database)

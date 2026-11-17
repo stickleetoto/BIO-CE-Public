@@ -29,18 +29,16 @@ from bio_ce.ui.hub.data import REVIEWS, HubItem
 from bio_ce.ui.i18n import t
 from bio_ce.ui.service_text import say
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS
-from bio_ce.ui.widgets import Button, Card, EmptyState, FlowFrame, Pill, ScrollFrame, WrapLabel
+from bio_ce.ui.widgets import Button, Card, ElideLabel, EmptyState, FlowFrame, Pill, ScrollFrame, Tooltip, WrapLabel
 
 KIND_KEYS = {"create": "hub.review.kind_create", "update": "hub.review.kind_update",
              "retract": "hub.review.kind_retract"}
-PENDING_KEYS = {"create": "hub.review.pending_create", "update": "hub.review.pending_update",
-                "retract": "hub.review.pending_retract"}
 
 
 @dataclass(frozen=True, slots=True)
 class ReviewCard:
     review_id: int
-    status_text: str
+    status_text: str  # the card's line: "tool · when · space"
     buttons: tuple
     different_fact: bool = False
     default: str = ""
@@ -77,8 +75,10 @@ class ReviewsView(tk.Frame):
         self.colors = c
         self.review_cards: list[ReviewCard] = []
         self.items: list[HubItem] = []
-        WrapLabel(self, t("hub.review.intro"), font=theme.font("body"), foreground=c.text_secondary,
-                  background=c.bg).pack(fill="x", pady=(0, theme.px(SPACE_M)))
+        # Said once for every card: nothing changes before you approve (POLISH §8 decision 3).
+        self.intro_label = WrapLabel(self, t("hub.review.intro"), font=theme.font("body"),
+                                     foreground=c.text_secondary, background=c.bg)
+        self.intro_label.pack(fill="x", pady=(0, theme.px(SPACE_M)))
         self.empty = EmptyState(self, theme, icon="check", title=t("hub.review.empty_title"),
                                 message=t("hub.review.empty_message"))
         self.scroll = ScrollFrame(self, theme)
@@ -134,10 +134,17 @@ class ReviewsView(tk.Frame):
         head.pack(fill="x")
         Pill(head, theme, t(KIND_KEYS.get(review.kind, "hub.review.kind_update")),
              "warning" if review.kind != "create" else "info").pack(side="left", anchor="n")
+        # "tool · when · space", and the tool's reason on one line ending in "…" (all of it on hover), POLISH §3.4.
         line = t("hub.review.line", host=host_name(review.host), when=when(review.created_at),
-                 reason=say(review.review_reason), space=space_label(item.space))
+                 space=space_label(item.space))
         WrapLabel(head, line, font=theme.font("caption"), foreground=c.text_muted).pack(
             side="left", fill="x", expand=True, padx=(theme.px(SPACE_S), 0))
+        reason = t("hub.review.reason", reason=say(review.review_reason)) if review.review_reason else ""
+        if reason:
+            reason_label = ElideLabel(card.body, text=reason, font=theme.font("caption"), background=c.surface,
+                                      foreground=c.text_muted, width=1)
+            reason_label.pack(fill="x", pady=(theme.px(SPACE_XS), 0))
+            Tooltip(reason_label, theme, reason)
         if review.kind == "update" and current is not None:
             self._columns(card, current, review)
         else:
@@ -146,9 +153,7 @@ class ReviewsView(tk.Frame):
             if review.content:
                 WrapLabel(card.body, preview(review.content, 600), font=theme.font("body"),
                           foreground=c.text_secondary).pack(fill="x")
-        status_text = t(PENDING_KEYS.get(review.kind, "hub.review.pending_update"))
-        WrapLabel(card.body, status_text, font=theme.font("caption_strong"), foreground=c.warning).pack(
-            fill="x", pady=(theme.px(SPACE_XS), 0))
+        # "Not saved yet…" is said once above the tab (hub.review.intro), not on every card (POLISH §8 decision 3).
         buttons = FlowFrame(card.body, gap=theme.px(SPACE_S), background=c.surface)
         buttons.pack(fill="x", pady=(theme.px(SPACE_S), 0))
         made: list[Button] = []
@@ -176,7 +181,7 @@ class ReviewsView(tk.Frame):
         add(t("hub.review.reject"), "subtle", lambda: self.reject(item))
         for button in made:
             self.app.gate(button, "review")
-        self.review_cards.append(ReviewCard(review.review_id, status_text, tuple(made), warn, default))
+        self.review_cards.append(ReviewCard(review.review_id, line, tuple(made), warn, default))
 
     def _columns(self, card, current, review) -> None:
         theme, c = self.theme, self.colors

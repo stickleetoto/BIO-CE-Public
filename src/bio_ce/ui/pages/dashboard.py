@@ -158,9 +158,7 @@ class DashboardPage(Page):
             pill.pack(anchor="w", pady=(theme.px(2), 0))
             row.track(pill, paint=False)
             self.host_rows[host] = pill
-        note = WrapLabel(self.connections_card.body, t("dashboard.hosts_note"), font=theme.font("caption"),
-                         foreground=c.text_muted)
-        note.pack(fill="x", pady=(theme.px(SPACE_M), 0))
+        # The explanation paragraph that stood here is on the Connections screen (POLISH §3.5).
 
         footer = tk.Frame(body, background=c.bg)
         footer.pack(fill="x", pady=(theme.px(SPACE_XL - 4), theme.px(SPACE_S)))

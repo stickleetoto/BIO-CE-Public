@@ -111,18 +111,19 @@ class HubPage(Page):
         self.chip_caption = self.chip_row.add(tk.Label(self.chip_row, text=t("hub.space"), background=c.bg,
                                                        font=theme.font("caption_strong"), foreground=c.text_muted))
         self.chips: dict[str, Button] = {}
-        # The tabs, and at their right end the folded filters and the sort (POLISH §3.3).
+        # The tabs, then the folded filters and the sort (POLISH §3.3). They are the last item of the tabs' flow, so
+        # on a narrow window or with wide text they go to the next line instead of squeezing the tabs into several
+        # (the memory screen ran out of height for the drawer with 1.5× fonts).
         self.tab_bar = tk.Frame(self, background=c.bg)
         self.tab_bar.pack(fill="x")
-        self.tab_tools = tk.Frame(self.tab_bar, background=c.bg)
-        self.tab_tools.pack(side="right", anchor="s", pady=(0, theme.px(SPACE_XS)))
+        self.tab_row = FlowFrame(self.tab_bar, gap=theme.px(SPACE_XS), background=c.bg)
+        self.tab_row.pack(side="left", fill="x", expand=True)
+        self.tab_tools = tk.Frame(self.tab_row, background=c.bg)
         self.filter_toggle = Button(self.tab_tools, theme, t("hub.filter.toggle"), variant="chip", padx=10, pady=3,
                                     command=self.toggle_filters)
         self.filter_clear = Button(self.tab_tools, theme, t("hub.filter.clear"), variant="link",
                                    command=lambda: self.filter_bar.clear())
         self._filters_open = False
-        self.tab_row = FlowFrame(self.tab_bar, gap=theme.px(SPACE_XS), background=c.bg)
-        self.tab_row.pack(side="left", fill="x", expand=True)
         # A line under the tabs ends the header part of the screen (POLISH §2.4): header → 16 → content.
         self.tab_rule = tk.Frame(self, height=1, background=c.border)
         self.tab_rule.pack(fill="x", pady=(0, theme.px(SPACE_L)))
@@ -137,6 +138,7 @@ class HubPage(Page):
         self.tab_row.set_visible(self.retracted_tab, False)
         self.result_label = self.tab_row.add(tk.Label(self.tab_row, text="", font=theme.font("caption"),
                                                       background=c.bg, foreground=c.text_muted))
+        self.tab_row.add(self.tab_tools)
 
         # Content and drawer ------------------------------------------------------------------------------------
         self.body = tk.Frame(self, background=c.bg)
@@ -152,7 +154,6 @@ class HubPage(Page):
         self.tools.pack(fill="x")
         self.quick_add = QuickAdd(self.tools, self)
         self.filter_bar = FilterBar(self.tools, app, lambda _view: self.refresh(), sort_parent=self.tab_tools)
-        self.filter_bar.sort_pair.pack(side="right", padx=(theme.px(SPACE_M), 0))
         self.selection_bar = SelectionBar(self.tools, self)
         self._anchor_key: str | None = None
         self.cleanup = Card(self.cards_view, theme, padding=SPACE_L)
@@ -552,17 +553,18 @@ class HubPage(Page):
         shown = self.state in filters.FILTERED_STATES
         for part in (self.filter_toggle, self.filter_clear, self.filter_bar.sort_pair):
             part.pack_forget()
-        if not shown:
-            return
-        self.filter_bar.sort_pair.pack(side="right", padx=(self.theme.px(SPACE_M), 0))
-        count = filters.active_count(self.filter_bar.view)
-        arrow = "▴" if self._filters_open else "▾"
-        label = t("hub.filter.toggle_count", count=count) if count else t("hub.filter.toggle")
-        self.filter_toggle.set_text(f"{label} {arrow}")
-        self.filter_toggle.set_variant("chip_selected" if count else "chip")
-        self.filter_toggle.pack(side="right", before=self.filter_bar.sort_pair)
-        if count and not self._filters_open:
-            self.filter_clear.pack(side="right", before=self.filter_toggle, padx=(0, self.theme.px(SPACE_S)))
+        self.tab_row.set_visible(self.tab_tools, shown)
+        if shown:
+            count = filters.active_count(self.filter_bar.view)
+            arrow = "▴" if self._filters_open else "▾"
+            label = t("hub.filter.toggle_count", count=count) if count else t("hub.filter.toggle")
+            self.filter_toggle.set_text(f"{label} {arrow}")
+            self.filter_toggle.set_variant("chip_selected" if count else "chip")
+            self.filter_toggle.pack(side="left", padx=(self.theme.px(SPACE_M), 0))
+            if count and not self._filters_open:
+                self.filter_clear.pack(side="left", padx=(self.theme.px(SPACE_XS), 0))
+            self.filter_bar.sort_pair.pack(side="left", padx=(self.theme.px(SPACE_M), 0))
+        self.tab_row.relayout()
 
     def _shrink_empty_tools(self) -> None:
         # Tk keeps a frame at its last size when its last child is removed: an empty band stayed above the cards.

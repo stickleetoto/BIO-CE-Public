@@ -71,7 +71,8 @@ class VersionDisplayTests(unittest.TestCase):
                 app.show_page("settings")
                 root.update()
                 texts = _label_texts(root)
-                self.assertIn(f"Version {display_version()}", texts)
+                # The sidebar's one footer line since rc2 (POLISH §3.5): "Local only · Version …".
+                self.assertIn(f"Local only · Version {display_version()}", texts)
                 self.assertTrue(any(text.startswith(f"BIO Community Edition {display_version()} · ")
                                     for text in texts), "About shows a different version form")
             finally:

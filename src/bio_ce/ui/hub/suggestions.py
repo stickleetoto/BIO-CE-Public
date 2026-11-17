@@ -22,7 +22,16 @@ from bio_ce.ui.hub.data import ALL_SPACES
 from bio_ce.ui.i18n import t
 from bio_ce.ui.service_text import say
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS
-from bio_ce.ui.widgets import Button, Card, EmptyState, FlowFrame, Pill, ScrollFrame, TextArea, WrapLabel
+from bio_ce.ui.widgets import (
+    Button,
+    Card,
+    EmptyState,
+    FlowFrame,
+    Pill,
+    ScrollFrame,
+    TextArea,
+    WrapLabel,
+)
 
 ACTION_KEYS = {MERGE: "hub.sugg.merge", PROMOTE: "hub.sugg.promote", UPDATE_EXISTING: "hub.sugg.update"}
 
@@ -52,11 +61,28 @@ class SuggestionsView(tk.Frame):
                                          command=self.reject_shown))
         for button in (self.find_button, self.approve_all, self.reject_all):
             self.app.gate(button, "review")
-        WrapLabel(self, t("hub.sugg.intro"), font=theme.font("body"), foreground=c.text_secondary,
-                  background=c.bg).pack(fill="x", pady=(0, theme.px(SPACE_M)))
+        # One line with "More" on the same line, the rest on request (POLISH §3.4); a row of its own made the list
+        # run out of height in the smallest window.
+        intro = tk.Frame(self, background=c.bg)
+        intro.pack(fill="x", pady=(0, theme.px(SPACE_M)))
+        self.intro_full = WrapLabel(self, t("hub.sugg.intro"), font=theme.font("caption"),
+                                    foreground=c.text_secondary, background=c.bg)
+        self.intro_more = Button(intro, theme, t("hub.more"), icon="chevron_right", variant="link",
+                                 command=lambda: self._show_intro(not self.intro_full.winfo_manager(), intro))
+        self.intro_more.pack(side="right", anchor="n")
+        WrapLabel(intro, t("hub.sugg.intro_short"), font=theme.font("body"), foreground=c.text_secondary,
+                  background=c.bg).pack(side="left", fill="x", expand=True)
         self.empty = EmptyState(self, theme, icon="memories", title=t("hub.sugg.empty_title"),
                                 message=t("hub.sugg.empty_message"))
         self.scroll = ScrollFrame(self, theme)
+
+    def _show_intro(self, show: bool, row: tk.Frame) -> None:
+        if show:
+            self.intro_full.pack(fill="x", pady=(0, self.theme.px(SPACE_M)), after=row)
+        else:
+            self.intro_full.pack_forget()
+        if self.intro_more.icon_label is not None:
+            self.intro_more.icon_label.configure(text=self.theme.icon("chevron_down" if show else "chevron_right"))
 
     @property
     def control(self):

@@ -54,6 +54,7 @@ from bio_ce.ui.theme import (
     SPACE_M,
     SPACE_S,
     SPACE_XL,
+    SPACE_XS,
     SPACE_XXL,
     Theme,
     app_icon,
@@ -242,15 +243,15 @@ class BIOCEDesktop:
                  foreground=c.success).pack(side="left", anchor="n", pady=(theme.px(2), 0))
         self.sidebar_footer_text = tk.Frame(row, background=c.sidebar)
         self.sidebar_footer_text.pack(side="left", fill="x", padx=(theme.px(SPACE_S), 0))
-        tk.Label(self.sidebar_footer_text, text=t("app.local_only"), font=theme.font("caption_strong"),
-                 background=c.sidebar, foreground=c.text_secondary, anchor="w").pack(fill="x")
-        tk.Label(self.sidebar_footer_text, text=t("app.you_control"), font=theme.font("caption"),
-                 background=c.sidebar, foreground=c.text_muted, anchor="w").pack(fill="x")
+        # One line (POLISH §3.5): "Local only · Version …". The engine's name is in Settings; this line says it only
+        # when the engine has a problem (R2).
+        # Wraps: in Korean and with large text the line is wider than the sidebar (the audit found it cut).
+        self.footer_line = WrapLabel(self.sidebar_footer_text,
+                                     t("app.footer_line", version=bio_ce.display_version()),
+                                     font=theme.font("caption"), background=c.sidebar, foreground=c.text_secondary)
+        self.footer_line.pack(fill="x")
         self.engine_label = tk.Label(self.sidebar_footer_text, text="", font=theme.font("caption"),
                                      background=c.sidebar, foreground=c.text_muted, anchor="w", justify="left")
-        self.engine_label.pack(fill="x", pady=(theme.px(SPACE_S), 0))
-        tk.Label(self.sidebar_footer_text, text=t("app.version", version=bio_ce.display_version()), font=theme.font("caption"),
-                 background=c.sidebar, foreground=c.text_muted, anchor="w").pack(fill="x", pady=(theme.px(SPACE_S), 0))
 
     def _on_resize(self, event) -> None:
         if event.widget is self.root:
@@ -435,8 +436,13 @@ class BIOCEDesktop:
         self._actions = action_states(self.engine_selection, self.engine_status, support)
         if hasattr(self, "engine_label"):
             c = self.theme.colors
+            connected = self.engine_banner().connected
             self.engine_label.configure(text=self._engine_label_text(),
-                                        foreground=c.text_muted if self.engine_banner().connected else c.warning)
+                                        foreground=c.text_muted if connected else c.warning)
+            if connected and self.engine_label.winfo_manager():
+                self.engine_label.pack_forget()
+            elif not connected and not self.engine_label.winfo_manager():
+                self.engine_label.pack(fill="x", pady=(self.theme.px(SPACE_XS), 0))
 
     def _engine_label_text(self) -> str:
         binding = self.engine_selection.binding
@@ -444,8 +450,9 @@ class BIOCEDesktop:
             return t("app.engine.none")
         name = engine_name(binding.engine_id, self.engine_status)
         if self.engine_status is None or not self.engine_status.ready:
-            state = self.engine_status.state.value.replace("_", " ") if self.engine_status else "error"
-            return f"{name}: {state}"
+            # The state in words ("설치 안 됨"), not its stored value ("not_installed"): leak scan, rc2.
+            state = self.engine_status.state.value if self.engine_status else "error"
+            return f"{name}: {t(f'svc.engine.state.{state}')}"
         return t("app.engine.name", name=name)
 
     def engine_statuses(self) -> tuple[EngineStatus, ...]:
