@@ -25,6 +25,8 @@ ALLOWED_WORDS = frozenset({
     "Alt", "Enter", "Esc", "Tab", "Delete", "Space", "KB", "MB", "GB", "UTF", "PC", "SSD",
     # The licence notice in Settings → About stays as written (the author's handle and the licence's name).
     "Copyright", "stickleetoto", "Apache", "License",
+    # Folder names on disk, which the user looks for by that name ("데이터 폴더의 backups 폴더").
+    "backups", "connections",
 })
 # A value as the app stores it: words joined with "-" or "_" (user-input, ai-auto-memory, code_mode).
 INTERNAL = re.compile(r"(?<![\w.\\/-])[a-z][a-z0-9]*(?:[-_][a-z0-9]+)+(?![\w.\\/-])")

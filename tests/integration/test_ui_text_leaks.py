@@ -13,10 +13,14 @@ to be reported.
 
 from __future__ import annotations
 
+import tkinter as tk
 import unittest
+from unittest.mock import patch
 
 from bio_ce.exporter import SOURCE_KINDS, SOURCE_LABELS
-from bio_ce.ui.dialogs import ExportDialog
+from bio_ce.spaces import PERSONAL_SPACE
+from bio_ce.ui.dialogs import Dialog, ExportDialog
+from bio_ce.ui.hub.data import INBOX as INBOX_TAB, MEMORIES, REVIEWS, SUGGESTIONS
 from bio_ce.ui.format import DEFAULT_SOURCE
 from tests.integration import test_ui_layout_audit as layout  # the module: its tests aren't collected here again
 from tests.ui_text_scan import leaks, shown_texts
@@ -113,6 +117,129 @@ class KoreanTextLeakTests(unittest.TestCase):
         self.assertIn("출처: 직접 추가", seen)  # D1: was "출처: user-input"
         self.assertIn("코드 모드로 실행", seen)  # D2: the Codex card's explanation
         self.assertIn("Ctrl+클릭", seen)
+
+    def test_no_dialog_notice_or_menu_of_the_main_actions_shows_an_internal_value_or_english(self):
+        """The main actions in Korean: each confirmation dialog is read and cancelled (nothing changes), each
+        notice is read, and the card menus are read. File pickers answer "cancelled"."""
+        case = self.open()
+        seen: list[tuple[str, str]] = []
+        found: list[str] = []
+        data = case.user_data()
+
+        def read(label: str, texts: list[tuple[str, str]]) -> None:
+            seen.extend(texts)
+            found.extend(f"{label}: {problem}" for problem in leaks(texts, data))
+
+        def dialog_waits(dialog, *_args) -> None:
+            for _ in range(3):
+                dialog.update()
+            read(f"dialog «{dialog.title()}»", shown_texts(dialog))
+            dialog.cancel()
+
+        shown = case.app.infobar.show
+
+        def notified(kind, message, *, title="", action=None):
+            read("notice", [("notice", message), ("notice", title)] + ([("notice", action[0])] if action else []))
+            return shown(kind, message, title=title, action=action)
+
+        def menu(label: str, widget: tk.Menu) -> None:
+            texts = []
+            for index in range((widget.index("end") or -1) + 1):
+                if widget.type(index) in ("command", "cascade", "checkbutton", "radiobutton"):
+                    texts.append((label, widget.entrycget(index, "label")))
+            read(label, texts)
+
+        app, hub = case.app, case.hub
+        patches = (patch.object(Dialog, "wait_window", dialog_waits), patch.object(app.infobar, "show", notified),
+                   patch.object(app, "ask_save_path", return_value=""),
+                   patch.object(app, "ask_open_path", return_value=""), patch.object(app, "ask_folder", return_value=""))
+        for each in patches:
+            each.start()
+            self.addCleanup(each.stop)
+        settle = case.settle
+
+        # Memories: the card menu, forget completely (cancelled), delete, move to Personal.
+        app.open_state(MEMORIES)
+        settle()
+        item = next(i for i in hub.items if i.item_id == case.plain.memory_id)
+        menu("card menu", hub.context_menu([item]))
+        hub.forget_item(item)
+        other = next(i for i in hub.items if i.item_id == case.editor_note.memory_id)
+        hub.do.move([other], PERSONAL_SPACE)
+        settle()
+        hub.delete_items([item])
+        settle()
+        # Quick add of a password (refused) and of a memory.
+        hub.quick_add.text.set("password=hunter2abc99")
+        hub.quick_add.save()
+        hub.quick_add.text.set("시험용: 빠른 추가 확인")
+        hub.quick_add.save()
+        settle()
+        # The inbox: to memories, discard.
+        app.open_state(INBOX_TAB)
+        settle()
+        first, second = hub.items[:2]
+        hub.do.to_memories(first)
+        settle()
+        hub.do.discard([second])
+        settle()
+        # Reviews: approve one, reject the other.
+        app.open_state(REVIEWS)
+        settle()
+        reviews = list(hub.items)
+        hub.reviews.approve(reviews[0])
+        settle()
+        if len(reviews) > 1:
+            hub.reviews.reject(reviews[1])
+            settle()
+        # Suggestions: approve all shown (cancelled), reject one.
+        app.suggestions.find()
+        app.open_state(SUGGESTIONS)
+        settle()
+        hub.suggestions.approve_shown()
+        settle()
+        # Settings: turn Personal off (cancelled), a new space (cancelled), check the engines, the language.
+        settings = app.settings
+        app.show_page("settings")
+        settle()
+        settings.turn_off_personal()
+        settings.new_space()
+        settings.check_engines()
+        settings.language_choice.set("en")
+        settings.choose_language()
+        settle()
+        read("settings after choosing a language", shown_texts(case.root))
+        # Connections: each host's actions that ask first (all cancelled), diagnostics, idle servers.
+        page = app.pages["connections"]
+        app.show_page("connections")
+        settle()
+        for host in ("codex", "claude", "claude_desktop"):
+            for action in (page.disconnect_host, page.change_personal, page.toggle_hooks, page.toggle_save_mode,
+                           page.toggle_skill):
+                action(host)
+                settle()
+        page.end_idle_servers()
+        page.pause_all()
+        settle()
+        # Import: import the previewed entries, then undo it (cancelled).
+        app.show_page("import")
+        importer = app.importer
+        importer.refresh()
+        importer.set_text(layout.SAMPLE)
+        importer.choose_destination("personal")
+        importer.start_preview()
+        app.tasks.wait(30)
+        settle()
+        importer.do_import()
+        app.tasks.wait(30)
+        settle()
+        read("import after importing", shown_texts(case.root))
+
+        newline = chr(10)
+        self.assertEqual(found, [], f"{len(found)} leaks:{newline}" + newline.join(found))
+        texts = newline.join(text for _path, text in seen)
+        for expected in ("완전히 잊기", "삭제한 기억에 남습니다", "비밀번호·토큰·키로 보이는", "되돌릴 수 없습니다"):
+            self.assertIn(expected, texts)  # the dialogs and notices were really read
 
     def test_positive_control_an_internal_value_and_an_english_sentence_are_reported(self):
         case = self.open()
