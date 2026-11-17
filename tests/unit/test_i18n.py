@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-import re
 import string
 import sys
 import tempfile
@@ -142,11 +141,38 @@ class TextKeyTests(unittest.TestCase):
         self.assertEqual([text for _n, _l, text in scan_source(source)], ["Save this memory"])
 
     def test_the_new_product_name_is_not_in_the_texts(self):
-        words = re.compile("(?!)")  # words withheld: checked by hash in a later commit
         for table in (en.STRINGS, ko.STRINGS):
-            for value in table.values():
+            for key, value in table.items():
                 for form in (value.values() if isinstance(value, dict) else [value]):
-                    self.assertIsNone(words.search(form))
+                    self.assertFalse(names_a_withheld_word(form), key)
+
+    def test_positive_control_a_withheld_word_is_found(self):
+        # The words are kept out of the repository; only their hashes are here. A made-up word of the same lengths
+        # shows the window search runs: with its own hash it is found.
+        self.assertTrue(names_a_withheld_word("Hello Zqxwvu.", hashes={_digest("zqxwvu")}))
+        self.assertFalse(names_a_withheld_word("Hello world.", hashes={_digest("zqxwvu")}))
+
+
+def _digest(text: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+# SHA-256 of the product-name words that must not appear before the name is filed (lower case): two of six letters,
+# two of two Hangul syllables. The words themselves are never written in the repository.
+WITHHELD_HASHES = frozenset({
+    "12ce821ff0d781389a2048d974da029fdeeb7be64e52d64741ac761be367cf68",
+    "bb38531e3c05ad48a4453fc62ff9f2957dbf0a9739957fd960b54ec00efec40b",
+    "934596c687e410995a0d672503c376ba55d215562ac04840c76b1bce05019873",
+    "e84b114c2224cec43a56063e60cd6038866150f985f569744d37ccaa6e6ded88",
+})
+
+
+def names_a_withheld_word(text: str, *, hashes=WITHHELD_HASHES) -> bool:
+    """Whether any 2- or 6-character run of ``text`` (lower case) hashes to one of ``hashes``."""
+    folded = text.casefold()
+    return any(_digest(folded[i:i + size]) in hashes for size in (2, 6) for i in range(len(folded) - size + 1))
 
 
 if __name__ == "__main__":
