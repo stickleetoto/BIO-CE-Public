@@ -29,7 +29,7 @@ TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (r"(?<!\{)\bspaces?\b(?!\})", ("공간",)),  # not the {space} placeholder
     (r"\bpersonal\b", ("개인",)),
     (r"\b(?:ai )?hosts?\b", ("AI 도구", "{host}")),
-    (r"\bimport(?:ed|s|ing)?\b", ("가져오", "가져온", "가져옴", "가져와")),
+    (r"\bimport(?:ed|s|ing)?\b", ("가져오", "가져온", "가져옴", "가져와", "가져올", "가져왔")),
     (r"\bexport(?:ed|s|ing)?\b", ("내보내", "내보낸", "내보냄", "내보낼", "내보냈")),
     (r"\bbackups?\b|\bbacked up\b|\bback(?:s)? up\b", ("백업",)),
     (r"\brestor(?:e|ed|es|ing)\b", ("복원",)),
@@ -52,6 +52,7 @@ RETIRED: tuple[tuple[str, str], ...] = (
 EXCEPTIONS: dict[str, str] = {
     "shortcut.tab": "“Space” is the key's name, not a BIO CE space",
     "hub.card.no_text": "a card's own label: “memory text” is the card's 본문",
+    "dashboard.stored_detail": "“your personal store” is the local database on this PC, not the Personal space",
 }
 
 

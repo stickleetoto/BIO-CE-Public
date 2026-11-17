@@ -490,7 +490,7 @@ STRINGS: dict[str, object] = {
     "import.personal_choice": "개인(추천: 다른 AI의 기억은 대부분 사용자 본인에 관한 것)",
     "import.general_note": "일반은 연결된 모든 AI 도구가 함께 쓰며 세션 훅이 불러옵니다. 개인적인 내용은 개인에 두세요.",
     "import.source.other": "기타",
-    "import.what": "1. 가져오기 대상",
+    "import.what": "1. 가져올 것",
     "import.what_note": "다른 AI가 준 목록을 붙여 넣거나 .md 또는 .txt 파일을 여세요. 각 줄은 \"[2025-03-14] - 내용\" "
                         "모양입니다. 다른 AI가 쓴 날짜는 확인하기 전까지 출처 날짜로 둡니다.",
     "import.open_file": "파일 열기…",
@@ -574,11 +574,11 @@ STRINGS: dict[str, object] = {
     # Import screen: importing
     "import.button": "가져오기",
     "import.button_count": {"other": "항목 {count:,}개 가져오기: {spaces}"},
-    "import.confirm.title": "이 항목들을 가져와도 될까요?",
+    "import.confirm.title": "이 항목들을 가져올까요?",
     "import.confirm.message": "새 항목은 각 공간의 수집함으로 가며, 거기서 보관하거나 버립니다. 가지고 있는 기억과 "
                               "충돌할 수 있는 항목은 검토 대기로 갑니다. 덮어쓰는 것은 없습니다.",
     "import.confirm.point": {"other": "{space}: 항목 {count:,}개"},
-    "import.done": {"other": "수집함에 항목 {count:,}개를 가져와 넣었습니다."},
+    "import.done": {"other": "항목 {count:,}개를 수집함으로 가져왔습니다."},
     "import.done_review": {"other": "수집함에 항목 {count:,}개를 가져와 넣고, {review}개는 검토로 보냈습니다."},
     "import.done_title": "가져옴",
     "import.failed": "BIO CE가 가져오지 못했습니다. 더 바뀐 것은 없습니다.",
@@ -618,7 +618,7 @@ STRINGS: dict[str, object] = {
     "dashboard.needs_attention": "확인 필요",
     "dashboard.read_failed": "기억 데이터베이스를 읽지 못했습니다. BIO CE를 다시 시작하고 다시 해 보세요.",
     "dashboard.stored": "저장된 기억",
-    "dashboard.stored_detail": {"other": "개인 저장소에 있는 기억(삭제한 것 제외)"},
+    "dashboard.stored_detail": {"other": "이 PC에 저장된 기억(삭제한 것 제외)"},
     "dashboard.connections": "AI 연결",
     "dashboard.connected_of": {"other": "AI 도구 {count:,}개 중 연결됨"},
     "dashboard.recent": "최근 기억",
