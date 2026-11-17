@@ -19,6 +19,7 @@ from bio_ce.engine.presentation import SEPARATE_DATABASES_NOTE, engine_rows
 from bio_ce.ui.hub.common import space_label
 from bio_ce.ui.i18n import t
 from bio_ce.ui.pages import Page
+from bio_ce.ui.service_text import say
 from bio_ce.ui.shortcuts import SHORTCUTS
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS
 from bio_ce.ui.widgets import (
@@ -330,7 +331,7 @@ class SettingsPage(Page):
         try:
             action()
         except Exception as exc:  # noqa: BLE001 - shown to the user
-            self.app.notify("error", str(exc) or t("settings.spaces.change_failed"), title=title)
+            self.app.notify("error", say(exc) or t("settings.spaces.change_failed"), title=title)
             return False
         self.render_spaces()
         return True
@@ -426,7 +427,7 @@ class SettingsPage(Page):
             for key, variable in self.inbox_values.items():
                 control.set_inbox_setting(key, int(variable.get().strip()))
         except (ValueError, TypeError) as exc:
-            self.app.notify("error", t("settings.inbox.save_failed", reason=exc), title=t("settings.inbox.saved_title"))
+            self.app.notify("error", t("settings.inbox.save_failed", reason=say(exc)), title=t("settings.inbox.saved_title"))
             self.render_inbox_settings()
             return
         self.app.notify("success", t("settings.inbox.saved"), title=t("settings.inbox.saved_title"))

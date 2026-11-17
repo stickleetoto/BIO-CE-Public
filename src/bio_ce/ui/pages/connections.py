@@ -36,6 +36,7 @@ from bio_ce.ui.hub.data import REVIEWS
 from bio_ce.ui.i18n import t
 from bio_ce.ui.pages import Page
 from bio_ce.ui.pages.dashboard import host_pill
+from bio_ce.ui.service_text import say
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS
 from bio_ce.ui.widgets import Button, Card, Pill, ScrollFrame, WrapLabel, caption_label, section_label
 
@@ -795,7 +796,7 @@ class ConnectionsPage(Page):
         try:
             self.app.connection_manager.set_mode(host, mode)
         except MCPConnectionError as exc:
-            self.app.notify("error", str(exc), title=t("connections.auto.failed_title", name=name))
+            self.app.notify("error", say(exc), title=t("connections.auto.failed_title", name=name))
             return
         self.app.hosts_changed()
         self.app.notify("success", host_message(host, self.app.host_statuses(refresh=False).get(host)),
@@ -855,7 +856,7 @@ class ConnectionsPage(Page):
         try:
             self.app.connection_manager.set_personal_access(host, can_read=read, can_write=write)
         except Exception as exc:  # noqa: BLE001 - shown to the user
-            self.app.notify("error", str(exc) or t("connections.setting_failed"),
+            self.app.notify("error", say(exc) or t("connections.setting_failed"),
                             title=t("connections.personal.title", name=name))
             return
         self.app.notify("success", {"read": t("connections.personal.now_read", name=name),
@@ -872,7 +873,7 @@ class ConnectionsPage(Page):
         try:
             self.app.connection_manager.set_connection_settings(host, all_projects=wanted)
         except Exception as exc:  # noqa: BLE001 - shown to the user
-            self.app.notify("error", str(exc) or t("connections.setting_failed"),
+            self.app.notify("error", say(exc) or t("connections.setting_failed"),
                             title=t("connections.spaces.title", name=name))
             return
         self.app.notify("success", t("connections.spaces.now_all", name=name) if wanted else
@@ -906,7 +907,7 @@ class ConnectionsPage(Page):
         try:
             self.app.connection_manager.set_connection_settings(host, save_mode=wanted)
         except Exception as exc:  # noqa: BLE001 - shown to the user
-            self.app.notify("error", str(exc) or t("connections.setting_failed"),
+            self.app.notify("error", say(exc) or t("connections.setting_failed"),
                             title=t("connections.saving.title", name=name))
             return
         self.app.notify("success", done, title=t("connections.saving.title", name=name))
@@ -989,7 +990,7 @@ class ConnectionsPage(Page):
     def _code_mode_done(self, host: str, result: CodeModeResult) -> None:
         self._finish(host)
         kind = "success" if result.state in ("applied", "already_applied") else "warning"
-        self.app.notify(kind, result.detail, title=t("connections.code_mode.done_title"))
+        self.app.notify(kind, say(result.detail), title=t("connections.code_mode.done_title"))
 
     def _show_skill(self, host: str, parent: tk.Misc | None = None) -> None:
         path = self.app.connection_manager.memory_skill_path(host)
@@ -1092,9 +1093,9 @@ class ConnectionsPage(Page):
                 message += " " + t("connections.connected.backup")
         message += " " + settings_summary(self.connection_settings(host))
         if result.code_mode is not None:
-            message += " " + result.code_mode.detail
+            message += " " + say(result.code_mode.detail)
         if isinstance(skill, BaseException):
-            message += " " + t("connections.connected.skill_failed", error=str(skill))
+            message += " " + t("connections.connected.skill_failed", error=say(skill))
         elif skill is not None:
             message += " " + _skill_message(name, skill[0])
         if host == DESKTOP:
@@ -1137,10 +1138,10 @@ class ConnectionsPage(Page):
                   "hooks": t("connections.failed.hooks", name=name),
                   "code_mode": t("connections.failed.code_mode"), "skill": t("connections.failed.skill")}
         if isinstance(error, MCPConnectionConflict):
-            message = t("connections.failed.conflict", error=error)
+            message = t("connections.failed.conflict", error=say(error))
             kind = "warning"
         elif isinstance(error, MCPConnectionError):
-            message = str(error)
+            message = say(error)
             kind = "error"
         else:
             message = t("connections.failed.other", name=name)
