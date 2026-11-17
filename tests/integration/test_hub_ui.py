@@ -127,10 +127,23 @@ class HubUiTests(unittest.TestCase):
     def focus(self, widget: tk.Misc) -> None:
         """Keyboard focus without bringing the window forward (tests run off screen, 2026-11-17): Tk gives the
         widget the focus when the window has it, so a card's FocusIn is told to the screen here as Tk would."""
+        self.settle()  # a list shown again a moment ago must be on screen before it can take the focus (CI)
+        if widget in self.hub.grid.cards.values() and self.hub.scroll.winfo_ismapped():
+            # A user focuses a card they can see (a click, or the arrow keys, which scroll); in the CI runner's small
+            # window a card further down is out of view and can't take the focus there.
+            self.hub.scroll.scroll_to_widget(widget)
+            self.settle()
         widget.focus_set()
         if widget in self.hub.grid.cards.values():
             self.hub.card_focused(widget)
         self.settle()
+
+    def focus_card_or_drawer(self, card) -> None:
+        """The card if the list is on screen; the drawer when it has the whole body and the list is hidden (a screen
+        below the minimum window, POLISH §1.3: the CI runner). A hidden card can't take the focus, so the keys
+        would act on the search box above instead (mirror CI 2026-11-18)."""
+        self.settle()
+        self.focus(card if card.winfo_ismapped() else self.hub.drawer)
 
     def card(self, memory_id: str, state: str = MEMORIES):
         return self.hub.grid.cards[f"{state}:{memory_id}"]
@@ -188,7 +201,7 @@ class HubUiTests(unittest.TestCase):
         self.hub.drawer.close_button.invoke()
         self.assertFalse(self.hub.drawer_open)
         self.hub.card_clicked(card)
-        self.focus(card)
+        self.focus_card_or_drawer(card)
         self.hub.keys.escape()
         self.assertFalse(self.hub.drawer_open)
         self.assertFalse(card.opened)
@@ -234,6 +247,7 @@ class HubUiTests(unittest.TestCase):
             self.assertTrue(hub.full_swap)
             self.assertEqual(hub.content.winfo_manager(), "")  # the list is hidden, never half covered
             self.assertEqual(hub.drawer.back_button.winfo_manager(), "pack")
+            self.assertTrue(hub.search.winfo_ismapped())  # the search above stays
             hub.drawer.back_button.invoke()
             self.settle()
         self.assertFalse(hub.drawer_open)
@@ -334,13 +348,11 @@ class HubUiTests(unittest.TestCase):
     # Keys -------------------------------------------------------------------------------------------------------
 
     def test_keys_e_delete_and_ctrl_z_act_on_the_focused_card_but_not_while_typing(self):
+        # Delete and Ctrl+Z first, E last: on a screen below the minimum window (the CI runner) the drawer E opens
+        # takes the whole body, and an off-screen test window never repaints the list it shows again afterwards, so
+        # its cards could not take the focus there (mirror CI 2026-11-18). On a real screen the list repaints.
         hub = self.hub
         card = self.card(self.first.memory_id)
-        self.focus(card)
-        hub.keys.edit()  # E
-        self.assertTrue(hub.drawer.editing)
-        self.app.editor.cancel_edit()
-        hub.close_drawer(force=True)
         self.focus(hub.search.entry)
         hub.focus_key = card.key
         hub.keys.delete()  # Delete while typing in the search box: nothing happens
@@ -351,12 +363,17 @@ class HubUiTests(unittest.TestCase):
         hub.keys.undo()  # Ctrl+Z
         self.assertEqual(self.app.pending.hidden(), frozenset())
         self.assertEqual(self.service.read(self.first.memory_id).revision_number, 1)
+        self.focus(self.card(self.first.memory_id))  # the list was laid out again after the undo
+        hub.keys.edit()  # E
+        self.assertTrue(hub.drawer.editing)
+        self.app.editor.cancel_edit()
+        hub.close_drawer(force=True)
 
     def test_m_opens_the_move_menu_for_the_selected_cards(self):
         hub = self.hub
         hub.card_clicked(self.card(self.first.memory_id))
         hub.toggle_select(self.card(self.second.memory_id))
-        self.focus(self.card(self.first.memory_id))
+        self.focus_card_or_drawer(self.card(self.first.memory_id))
         with patch.object(tk.Menu, "tk_popup") as popped:
             hub.keys.move()
         popped.assert_called_once()

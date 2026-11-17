@@ -455,9 +455,9 @@ class HubPage(Page):
 
     def drawer_overlaps(self) -> bool:
         """True when the open drawer covers any part of the cards' area on screen (it never should, §1)."""
-        if not self._drawer_shown or self.full_swap:
+        if not self._drawer_shown:
             return False
-        try:
+        try:  # where they are on screen, whatever mode the screen thinks it is in
             self.update_idletasks()
             if not (self.drawer.winfo_ismapped() and self.content.winfo_ismapped()):
                 return False
@@ -470,7 +470,23 @@ class HubPage(Page):
     def _show_drawer(self) -> None:
         self._drawer_shown = True
         self._place_drawer(max(self.window_width(), 1))
-        self.after_idle(self.relayout)
+        self.after_idle(lambda: self._relayout_and_show(self.open_key))
+
+    def _relayout_and_show(self, key: str | None) -> None:
+        """Lay the list out for the drawer opening or closing, then scroll the card the user opened back into view
+        (POLISH §1.4). Fewer columns move a card down; without this it could end up out of view, and could not take
+        the keyboard focus there (mirror CI 2026-11-18, a screen below the minimum window)."""
+        self.relayout()
+        card = self.grid.cards.get(key) if key else None
+        try:
+            self.update_idletasks()  # the list just shown again is laid out and on screen before it scrolls
+        except tk.TclError:
+            return
+        if card is not None and not self.full_swap and self.scroll.winfo_ismapped():
+            try:
+                self.scroll.scroll_to_widget(card)
+            except tk.TclError:
+                pass
 
     def close_drawer(self, force: bool = False) -> bool:
         if not self._drawer_shown:
@@ -490,7 +506,7 @@ class HubPage(Page):
         if card is not None:
             card.set_state(opened=False)
             card.focus_set()
-        self.after_idle(self.relayout)
+        self.after_idle(lambda: self._relayout_and_show(old))
         return True
 
     def close_drawer_for(self, ids) -> None:
