@@ -594,7 +594,7 @@ STRINGS: dict[str, object] = {
                                             "않습니다. 남길 만한 것은 기억 → 수집함에서 기억으로 옮기세요.",
     "connections.saving.collect_point_cleanup": "30일 동안 쓰이지 않은 항목은 버림 제안이 되고, 보관하지 않으면 7일 뒤에 "
                                                 "버립니다. 두 기간 모두 설정에서 바꿀 수 있습니다.",
-    "connections.saving.collect_point_review": "바로 저장된 기억의 변경은 여전히 검토를 기다립니다. 비밀 정보는 언제나 "
+    "connections.saving.collect_point_review": "이미 있는 기억을 바꾸는 것은 여전히 검토를 기다립니다. 비밀 정보는 언제나 "
                                                "거부합니다.",
     "connections.saving.collect_point_skill": "BIO CE가 이 AI 도구에 기억 스킬을 설치했다면 수집 방식에 맞게 스킬을 다시 "
                                               "씁니다.",
@@ -698,7 +698,7 @@ STRINGS: dict[str, object] = {
     "connections.connect.title": "{name}을(를) 연결할까요?",
     "connections.connect.message": "BIO CE가 {name}의 자체 명령으로 사용자 설정에 “bio-ce”라는 MCP 서버 항목 하나를 "
                                    "추가합니다.",
-    "connections.connect.point_read": "{name}이(가) 개인 저장소의 활성 기억을 검색하고 읽을 수 있게 됩니다. 기억을 "
+    "connections.connect.point_read": "{name}이(가) 이 PC에 저장된 활성 기억을 검색하고 읽을 수 있게 됩니다. 기억을 "
                                       "추가·수정·삭제할 수는 없습니다.",
     "connections.connect.point_provider": "{name}이(가) 읽은 기억은 대화의 일부가 되며, {name}이(가) 쓰는 AI 모델 "
                                           "제공자({provider})에게 보내질 수 있습니다. 그곳에서 어떻게 되는지는 BIO CE가 "
@@ -716,7 +716,7 @@ STRINGS: dict[str, object] = {
     "connections.desktop.settings_file": "설정 파일: {path}",
     "connections.desktop.settings_file_found": "BIO CE가 Claude 앱의 설정 파일을 찾습니다.",
     "connections.desktop.point_backup": "먼저 파일을 백업합니다. 파일을 읽을 수 없으면 BIO CE는 아무것도 바꾸지 않습니다.",
-    "connections.desktop.point_read": "Claude 채팅에서 개인 저장소의 활성 기억을 검색하고 읽을 수 있게 됩니다. 채팅에서 "
+    "connections.desktop.point_read": "Claude 채팅에서 이 PC에 저장된 활성 기억을 검색하고 읽을 수 있게 됩니다. 채팅에서 "
                                       "읽은 기억은 대화의 일부가 되어 {provider}에 보내집니다. 그곳에서 어떻게 되는지는 "
                                       "BIO CE가 통제할 수 없습니다.",
     "connections.desktop.point_auto_off": "자동 기억은 꺼진 채로 둡니다. 켜기 전까지 앱은 검색하고 읽을 수만 있습니다.",

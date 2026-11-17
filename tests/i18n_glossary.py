@@ -53,6 +53,10 @@ EXCEPTIONS: dict[str, str] = {
     "shortcut.tab": "“Space” is the key's name, not a BIO CE space",
     "hub.card.no_text": "a card's own label: “memory text” is the card's 본문",
     "dashboard.stored_detail": "“your personal store” is the local database on this PC, not the Personal space",
+    "connections.connect.point_read": "“your personal store” is the local database on this PC, not the Personal space",
+    "connections.desktop.point_read": "“your personal store” is the local database on this PC, not the Personal space",
+    "connections.saving.collect_point_review": "“curated memories” are saved memories (not the inbox), not the "
+                                               "Curated saving mode",
 }
 
 
