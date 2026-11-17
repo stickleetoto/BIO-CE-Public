@@ -17,11 +17,33 @@ from unittest import mock
 from bio_ce.control_store import ControlStore, control_database_for
 from bio_ce.ui import i18n
 from bio_ce.ui.i18n import en, ko
-from tests.i18n_scan import ui_literals, used_keys
+from tests.i18n_scan import scan_source, ui_literals, used_keys
 
 # The number of English texts still written directly in the UI. It may only go down (v0.4.4 moves them to keys);
 # lower it when a change removes some. At the end of v0.4.4 only an allowlist remains.
-LITERAL_BASELINE = 828  # 2026-11-17, v0.4.4 U1+U2 memory screen (was 1139 at the v0.4.3-rc1 UI)
+# v0.4.4 U5 (design §6.3): no English text is written directly in the UI any more (1,139 at the v0.4.3-rc1 UI).
+# What may stay, and why: names, key names, Tk class names, and checks the code makes on its own strings.
+_NAMES = "a product or AI tool name: not translated (glossary §3)"
+_KEYS = "a key name on the keyboard: not translated (glossary §3)"
+_TK = "a Tk widget class name, not text"
+ALLOWED: dict[str, str] = {
+    "BIO CE": _NAMES, "BIO Community Edition": _NAMES, "ChatGPT": _NAMES, "Claude": _NAMES, "Claude Code": _NAMES,
+    "Claude desktop app": "format.HOST_NAMES: the English host name for hosts and logs; screens use host_name()",
+    "Codex (CLI · desktop app)": "format.HOST_NAMES: the English host name for hosts and logs; screens use host_name()",
+    "Ctrl+1": _KEYS, "Ctrl+2": _KEYS, "Ctrl+3": _KEYS, "Ctrl+4": _KEYS, "Ctrl+1 – Ctrl+4": _KEYS, "Ctrl+F / /": _KEYS,
+    "Ctrl+H": _KEYS, "Ctrl+N": _KEYS, "Ctrl+S / Ctrl+Enter": _KEYS, "Ctrl+Z": _KEYS,
+    "Ctrl+click / Shift+click / Space": _KEYS, "Delete": _KEYS, "E / Ctrl+E": _KEYS, "Enter": _KEYS, "Esc": _KEYS,
+    "F5": _KEYS, "Shift+F10": _KEYS, "Tab / Shift+Tab": _KEYS,
+    "Entry": _TK, "Listbox": _TK, "Sash": _TK, "Spinbox": _TK, "TCombobox": _TK, "TEntry": _TK, "TFrame": _TK,
+    "TSpinbox": _TK, "Text": _TK, "Treeview": _TK,
+    "*.md *.txt *.markdown": "a file-dialog pattern",
+    "BIO CE missing font probe": "a font name the theme asks Tk for, to see what Tk falls back to",
+    "UI background task did not finish": "an exception for a programming error in the task runner; never shown",
+    "the memory changed": "an internal exception the editor catches and turns into its own notice",
+    "must not be empty": "format.validation_feedback reads the store's English message; not shown",
+    "(\\w+) (must not be empty|exceeds (\\d+) characters|contains a control character)":
+        "format.validation_feedback's pattern for the store's English message",
+}
 
 
 def placeholders(value) -> set[str]:
@@ -107,10 +129,17 @@ class TextKeyTests(unittest.TestCase):
             finally:
                 control.close()
 
-    def test_no_new_text_is_written_directly_in_the_ui(self):
+    def test_no_text_is_written_directly_in_the_ui(self):
         found = ui_literals()
-        self.assertGreater(len(found), 0)  # positive control: the scan sees today's literals
-        self.assertLessEqual(len(found), LITERAL_BASELINE, "move new UI text to i18n keys")
+        left = [f"{name}:{line}: {text!r}" for name, line, text in found if text not in ALLOWED]
+        newline = chr(10)
+        self.assertEqual(left, [], "move this UI text to i18n keys:" + newline + newline.join(left))
+        self.assertEqual(sorted(set(ALLOWED) - {text for _n, _l, text in found}), [],
+                         "allowed texts no longer in the UI: remove them from ALLOWED")
+
+    def test_positive_control_text_written_directly_is_found(self):
+        source = 'import tkinter as tk\nlabel = tk.Label(text="Save this memory")\n__all__ = ["Label"]\n'
+        self.assertEqual([text for _n, _l, text in scan_source(source)], ["Save this memory"])
 
     def test_the_new_product_name_is_not_in_the_texts(self):
         words = re.compile("(?!)")  # words withheld: checked by hash in a later commit

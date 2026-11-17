@@ -1238,6 +1238,9 @@ STRINGS: dict[str, object] = {
     # ===== end of U5-C =====
     # ===== U5-L: App shell, formatting, service messages (app.py, format.py, theme.py, tasks.py, the rest) =====
     # Add this part's keys right below this line, in this block only (other parts merge around it).
+    "app.engine.status_unreadable": "The engine status could not be read.",
+    "app.engine.none_connected": "No memory engine is connected.",
+    "app.engine.unavailable": "The memory engine is unavailable.",
     "format.host.codex": "Codex (CLI · desktop app)",
     "format.host.claude": "Claude Code",
     "format.host.claude_desktop": "Claude desktop app",

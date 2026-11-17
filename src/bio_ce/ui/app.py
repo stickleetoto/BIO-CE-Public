@@ -425,7 +425,7 @@ class BIOCEDesktop:
                 statuses[engine_id] = backend.status()
             except Exception:
                 statuses[engine_id] = EngineStatus(engine_id, EngineState.ERROR,
-                                                   "The engine status could not be read.")
+                                                   t("app.engine.status_unreadable"))
         self._engine_statuses = statuses
         binding = self.engine_selection.binding
         self.engine_status = statuses.get(binding.engine_id) if binding is not None else None
@@ -473,9 +473,9 @@ class BIOCEDesktop:
     def memory_engine(self) -> EngineBackend:
         """The engine for reads and writes now, or :class:`EngineUnavailable`. Never another engine."""
         if self.engine_selection.binding is None:
-            raise EngineUnavailable("No memory engine is connected.")
+            raise EngineUnavailable(t("app.engine.none_connected"))
         if self.engine_status is None or not self.engine_status.ready:
-            raise EngineUnavailable("The memory engine is unavailable.")
+            raise EngineUnavailable(t("app.engine.unavailable"))
         return self.engine
 
     # Shared services ------------------------------------------------------

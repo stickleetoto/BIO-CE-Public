@@ -31,21 +31,50 @@ def _docstrings(tree: ast.AST) -> set[int]:
     return ids
 
 
+def _code_strings(tree: ast.AST) -> set[int]:
+    """Strings that are code, not text: the names in ``__all__`` and quoted type annotations."""
+    ids = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "__all__"
+                                                for target in node.targets):
+            ids |= {id(element) for element in ast.walk(node.value)}
+        annotations = []
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            annotations.append(node.returns)
+            arguments = node.args
+            annotations += [arg.annotation for arg in (*arguments.posonlyargs, *arguments.args,
+                                                       *arguments.kwonlyargs, arguments.vararg, arguments.kwarg)
+                            if arg is not None]
+        elif isinstance(node, ast.AnnAssign):
+            annotations.append(node.annotation)
+        for annotation in annotations:
+            if annotation is not None:
+                ids |= {id(part) for part in ast.walk(annotation)}
+    return ids
+
+
+def scan_source(source: str, name: str = "<source>") -> list[tuple[str, int, str]]:
+    """The text literals in one module's source (``ui_literals`` runs this on every UI module)."""
+    tree = ast.parse(source)
+    skip = _docstrings(tree) | _code_strings(tree)
+    found = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Constant) and isinstance(node.value, str)) or id(node) in skip:
+            continue
+        text = node.value.strip()
+        if len(text) < 2 or not re.search(r"[A-Za-z가-힣]", text) or _NOT_TEXT.match(text):
+            continue
+        if text[0].isupper() or " " in text:
+            found.append((name, node.lineno, text))
+    return found
+
+
 def ui_literals() -> list[tuple[str, int, str]]:
     found = []
     for path in sorted(UI.rglob("*.py")):
-        if "i18n" in path.parts:
+        if "i18n" in path.parts or path.name == "service_text.py":  # translation tables: English on purpose
             continue
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        skip = _docstrings(tree)
-        for node in ast.walk(tree):
-            if not (isinstance(node, ast.Constant) and isinstance(node.value, str)) or id(node) in skip:
-                continue
-            text = node.value.strip()
-            if len(text) < 2 or not re.search(r"[A-Za-z가-힣]", text) or _NOT_TEXT.match(text):
-                continue
-            if text[0].isupper() or " " in text:
-                found.append((str(path.relative_to(UI)), node.lineno, text))
+        found += scan_source(path.read_text(encoding="utf-8"), str(path.relative_to(UI)))
     return found
 
 
@@ -58,4 +87,4 @@ def used_keys() -> set[str]:
     return keys
 
 
-__all__ = ["ui_literals", "used_keys"]
+__all__ = ["scan_source", "ui_literals", "used_keys"]

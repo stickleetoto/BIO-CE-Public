@@ -1173,6 +1173,9 @@ STRINGS: dict[str, object] = {
     # ===== end of U5-C =====
     # ===== U5-L: App shell, formatting, service messages (app.py, format.py, theme.py, tasks.py, the rest) =====
     # Add this part's keys right below this line, in this block only (other parts merge around it).
+    "app.engine.status_unreadable": "엔진 상태를 읽지 못했습니다.",
+    "app.engine.none_connected": "연결된 기억 엔진이 없습니다.",
+    "app.engine.unavailable": "기억 엔진을 쓸 수 없습니다.",
     "format.host.codex": "Codex (CLI · 데스크톱 앱)",
     "format.host.claude": "Claude Code",
     "format.host.claude_desktop": "Claude 앱",
