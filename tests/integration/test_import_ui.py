@@ -20,9 +20,13 @@ from bio_ce.desktop import AppDataPaths, BIOCEDesktop, DesktopMemoryService
 from bio_ce.spaces import PERSONAL_SPACE
 from bio_ce.ui.dialogs import EntryEditDialog
 from bio_ce.ui.hub.data import INBOX, REVIEWS
-from bio_ce.ui.pages.importing import GENERAL_NOTE, PERSONAL_CHOICE
 from bio_ce.ui.widgets import ScrollFrame
 from tests.ui_audit import HEADING_DIVIDER, style_padding_x
+
+# The English texts as written before they moved to i18n keys (v0.4.4 U5-C); the screen must show them unchanged.
+PERSONAL_CHOICE = "Personal (recommended: memories from another AI are mostly about you)"
+GENERAL_NOTE = ("General is shared with every connected AI host and recalled by session hooks. Personal details "
+                "belong in Personal.")
 from tests.integration.test_auto_memory_ui import FakeManagedConnections
 from tests.integration.test_desktop_ui_redesign import new_root
 

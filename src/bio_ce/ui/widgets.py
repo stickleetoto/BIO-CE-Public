@@ -15,6 +15,7 @@ import tkinter as tk
 from tkinter import font as tkfont
 from tkinter import ttk
 
+from bio_ce.ui.i18n import t
 from bio_ce.ui.theme import READING_MAX_WIDTH, SPACE_L, SPACE_M, SPACE_XS, Theme
 
 
@@ -850,7 +851,7 @@ class SearchBox(Field):
         self.placeholder = tk.Label(self.content, text=placeholder, font=theme.font("body"), background=self._fill,
                                     foreground=c.text_muted, borderwidth=0)
         self.placeholder.bind("<Button-1>", lambda _e: self.entry.focus_set())
-        self.clear_button = IconButton(self.content, theme, "close", "Clear search", command=self.clear)
+        self.clear_button = IconButton(self.content, theme, "close", t("widget.clear_search"), command=self.clear)
         self._on_clear = on_clear
         variable.trace_add("write", lambda *_: self._sync())
         self.entry.bind("<Escape>", lambda _e: self.clear() if self.variable.get() else None, add="+")
@@ -1142,7 +1143,7 @@ class InfoBar(tk.Frame):
         self.title_label = tk.Label(text_column, font=theme.font("body_strong"), anchor="w", borderwidth=0)
         self.message_label = WrapLabel(text_column, font=theme.font("body"))
         self.message_label.pack(fill="x")
-        self.close_button = IconButton(self.inner, theme, "close", "Dismiss", command=self.hide)
+        self.close_button = IconButton(self.inner, theme, "close", t("widget.dismiss"), command=self.hide)
         self.close_button.pack(side="right", anchor="n", padx=theme.px(6), pady=theme.px(5))
         self.action_button: Button | None = None
 
@@ -1176,7 +1177,7 @@ class InfoBar(tk.Frame):
             self.action_button.destroy()
             self.action_button = None
         self.close_button.destroy()
-        self.close_button = IconButton(self.inner, self.theme, "close", "Dismiss", command=self.hide)
+        self.close_button = IconButton(self.inner, self.theme, "close", t("widget.dismiss"), command=self.hide)
         self.close_button.pack(side="right", anchor="n", padx=self.theme.px(6), pady=self.theme.px(5))
         if action is not None:
             label, callback = action

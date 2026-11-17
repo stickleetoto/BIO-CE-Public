@@ -17,11 +17,15 @@ from bio_ce.importer import (
     BLOCKED,
     BATCH_DUPLICATE,
     CONFLICT,
+    EMPTY,
     EXISTS,
+    INSTRUCTION,
     NEW,
     PATH_REVIEW,
+    SECRET,
     SENSITIVE_LABELS,
     STATE_LABELS,
+    TOO_LONG,
     ImportCancelled,
     ImportRejected,
     parse_date,
@@ -29,7 +33,8 @@ from bio_ce.importer import (
     read_import_file,
 )
 from bio_ce.ui.dialogs import Dialog, EntryEditDialog
-from bio_ce.ui.format import format_timestamp, plural, preview as short
+from bio_ce.ui.format import format_timestamp, preview as short
+from bio_ce.ui.hub.common import space_label
 from bio_ce.ui.hub.data import INBOX, SUGGESTIONS
 from bio_ce.ui.i18n import t
 from bio_ce.ui.pages import Page
@@ -49,19 +54,56 @@ from bio_ce.ui.widgets import (
     section_label,
 )
 
-PERSONAL_CHOICE = "Personal (recommended: memories from another AI are mostly about you)"
-GENERAL_NOTE = ("General is shared with every connected AI host and recalled by session hooks. Personal details "
-                "belong in Personal.")
-SOURCE_LABELS = (("chatgpt", "ChatGPT"), ("claude", "Claude"), ("other", "Other"))
-FILTERS = (("all", "All entries"), ("new", "New"), ("exists", "Already there"), ("review", "Goes to review"),
-           ("sensitive", "Sensitive only"), ("blocked", "Blocked"))
+def personal_choice() -> str:
+    return t("import.personal_choice")
+
+
+def general_note() -> str:
+    return t("import.general_note")
+
+
+def source_labels() -> tuple[tuple[str, str], ...]:
+    return (("chatgpt", "ChatGPT"), ("claude", "Claude"), ("other", t("import.source.other")))
+
+
+def filters() -> tuple[tuple[str, str], ...]:
+    return (("all", t("import.filter.all")), ("new", t("import.filter.new")), ("exists", t("import.filter.exists")),
+            ("review", t("import.filter.review")), ("sensitive", t("import.filter.sensitive")),
+            ("blocked", t("import.filter.blocked")))
+
+
+def state_label(state: str) -> str:
+    """The preview's STATE cell in the app's language; a state this screen doesn't know keeps the importer's label."""
+    labels = {
+        NEW: t("import.state.new"), EXISTS: t("import.state.exists"), CONFLICT: t("import.state.conflict"),
+        BATCH_DUPLICATE: t("import.state.batch_duplicate"), SECRET: t("import.state.secret"),
+        INSTRUCTION: t("import.state.instruction"), TOO_LONG: t("import.state.too_long"),
+        PATH_REVIEW: t("import.state.path_review"), EMPTY: t("import.state.empty"),
+    }
+    return labels.get(state) or STATE_LABELS[state]
+
+
+def sensitive_label(key: str) -> str:
+    """A sensitive kind in the app's language; one this screen doesn't know keeps the importer's label."""
+    labels = {
+        "health": t("import.sensitive.health"), "military": t("import.sensitive.military"),
+        "school": t("import.sensitive.school"), "family": t("import.sensitive.family"),
+        "other": t("import.sensitive.other"),
+    }
+    return labels.get(key) or SENSITIVE_LABELS[key]
 
 
 class ImportPage(Page):
     key = "import"
     nav_key = "memories"
-    title = "Import memories"
-    subtitle = "From ChatGPT, Claude, or another AI: preview first, nothing is overwritten"
+
+    @property
+    def title(self) -> str:  # type: ignore[override]
+        return t("import.title")
+
+    @property
+    def subtitle(self) -> str:  # type: ignore[override]
+        return t("import.subtitle")
 
     def __init__(self, app, master) -> None:
         super().__init__(app, master)
@@ -80,35 +122,33 @@ class ImportPage(Page):
 
         form = Card(body, theme, padding=SPACE_L)
         form.pack(fill="x", pady=(0, theme.px(SPACE_M)))
-        section_label(form.body, theme, "1. What to import").pack(fill="x")
-        WrapLabel(form.body, "Paste the list another AI gave you, or open a .md or .txt file. Each line looks like "
-                  "\"[2025-03-14] - content\". Dates written by another AI are kept as the source's date until you "
-                  "confirm them.", font=theme.font("caption"), foreground=c.text_secondary).pack(
+        section_label(form.body, theme, t("import.what")).pack(fill="x")
+        WrapLabel(form.body, t("import.what_note"), font=theme.font("caption"), foreground=c.text_secondary).pack(
             fill="x", pady=(theme.px(SPACE_XS), theme.px(SPACE_S)))
         self.text = TextArea(form.body, theme, font="body")
         self.text.text.configure(height=8)
         self.text.pack(fill="x")
         row = tk.Frame(form.body, background=c.surface)
         row.pack(fill="x", pady=(theme.px(SPACE_S), 0))
-        Button(row, theme, "Open file…", command=self.open_file).pack(side="left")
+        Button(row, theme, t("import.open_file"), command=self.open_file).pack(side="left")
         self.encoding_label = tk.Label(row, text="", font=theme.font("caption"), background=c.surface,
                                        foreground=c.text_muted)
         self.encoding_label.pack(side="left", padx=(theme.px(SPACE_S), 0))
 
         choose = tk.Frame(form.body, background=c.surface)
         choose.pack(fill="x", pady=(theme.px(SPACE_M), 0))
-        tk.Label(choose, text="Source", font=theme.font("body_strong"), background=c.surface, foreground=c.text,
-                 width=12, anchor="w").pack(side="left")
+        tk.Label(choose, text=t("import.source"), font=theme.font("body_strong"), background=c.surface,
+                 foreground=c.text, width=12, anchor="w").pack(side="left")
         self.source = tk.StringVar(master=self, value="other")
-        for key, label in SOURCE_LABELS:
+        for key, label in source_labels():
             tk.Radiobutton(choose, text=label, value=key, variable=self.source, font=theme.font("body"),
                            background=c.surface, foreground=c.text, activebackground=c.surface,
                            activeforeground=c.text, selectcolor=c.surface_alt, highlightthickness=0,
                            borderwidth=0).pack(side="left", padx=(0, theme.px(SPACE_M)))
         where = tk.Frame(form.body, background=c.surface)
         where.pack(fill="x", pady=(theme.px(SPACE_S), 0))
-        tk.Label(where, text="Destination", font=theme.font("body_strong"), background=c.surface, foreground=c.text,
-                 width=12, anchor="w").pack(side="left")
+        tk.Label(where, text=t("import.destination"), font=theme.font("body_strong"), background=c.surface,
+                 foreground=c.text, width=12, anchor="w").pack(side="left")
         self.destination = tk.StringVar(master=self, value="")
         # Narrow request, then as wide as the row allows (a 60-character request was cut at 150% scaling).
         self.destination_picker = ttk.Combobox(where, textvariable=self.destination, state="readonly", width=24,
@@ -117,52 +157,54 @@ class ImportPage(Page):
         self.destination_picker.bind("<<ComboboxSelected>>", lambda _e: self._destination_chosen())
         self.destination_note = WrapLabel(form.body, "", font=theme.font("caption"), foreground=c.text_secondary)
         self.destination_note.pack(fill="x", pady=(theme.px(SPACE_XS), 0))
-        self.turn_on_button = Button(form.body, theme, "Turn on Personal…", variant="link",
+        self.turn_on_button = Button(form.body, theme, t("import.turn_on_personal"), variant="link",
                                      command=self.turn_on_personal)
         actions = tk.Frame(form.body, background=c.surface)
         actions.pack(fill="x", pady=(theme.px(SPACE_M), 0))
-        self.preview_button = Button(actions, theme, "Preview", variant="primary", command=self.start_preview)
+        self.preview_button = Button(actions, theme, t("import.preview"), variant="primary",
+                                     command=self.start_preview)
         self.preview_button.pack(side="left")
-        self.cancel_button = Button(actions, theme, "Cancel", variant="subtle", command=self.cancel_preview)
+        self.cancel_button = Button(actions, theme, t("common.cancel"), variant="subtle", command=self.cancel_preview)
         self.progress = ttk.Progressbar(actions, mode="determinate", style="BIO.Horizontal.TProgressbar",
                                         length=theme.px(220))
         self.app.gate(self.preview_button, "create")
 
         self.result = Card(body, theme, padding=SPACE_L)
-        section_label(self.result.body, theme, "2. Check the preview").pack(fill="x")
+        section_label(self.result.body, theme, t("import.check")).pack(fill="x")
         self.summary = WrapLabel(self.result.body, "", font=theme.font("body_strong"), foreground=c.text)
         self.summary.pack(fill="x", pady=(theme.px(SPACE_XS), 0))
         self.date_warning = WrapLabel(self.result.body, "", font=theme.font("body"), foreground=c.warning)
         self.notes_box = tk.Frame(self.result.body, background=c.surface_alt, highlightthickness=1,
                                   highlightbackground=c.border)
-        tk.Label(self.notes_box, text="Source notes (not memories, not saved)", font=theme.font("caption_strong"),
+        tk.Label(self.notes_box, text=t("import.notes_title"), font=theme.font("caption_strong"),
                  background=c.surface_alt, foreground=c.text_muted, anchor="w").pack(
             fill="x", padx=theme.px(SPACE_M), pady=(theme.px(SPACE_S), 0))
         self.notes = ttk.Treeview(self.notes_box, columns=("line", "text"), show="headings", height=3,
                                   selectmode="browse", style="BIO.Treeview")
-        self.notes.heading("line", text="LINE", anchor="w")
-        self.notes.heading("text", text="TEXT", anchor="w")
+        self.notes.heading("line", text=t("import.column.line"), anchor="w")
+        self.notes.heading("text", text=t("import.column.text"), anchor="w")
         self.notes.column("line", width=theme.px(56), stretch=False)
         self.notes.column("text", width=theme.px(600), stretch=True)
         fit_tree_columns(self.notes, theme, "text", floor=120)
         self.notes.pack(fill="x", padx=theme.px(SPACE_M), pady=theme.px(SPACE_XS))
-        Button(self.notes_box, theme, "Import this line as a memory", variant="link",
+        Button(self.notes_box, theme, t("import.note_to_entry"), variant="link",
                command=self.note_to_entry).pack(anchor="w", padx=theme.px(SPACE_M), pady=(0, theme.px(SPACE_S)))
 
         tools = FlowFrame(self.result.body, gap=theme.px(SPACE_S), background=c.surface)
         tools.pack(fill="x", pady=(theme.px(SPACE_M), theme.px(SPACE_XS)))
-        self.filter = tk.StringVar(master=self, value=FILTERS[0][1])
+        self.filters = filters()
+        self.filter = tk.StringVar(master=self, value=self.filters[0][1])
         filter_box = ttk.Combobox(tools, textvariable=self.filter, state="readonly", width=18, style="BIO.TCombobox",
-                                  values=[label for _key, label in FILTERS], font=theme.font("body"))
+                                  values=[label for _key, label in self.filters], font=theme.font("body"))
         tools.add(filter_box)
         filter_box.bind("<<ComboboxSelected>>", lambda _e: self.render_items())
-        for text, command in (("Check visible", lambda: self.check_visible(True)),
-                              ("Uncheck visible", lambda: self.check_visible(False)),
-                              ("Destination…", self.destination_for_selected),
-                              ("Confirm dates…", self.confirm_dates_selected),
+        for text, command in ((t("import.check_visible"), lambda: self.check_visible(True)),
+                              (t("import.uncheck_visible"), lambda: self.check_visible(False)),
+                              (t("import.destination_button"), self.destination_for_selected),
+                              (t("import.confirm_dates_button"), self.confirm_dates_selected),
                               (t("import.set_date.button"), self.set_date_selected),
-                              ("Edit…", self.edit_selected),
-                              ("Not a memory", self.entry_to_note)):
+                              (t("import.edit_button"), self.edit_selected),
+                              (t("import.not_a_memory"), self.entry_to_note)):
             button = Button(tools, theme, text, variant="link", command=command)
             tools.add(button)
             if command == self.set_date_selected:
@@ -174,8 +216,9 @@ class ImportPage(Page):
         # Fixed columns are compact; TEXT takes whatever width is left (at least 150 px), so the SENSITIVE column on
         # the right is never off the edge (GUI check I6). A horizontal scroll bar appears only if even that can't fit.
         self._fixed_columns = {"check": 30, "state": 150, "date": 150, "space": 100, "sensitive": 110}
-        for column, label in (("check", ""), ("state", "STATE"), ("date", "DATE"), ("text", "TEXT"),
-                              ("space", "DESTINATION"), ("sensitive", "SENSITIVE")):
+        for column, label in (("check", ""), ("state", t("import.column.state")), ("date", t("import.column.date")),
+                              ("text", t("import.column.text")), ("space", t("import.column.destination")),
+                              ("sensitive", t("import.column.sensitive"))):
             self.tree.heading(column, text=label, anchor="w")
             width = self._fixed_columns.get(column, 150)
             self.tree.column(column, width=theme.px(width), minwidth=theme.px(width if column != "text" else 150),
@@ -199,21 +242,20 @@ class ImportPage(Page):
         self.unreadable_toggle = Button(self.result.body, theme, "", variant="link", command=self.toggle_unreadable)
         self.unreadable_list = ttk.Treeview(self.result.body, columns=("line", "text"), show="headings", height=3,
                                             selectmode="browse", style="BIO.Treeview")
-        self.unreadable_list.heading("line", text="LINE", anchor="w")
-        self.unreadable_list.heading("text", text="LINES BIO CE COULDN'T READ (not saved)", anchor="w")
+        self.unreadable_list.heading("line", text=t("import.column.line"), anchor="w")
+        self.unreadable_list.heading("text", text=t("import.column.unreadable"), anchor="w")
         self.unreadable_list.column("line", width=theme.px(56), stretch=False)
         footer = tk.Frame(self.result.body, background=c.surface)
         footer.pack(fill="x", side="bottom", pady=(theme.px(SPACE_M), 0))
-        self.import_button = Button(footer, theme, "Import", variant="primary", command=self.do_import)
+        self.import_button = Button(footer, theme, t("import.button"), variant="primary", command=self.do_import)
         self.import_button.pack(side="left")
         self.app.gate(self.import_button, "create")
 
         self.history = Card(body, theme, padding=SPACE_L)
         self.history.pack(fill="x", pady=(theme.px(SPACE_M), 0))
-        section_label(self.history.body, theme, "Recent imports").pack(fill="x")
-        WrapLabel(self.history.body, "Undo removes what is still in the inbox from that import and closes its "
-                  "waiting reviews. Entries you already moved to your memories stay.",
-                  font=theme.font("caption"), foreground=c.text_secondary).pack(fill="x")
+        section_label(self.history.body, theme, t("import.recent")).pack(fill="x")
+        WrapLabel(self.history.body, t("import.recent_note"), font=theme.font("caption"),
+                  foreground=c.text_secondary).pack(fill="x")
         self.history_rows = tk.Frame(self.history.body, background=c.surface)
         self.history_rows.pack(fill="x", pady=(theme.px(SPACE_S), 0))
         self.batch_rows: dict[str, tk.Frame] = {}
@@ -228,8 +270,8 @@ class ImportPage(Page):
         super().refresh()
         personal_on = self.app.personal_enabled()
         projects = [space for space in self.app.spaces() if not space.is_general and not space.is_personal]
-        self._destinations = [("personal", PERSONAL_CHOICE), ("general", "General")]
-        self._destinations += [(space.space_id, space.display_name) for space in projects]
+        self._destinations = [("personal", personal_choice()), ("general", t("space.general"))]
+        self._destinations += [(space.space_id, space_label(space)) for space in projects]
         self.destination_picker.configure(values=[label for _key, label in self._destinations])
         if self.destination_id() == "personal" and personal_on:
             self.turn_on_button.pack_forget()
@@ -246,18 +288,18 @@ class ImportPage(Page):
     def set_text(self, text: str, encoding: str = "text") -> None:
         self.text.set(text)
         self.encoding = encoding
-        self.encoding_label.configure(text="" if encoding == "text" else f"Read as {encoding}")
+        self.encoding_label.configure(text="" if encoding == "text" else t("import.read_as", encoding=encoding))
         self._sync_buttons()
 
     def open_file(self) -> None:
-        path = self.app.ask_open_path(title="Open a memory list",
-                                      filetypes=(("Text and Markdown", "*.md *.txt *.markdown"),))
+        path = self.app.ask_open_path(title=t("import.open_title"),
+                                      filetypes=((t("import.open_types"), "*.md *.txt *.markdown"),))
         if not path:
             return
         try:
             text, encoding = read_import_file(path)
         except (ImportRejected, OSError) as exc:
-            self.app.notify("error", str(exc) or "BIO CE couldn't read this file.", title="Not opened")
+            self.app.notify("error", str(exc) or t("import.open_failed"), title=t("import.open_failed_title"))
             return
         self.set_text(text, encoding)
 
@@ -272,13 +314,12 @@ class ImportPage(Page):
         chosen = self.destination_id()
         self.turn_on_button.pack_forget()
         if chosen == "personal" and not self.app.personal_enabled():
-            self.destination_note.configure(text="Personal must be turned on first. Or choose General or a project "
-                                                 "space yourself.")
+            self.destination_note.configure(text=t("import.personal_off"))
             self.turn_on_button.pack(anchor="w", after=self.destination_note)
             self.destination.set("")
             self._sync_buttons()
             return False
-        self.destination_note.configure(text=GENERAL_NOTE if chosen == "general" else "")
+        self.destination_note.configure(text=general_note() if chosen == "general" else "")
         if self.preview is not None and chosen:
             self.planner.set_destination(self.preview, [item.key for item in self.preview.items], chosen)
             self.render_items()
@@ -343,10 +384,10 @@ class ImportPage(Page):
     def _preview_failed(self, error: BaseException) -> None:
         self._end_progress()
         if isinstance(error, ImportCancelled):
-            self.app.notify("info", "The preview was cancelled. Nothing was imported.", title="Cancelled")
+            self.app.notify("info", t("import.cancelled"), title=t("import.cancelled_title"))
             return
         self.app.notify("error", str(error) if isinstance(error, (ImportRejected, ValueError)) else
-                        "BIO CE couldn't read this list. Nothing was imported.", title="Preview failed")
+                        t("import.preview_failed"), title=t("import.preview_failed_title"))
 
     def _preview_done(self, preview) -> None:
         self.preview = preview
@@ -357,12 +398,12 @@ class ImportPage(Page):
     # Table ----------------------------------------------------------------------------------------------
 
     def _names(self) -> dict[str, str]:
-        return {space.space_id: space.display_name for space in self._planner_spaces()}
+        return {space.space_id: space_label(space) for space in self._planner_spaces()}
 
     def visible_items(self) -> list:
         if self.preview is None:
             return []
-        wanted = next((key for key, label in FILTERS if label == self.filter.get()), "all")
+        wanted = next((key for key, label in self.filters if label == self.filter.get()), "all")
         tests = {
             "all": lambda item: True, "new": lambda item: item.state == NEW,
             "exists": lambda item: item.state == EXISTS,
@@ -382,31 +423,28 @@ class ImportPage(Page):
         self.text_cells.clear()
         for item in self.visible_items():
             if item.said_at:
-                when = f"Said {item.said_at}"
+                when = t("import.when.said", date=item.said_at)
             elif item.claimed_date:
-                when = f"{item.claimed_date} (unconfirmed)"
+                when = t("import.when.unconfirmed", date=item.claimed_date)
             else:
-                when = "Unknown"
+                when = t("import.when.unknown")
             iid = str(item.key)
             self.text_cells.set(iid, item.display_content)
             self.tree.insert("", "end", iid=iid, values=(
-                "☑" if item.checked else "☐", STATE_LABELS[item.state], when, self.text_cells.text(iid),
-                names.get(item.destination or "", "Choose…"),
-                ", ".join(SENSITIVE_LABELS[key] for key in item.sensitive)))
+                "☑" if item.checked else "☐", state_label(item.state), when, self.text_cells.text(iid),
+                names.get(item.destination or "", t("import.choose")),
+                ", ".join(sensitive_label(key) for key in item.sensitive)))
             if iid in selection:
                 self.tree.selection_add(iid)
         self.fit_contents(("state", "date", "space", "sensitive"))
         self.text_cells.fit()
         summary = preview.summary()
-        self.summary.configure(text=(
-            f"New {summary['new']} · Already there {summary['exists']} · To review "
-            f"{summary['conflict'] + summary['path_review']} · Sensitive {summary['sensitive']} · Blocked "
-            f"{summary['blocked']} · Source notes {summary['source_notes']} · Unreadable lines {summary['unreadable']}"))
+        self.summary.configure(text=t(
+            "import.summary", new=summary["new"], exists=summary["exists"],
+            review=summary["conflict"] + summary["path_review"], sensitive=summary["sensitive"],
+            blocked=summary["blocked"], notes=summary["source_notes"], unreadable=summary["unreadable"]))
         if preview.same_date_warning:
-            self.date_warning.configure(text=(
-                "These dates may be when the list was exported, not when you said it: "
-                + ", ".join(preview.same_date_warning) + ". They are left out of \"Confirm dates\" unless you "
-                "choose them yourself."))
+            self.date_warning.configure(text=t("import.date_warning", dates=", ".join(preview.same_date_warning)))
             self.date_warning.pack(fill="x", pady=(theme_px(self, SPACE_XS), 0), after=self.summary)
         else:
             self.date_warning.pack_forget()
@@ -421,7 +459,7 @@ class ImportPage(Page):
         for number, text in preview.unreadable:
             self.unreadable_list.insert("", "end", iid=f"u{number}", values=(number, text))
         if preview.unreadable:
-            self.unreadable_toggle.set_text(f"Show {plural(len(preview.unreadable), 'line')} BIO CE couldn't read")
+            self.unreadable_toggle.set_text(t("import.show_unreadable", count=len(preview.unreadable)))
             self.unreadable_toggle.pack(anchor="w", pady=(theme_px(self, SPACE_XS), 0), after=self.detail)
         else:
             self.unreadable_toggle.pack_forget()
@@ -473,15 +511,15 @@ class ImportPage(Page):
     def destination_for_selected(self) -> None:
         keys = self.selected_keys()
         if self.preview is None or not keys:
-            self.app.notify("info", "Select one or more entries first.")
+            self.app.notify("info", t("import.set_date.select_first"))
             return
-        details = {"general": GENERAL_NOTE, "personal": "Hosts see it only with your permission."}
+        details = {"general": general_note(), "personal": t("import.choice.personal")}
         choice = self.app.ask_choice(
-            title=f"Destination for {plural(len(keys), 'entry', 'entries')}",
-            message="Already-there and conflict checks run again for the new space.",
-            choices=[(space.space_id, space.display_name, details.get(space.space_id, "Project space"))
+            title=t("import.choice.title", count=len(keys)),
+            message=t("import.choice.message"),
+            choices=[(space.space_id, space_label(space), details.get(space.space_id, t("import.choice.project")))
                      for space in self._planner_spaces()],
-            confirm_text="Change")
+            confirm_text=t("import.choice.confirm"))
         if choice:
             self.planner.set_destination(self.preview, keys, choice)
             self.render_items()
@@ -493,13 +531,13 @@ class ImportPage(Page):
         keys = keys if keys is not None else self.selected_keys() or self.planner.bulk_confirmable(self.preview)
         dated = [key for key in keys if self.preview.by_key(key).claimed_date]
         if not dated:
-            self.app.notify("info", "None of these entries has a date to confirm.")
+            self.app.notify("info", t("import.dates.none"))
             return 0
         if not self.app.confirm(
-            title=f"Confirm {plural(len(dated), 'date')}?",
-            message="Dates an AI wrote may not be when you said it. Confirm only dates you know are right.",
-            points=("Confirmed dates are shown as \"said on\" and used in exports.",),
-            confirm_text="Confirm dates",
+            title=t("import.dates.title", count=len(dated)),
+            message=t("import.dates.message"),
+            points=(t("import.dates.point"),),
+            confirm_text=t("import.dates.confirm"),
         ):
             return 0
         count = self.planner.confirm_dates(self.preview, dated,
@@ -533,7 +571,7 @@ class ImportPage(Page):
     def edit_selected(self) -> None:
         keys = self.selected_keys()
         if self.preview is None or len(keys) != 1:
-            self.app.notify("info", "Select one entry to edit.")
+            self.app.notify("info", t("import.edit.select_one"))
             return
         item = self.preview.by_key(keys[0])
         before_said, before_how = item.said_at or "", item.said_at_confirmed
@@ -549,7 +587,7 @@ class ImportPage(Page):
             try:
                 self.planner.set_date(self.preview, item.key, said_at)
             except ValueError as exc:
-                self.app.notify("warning", str(exc), title="Date not changed")
+                self.app.notify("warning", str(exc), title=t("import.set_date.not_changed"))
         self.render_items()
 
     def entry_to_note(self) -> None:
@@ -567,7 +605,7 @@ class ImportPage(Page):
         if line_no is None:
             chosen = self.notes.selection() or self.unreadable_list.selection()
             if not chosen:
-                self.app.notify("info", "Select a line first.")
+                self.app.notify("info", t("import.line.select_first"))
                 return
             line_no = int(chosen[0][1:])
         key = self.preview.from_note(line_no)
@@ -582,26 +620,26 @@ class ImportPage(Page):
         item = self.preview.by_key(keys[0])
         parts = list(item.reasons)
         if item.match_title:
-            parts.append(f"Existing memory: “{short(item.match_title, 60)}”")
+            parts.append(t("import.detail.existing", title=short(item.match_title, 60)))
         if item.project_hint:
-            parts.append(f"Mentions {item.project_hint}: move it to that project space?")
+            parts.append(t("import.detail.mentions", project=item.project_hint))
         if item.destination == "general":
-            parts.append("General: shared with every connected host")
+            parts.append(t("import.detail.general"))
         if item.section:
-            parts.append(f"Section: {item.section}")
+            parts.append(t("import.detail.section", section=item.section))
         self.detail.configure(text=" · ".join(parts))
 
     # Import ---------------------------------------------------------------------------------------------
 
     def import_label(self) -> str:
         if self.preview is None:
-            return "Import"
+            return t("import.button")
         counts = self.preview.counts_by_space(self._names())
         total = sum(counts.values())
         if not total:
-            return "Import"
-        return f"Import {plural(total, 'entry', 'entries')}: " + ", ".join(
-            f"{name} {count}" for name, count in counts.items())
+            return t("import.button")
+        return t("import.button_count", count=total,
+                 spaces=", ".join(f"{name} {count}" for name, count in counts.items()))
 
     def _sync_buttons(self) -> None:
         enabled = self.app.allowed("create").enabled
@@ -617,15 +655,14 @@ class ImportPage(Page):
             return
         names = self._names()
         general = sum(1 for item in preview.selected() if item.destination == "general")
-        points = [f"{name}: {plural(count, 'entry', 'entries')}"
+        points = [t("import.confirm.point", space=name, count=count)
                   for name, count in preview.counts_by_space(names).items()]
         if general:
-            points.append(GENERAL_NOTE)
+            points.append(general_note())
         if not self.app.confirm(
-            title="Import these entries?",
-            message="New entries go to each space's inbox, where you keep or discard them. Entries that may "
-                    "conflict with a memory you have go to your review queue. Nothing is overwritten.",
-            points=points, confirm_text="Import"):
+            title=t("import.confirm.title"),
+            message=t("import.confirm.message"),
+            points=points, confirm_text=t("import.button")):
             return
         service = self.app.service.import_service(control, self._planner_spaces())
         self.import_button.set_enabled(False)
@@ -642,11 +679,11 @@ class ImportPage(Page):
             self.app.notify("warning", t("import.partial", count=result.to_inbox), title=t("import.partial_title"),
                             action=(t("hub.open_inbox"), lambda: self.app.open_state(INBOX)))
         else:
-            message = f"Imported {plural(result.to_inbox, 'entry', 'entries')} to the inbox" + (
-                f" and sent {result.to_review} to review" if result.to_review else "") + "."
+            message = (t("import.done_review", count=result.to_inbox, review=result.to_review) if result.to_review
+                       else t("import.done", count=result.to_inbox))
             if suggested:
                 message += " " + t("import.suggested", count=suggested)
-            self.app.notify("success", message, title="Imported",
+            self.app.notify("success", message, title=t("import.done_title"),
                             action=(t("hub.open_inbox"), lambda: self.app.open_state(INBOX)))
         self.preview = None
         self.result.pack_forget()
@@ -656,7 +693,7 @@ class ImportPage(Page):
     def _import_failed(self, error: BaseException) -> None:
         self._sync_buttons()
         self.app.notify("error", str(error) if isinstance(error, ImportRejected) else
-                        "BIO CE couldn't import. Nothing more was changed.", title="Import failed")
+                        t("import.failed"), title=t("import.failed_title"))
 
     # History --------------------------------------------------------------------------------------------
 
@@ -671,25 +708,25 @@ class ImportPage(Page):
         except Exception:  # noqa: BLE001
             batches = ()
         if not batches:
-            tk.Label(self.history_rows, text="No imports yet.", font=theme.font("caption"), background=c.surface,
-                     foreground=c.text_muted, anchor="w").pack(fill="x")
+            tk.Label(self.history_rows, text=t("import.recent_none"), font=theme.font("caption"),
+                     background=c.surface, foreground=c.text_muted, anchor="w").pack(fill="x")
             return
         for batch in batches:
             row = tk.Frame(self.history_rows, background=c.surface)
             row.pack(fill="x", pady=(0, theme.px(SPACE_XS)))
             counts = batch["counts"]
-            text = (f"{format_timestamp(batch['created_at'])} · {batch['source']} · "
-                    f"{plural(int(counts.get('inbox', 0)), 'entry', 'entries')} to the inbox, "
-                    f"{int(counts.get('review', 0))} to review")
+            text = t("import.recent_row", when=format_timestamp(batch["created_at"]), source=batch["source"],
+                     count=int(counts.get("inbox", 0)), review=int(counts.get("review", 0)))
             tk.Label(row, text=text, font=theme.font("body"), background=c.surface, foreground=c.text_secondary,
                      anchor="w").pack(side="left")
-            status = {"complete": ("Done", "success"), "partial": ("Partial", "warning"),
-                      "undone": ("Undone", "neutral")}[batch["status"]]
+            status = {"complete": (t("import.status.complete"), "success"),
+                      "partial": (t("import.status.partial"), "warning"),
+                      "undone": (t("import.status.undone"), "neutral")}[batch["status"]]
             Pill(row, theme, *status).pack(side="left", padx=(theme.px(SPACE_S), 0))
             if batch["status"] != "undone":
-                Button(row, theme, "Undo import…", variant="link",
+                Button(row, theme, t("import.undo_button"), variant="link",
                        command=lambda b=batch["batch_id"]: self.undo_batch(b)).pack(side="right")
-                Button(row, theme, "Review and keep…", variant="link",
+                Button(row, theme, t("import.review_keep_button"), variant="link",
                        command=lambda b=batch["batch_id"]: self.review_and_keep(b)).pack(side="right")
             self.batch_rows[batch["batch_id"]] = row
 
@@ -701,7 +738,7 @@ class ImportPage(Page):
         try:
             added = self.app.service.curation(control, self._planner_spaces()).promote_batch(batch_id)
         except Exception:  # noqa: BLE001 - shown to the user
-            self.app.notify("error", "BIO CE couldn't prepare the suggestions.", title="Suggestions")
+            self.app.notify("error", t("import.review_keep_failed"), title=t("import.review_keep_failed_title"))
             return 0
         self.app.refresh_badges()
         self.app.open_state(SUGGESTIONS, batch_id=batch_id)
@@ -712,27 +749,24 @@ class ImportPage(Page):
         if control is None or not self.app.require_action("create"):
             return None
         if not self.app.confirm(
-            title="Undo this import?",
-            message="Entries from this import that are still in the inbox are deleted. Its reviews that are still "
-                    "waiting are closed.",
-            points=("Entries you already moved to your memories stay. BIO CE tells you how many.",
-                    "The deleted entries' text is overwritten in the database file as far as BIO CE can; older "
-                    "backups still contain them."),
-            confirm_text="Undo import", danger=True):
+            title=t("import.undo.title"),
+            message=t("import.undo.message"),
+            points=(t("import.undo.point_kept"), t("import.undo.point_overwrite")),
+            confirm_text=t("import.undo.confirm"), danger=True):
             return None
         service = self.app.service.import_service(control, self._planner_spaces())
         try:
             outcome = service.undo(batch_id)
         except Exception as exc:  # noqa: BLE001 - shown to the user
-            self.app.notify("error", str(exc) or "BIO CE couldn't undo this import.", title="Not undone")
+            self.app.notify("error", str(exc) or t("import.undo.failed"), title=t("import.undo.failed_title"))
             return None
         self.app.data_changed()
         self.render_history()
         kept = outcome["kept"]
-        self.app.notify("success", f"Removed {plural(outcome['removed'], 'entry', 'entries')} from the inbox"
-                        + (f"; {plural(kept, 'entry', 'entries')} you already sorted stay" if kept else "")
-                        + (f"; closed {plural(outcome['reviews_closed'], 'review')}" if outcome["reviews_closed"]
-                           else "") + ".", title="Import undone")
+        self.app.notify("success", t("import.undo.removed", count=outcome["removed"])
+                        + (t("import.undo.kept", count=kept) if kept else "")
+                        + (t("import.undo.closed", count=outcome["reviews_closed"]) if outcome["reviews_closed"]
+                           else "") + ".", title=t("import.undo.done_title"))
         return outcome
 
 
@@ -777,4 +811,4 @@ def theme_px(page: Page, value: int) -> int:
     return page.theme.px(value)
 
 
-__all__ = ["ImportPage", "PERSONAL_CHOICE", "GENERAL_NOTE"]
+__all__ = ["ImportPage", "general_note", "personal_choice", "sensitive_label", "state_label"]

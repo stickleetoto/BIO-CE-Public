@@ -9,7 +9,7 @@ import tkinter as tk
 
 from bio_ce.connections import HostStatus, auto_memory_support
 from bio_ce.engine.contract import EngineUnavailable
-from bio_ce.ui.format import HOSTS, host_name, plural, preview, relative_time
+from bio_ce.ui.format import HOSTS, host_name, preview, relative_time
 from bio_ce.ui.hub.data import REVIEWS
 from bio_ce.ui.i18n import t
 from bio_ce.ui.pages import Page
@@ -33,29 +33,35 @@ RECENT_LIMIT = 6
 
 def host_pill(status: HostStatus | None) -> tuple[str, str]:
     if status is None:
-        return "Unavailable", "danger"
+        return t("dashboard.host.unavailable"), "danger"
     if not status.installed:
-        return "Not installed", "neutral"
+        return t("dashboard.host.not_installed"), "neutral"
     if status.configuration_conflict:
-        return "Needs attention", "warning"
+        return t("dashboard.needs_attention"), "warning"
     if status.connected and status.legacy:
-        return "Connected (v0.2)", "success"
+        return t("dashboard.host.legacy"), "success"
     if status.connected and status.mode == "auto_memory":
         if auto_memory_support(status.host).level != "available":
-            return "Auto memory (limited)", "warning"
-        return "Auto memory", "success"
+            return t("dashboard.host.auto_limited"), "warning"
+        return t("dashboard.host.auto"), "success"
     if status.connected and status.mode == "paused":
-        return "Paused", "warning"
+        return t("dashboard.host.paused"), "warning"
     if status.connected:
-        return "Connected · Read only", "success"
-    return "Not connected", "neutral"
+        return t("dashboard.host.read_only"), "success"
+    return t("dashboard.host.not_connected"), "neutral"
 
 
 class DashboardPage(Page):
     key = "dashboard"
     nav_key = "dashboard"
-    title = "Dashboard"
-    subtitle = "Your local memory at a glance"
+
+    @property
+    def title(self) -> str:  # type: ignore[override]
+        return t("nav.dashboard")
+
+    @property
+    def subtitle(self) -> str:  # type: ignore[override]
+        return t("dashboard.subtitle")
 
     def __init__(self, app, master) -> None:
         super().__init__(app, master)
@@ -80,26 +86,25 @@ class DashboardPage(Page):
         self.review_card = Card(stats, theme, padding=SPACE_L + 2)
         self._stat_cards = (self.status_card, self.count_card, self.hosts_card, self.review_card)
 
-        caption_label(self.status_card.body, theme, "BIO CE status").pack(fill="x")
-        self.status_pill = Pill(self.status_card.body, theme, "Ready", "success")
+        caption_label(self.status_card.body, theme, t("dashboard.status")).pack(fill="x")
+        self.status_pill = Pill(self.status_card.body, theme, t("dashboard.ready"), "success")
         self.status_pill.pack(anchor="w", pady=(theme.px(SPACE_S + 2), theme.px(SPACE_S)))
         self.status_detail = caption_label(self.status_card.body, theme, "", muted=True)
         self.status_detail.pack(fill="x")
 
-        caption_label(self.count_card.body, theme, "Stored memories").pack(fill="x")
+        caption_label(self.count_card.body, theme, t("dashboard.stored")).pack(fill="x")
         self.count_value = tk.Label(self.count_card.body, text="0", font=theme.font("stat"), background=c.surface,
                                     foreground=c.text, anchor="w")
         self.count_value.pack(fill="x")
-        self.count_detail = caption_label(self.count_card.body, theme, "Active memories in your personal store",
-                                          muted=True)
+        self.count_detail = caption_label(self.count_card.body, theme, t("dashboard.stored_detail"), muted=True)
         self.count_detail.pack(fill="x")
 
-        caption_label(self.hosts_card.body, theme, "AI connections").pack(fill="x")
+        caption_label(self.hosts_card.body, theme, t("dashboard.connections")).pack(fill="x")
         self.hosts_value = tk.Label(self.hosts_card.body, text="0", font=theme.font("stat"), background=c.surface,
                                     foreground=c.text, anchor="w")
         self.hosts_value.pack(fill="x")
         self.hosts_detail = caption_label(self.hosts_card.body, theme,
-                                          f"of {plural(len(HOSTS), 'host')} connected", muted=True)
+                                          t("dashboard.connected_of", count=len(HOSTS)), muted=True)
         self.hosts_detail.pack(fill="x")
 
         # v0.4.4 §2.4: one number, the review queue; it and its link open the memory screen's Reviews tab.
@@ -118,23 +123,24 @@ class DashboardPage(Page):
         self.recent_card = Card(lower, theme, padding=SPACE_L + 2)
         header = tk.Frame(self.recent_card.body, background=c.surface)
         header.pack(fill="x", pady=(0, theme.px(SPACE_S)))
-        section_label(header, theme, "Recent memories").pack(side="left")
-        Button(header, theme, "View all", variant="link", command=lambda: app.show_page("memories")).pack(side="right")
+        section_label(header, theme, t("dashboard.recent")).pack(side="left")
+        Button(header, theme, t("dashboard.view_all"), variant="link",
+               command=lambda: app.show_page("memories")).pack(side="right")
         self.recent_list = tk.Frame(self.recent_card.body, background=c.surface)
         self.recent_list.pack(fill="both", expand=True)
         self.recent_empty = EmptyState(
-            self.recent_card.body, theme, icon="memories", title="No memories yet",
-            message="Save notes, decisions, or preferences you want your AI tools to recall. "
-                    "Nothing is stored until you select Save.",
-            actions=(("Add your first memory", app.start_new_memory, "primary"),),
+            self.recent_card.body, theme, icon="memories", title=t("dashboard.empty_title"),
+            message=t("dashboard.empty_message"),
+            actions=((t("dashboard.empty_add"), app.start_new_memory, "primary"),),
         )
         self.recent_empty.configure(height=theme.px(240))
 
         self.connections_card = Card(lower, theme, padding=SPACE_L + 2)
         header = tk.Frame(self.connections_card.body, background=c.surface)
         header.pack(fill="x", pady=(0, theme.px(SPACE_S)))
-        section_label(header, theme, "AI hosts").pack(side="left")
-        Button(header, theme, "Manage", variant="link", command=lambda: app.show_page("connections")).pack(side="right")
+        section_label(header, theme, t("dashboard.hosts")).pack(side="left")
+        Button(header, theme, t("dashboard.manage"), variant="link",
+               command=lambda: app.show_page("connections")).pack(side="right")
         self.host_rows: dict[str, Pill] = {}
         for host in HOSTS:
             row = RowButton(self.connections_card.body, theme, lambda: app.show_page("connections"))
@@ -152,9 +158,7 @@ class DashboardPage(Page):
             pill.pack(anchor="w", pady=(theme.px(2), 0))
             row.track(pill, paint=False)
             self.host_rows[host] = pill
-        note = WrapLabel(self.connections_card.body, "Connected hosts can search and read memories. With Auto "
-                         "memory on they can also save lasting ones; retractions always wait for you.",
-                         font=theme.font("caption"),
+        note = WrapLabel(self.connections_card.body, t("dashboard.hosts_note"), font=theme.font("caption"),
                          foreground=c.text_muted)
         note.pack(fill="x", pady=(theme.px(SPACE_M), 0))
 
@@ -162,8 +166,7 @@ class DashboardPage(Page):
         footer.pack(fill="x", pady=(theme.px(SPACE_XL - 4), theme.px(SPACE_S)))
         tk.Label(footer, text=theme.icon("lock"), font=theme.icon_font("small"), background=c.bg,
                  foreground=c.text_muted).pack(side="left", anchor="n", padx=(0, theme.px(SPACE_S)), pady=theme.px(2))
-        WrapLabel(footer, "BIO CE never records conversations. Memories are saved when you select Save or when a "
-                  "host you gave Auto memory saves a lasting fact, and they stay on this PC.", font=theme.font("caption"),
+        WrapLabel(footer, t("dashboard.privacy"), font=theme.font("caption"),
                   foreground=c.text_muted).pack(side="left", fill="x", expand=True)
 
         self._layout_mode: str | None = None
@@ -253,20 +256,18 @@ class DashboardPage(Page):
             count = engine.count()
             recent = engine.list(limit=RECENT_LIMIT)
         except EngineUnavailable:
-            self.status_pill.set("Engine unavailable", "danger")
-            self.status_detail.configure(text="BIO CE can't reach the memory engine. See Settings → Memory engine.")
+            self.status_pill.set(t("dashboard.engine_down"), "danger")
+            self.status_detail.configure(text=t("dashboard.engine_down_detail"))
             count, recent = None, ()
         except Exception:
-            self.status_pill.set("Needs attention", "danger")
-            self.status_detail.configure(text="The memory database could not be read. Restart BIO CE and try again.")
+            self.status_pill.set(t("dashboard.needs_attention"), "danger")
+            self.status_detail.configure(text=t("dashboard.read_failed"))
             count, recent = None, ()
         else:
-            self.status_pill.set("Ready", "success")
-            self.status_detail.configure(text="Database open · stored only on this PC")
+            self.status_pill.set(t("dashboard.ready"), "success")
+            self.status_detail.configure(text=t("dashboard.ready_detail"))
         self.count_value.configure(text="—" if count is None else f"{count:,}")
-        self.count_detail.configure(
-            text="Active memories in your personal store" if count is None
-            else f"Active {'memory' if count == 1 else 'memories'} in your personal store")
+        self.count_detail.configure(text=t("dashboard.stored_detail", count=count))
 
         for child in self.recent_list.winfo_children():
             child.destroy()
@@ -284,7 +285,7 @@ class DashboardPage(Page):
                 text_column.pack(side="left", fill="x", expand=True, padx=theme.px(SPACE_S), pady=theme.px(SPACE_S))
                 row.track(ElideLabel(text_column, text=preview(record.title, 80), font=theme.font("body_strong"),
                                      background=c.surface, foreground=c.text, width=1)).pack(fill="x")
-                snippet = preview(record.content, 110) or "No memory text"
+                snippet = preview(record.content, 110) or t("hub.card.no_text")
                 row.track(ElideLabel(text_column, text=snippet, font=theme.font("caption"), background=c.surface,
                                      foreground=c.text_secondary, width=1)).pack(fill="x")
             self._place_recent()
@@ -302,7 +303,7 @@ class DashboardPage(Page):
             if status is not None and status.connected:
                 connected += 1
         self.hosts_value.configure(text=str(connected))
-        self.hosts_detail.configure(text=f"of {plural(len(self.host_rows), 'host')} connected")
+        self.hosts_detail.configure(text=t("dashboard.connected_of", count=len(self.host_rows)))
         self.show_review_count(self.app.pending_review_count())
         try:
             inbox = int(self.app.inbox_count_all())
