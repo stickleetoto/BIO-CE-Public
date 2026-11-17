@@ -1,17 +1,18 @@
 <!-- Copyright 2026 stickleetoto | Apache-2.0 -->
-# BIO CE v0.4.4-rc1 — Release Notes (DRAFT)
+# BIO CE v0.4.4-rc2 — Release Notes (DRAFT)
 
-**Status: draft, not released.** The size and SHA-256 below are those of candidate 1, built and tested by the
-release-qualification workflow (all steps PASS). Nothing here is final until the owner approves the candidate.
+**Status: draft, not released.** The size and SHA-256 below are filled in from the CI build of the candidate.
+v0.4.4-rc1 was not released: its screens were reworked first (see "Screens since rc1"). Nothing here is final until
+the owner approves the candidate.
 
 ## Download
 
 | File | Size | SHA-256 |
 |---|---:|---|
-| `BIO-CE-Setup-v0.4.4-rc1.exe` | 41,765,051 bytes | `addf857441ed48393918ac6b7a766f2c35f6410d02be6485d02a42ae8c42c40e` |
+| `BIO-CE-Setup-v0.4.4-rc2.exe` | (from CI) | (from CI) |
 
 ```powershell
-Get-FileHash -Algorithm SHA256 .\BIO-CE-Setup-v0.4.4-rc1.exe
+Get-FileHash -Algorithm SHA256 .\BIO-CE-Setup-v0.4.4-rc2.exe
 ```
 
 ### The installer is not code-signed
@@ -22,20 +23,20 @@ SmartScreen, Microsoft Defender, or any other protection.
 
 ## Updating
 
-- **From v0.4.3-rc1 (or older):** run the v0.4.4-rc1 installer over the existing installation. Your memories,
+- **From v0.4.3-rc1 (or older):** run the v0.4.4-rc2 installer over the existing installation. Your memories,
   settings, backups, and AI connections are kept. **Close Codex, Claude Code, and the Claude desktop app before you
   install**, and start new conversations afterwards.
 - The file formats do not change: no new tables, and both databases keep their versions. New settings (language,
   the memory screen's filters, how many automatic backups to keep) are rows in the existing settings table.
-- **Going back to v0.4.3-rc1 works:** run the v0.4.3-rc1 installer over v0.4.4-rc1. Memories you deleted stay
+- **Going back to v0.4.3-rc1 works:** run the v0.4.3-rc1 installer over v0.4.4-rc2. Memories you deleted stay
   hidden there too (v0.4.3 calls this retracting, and has no Deleted memories view); memories you forgot completely
   are gone in both versions. v0.4.3 ignores the new settings rows.
 
 ## Added
 
 - **One memory screen.** Memories, the inbox, suggestions, and the reviews waiting for you are now tabs of one
-  screen, with the spaces as chips above them. Click a card to open it in a drawer beside the cards (on a wide window
-  the drawer moves the cards aside; on a narrower one it lies over them). Point at a card for Edit, Move, and Delete;
+  screen, with the spaces as chips above them. Click a card to open it in a drawer beside the cards; it never covers
+  them (a window too narrow for both shows the drawer alone, with "← List"). Point at a card for Edit, Move, and Delete;
   drag cards onto a space chip to move them. The old Memories, Inbox, Suggestions, and editor pages are gone.
 - **Undo instead of confirmations.** Deleting a memory, discarding an inbox item, moving cards, and rejecting a
   suggestion or a review wait 8 seconds for **Undo**. Moving an inbox item to your memories and approving a review can
@@ -59,6 +60,20 @@ SmartScreen, Microsoft Defender, or any other protection.
   used, and **End idle servers…** ends the ones idle for 12 hours (only when you ask).
 - **Big windows.** From about 2,200 pixels wide the pages stay at most 1,960 pixels wide and centred; cards use up to
   four columns; the dashboard lists recent memories in two columns.
+
+## Screens since rc1
+
+- The drawer sits beside the cards at every window width (rc1 laid it over them below 1,600 pixels).
+- Areas are easier to tell apart: the cards, the drawer, and the fields are distinct shades; the state tabs are
+  underlined words and the space chips light pills, so only an area's main action is a blue button; more room between
+  areas; panels and big cards have rounded corners.
+- Summary first, details on request: the drawer shows the space and time (version, source, IDs, dates, and **Forget
+  completely** are under **Details**); each AI tool on Connections shows its access, one settings line, and anything
+  that needs attention (the rest under **Details**; running servers and settings backups under **Advanced**); the
+  memory screen's filters fold behind **Filters** (which says how many apply). Nothing you need to act on is folded
+  away.
+- Korean screens no longer show stored values or English: where a memory came from ("Added here" instead of
+  "user-input"), the AI tools' support notes, and the shortcut list ("Ctrl+클릭").
 
 ## Changed
 
