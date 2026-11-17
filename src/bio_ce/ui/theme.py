@@ -17,6 +17,8 @@ import tkinter as tk
 from tkinter import font as tkfont
 from tkinter import ttk
 
+from bio_ce.ui.i18n import language
+
 
 @dataclass(frozen=True, slots=True)
 class Palette:
@@ -137,9 +139,10 @@ class Theme:
             # Localized Windows lists some families under translated names, so also test resolution.
             return family in families or tkfont.Font(root=root, family=family, size=10).actual("family") != missing
 
-        # Tk cannot use Windows font linking, so CJK text falls back to an arbitrary font. When the user's
-        # Windows language is CJK, use that language's UI font for all text so mixed scripts render evenly.
-        cjk_family = next((choice for choice in cjk_ui_fonts() if available(choice)), None)
+        # Tk cannot use Windows font linking, so CJK text falls back to an arbitrary font. One family for all text
+        # renders mixed scripts evenly: Malgun Gothic in both app languages (owner decision Q7: memories in English
+        # Windows often hold Korean), or the Windows UI font of a Japanese or Chinese Windows in the English app.
+        cjk_family = next((choice for choice in text_font_families(language()) if available(choice)), None)
         self.text_family = cjk_family
         self.fonts: dict[str, tkfont.Font] = {}
         for name, (choices, size, weight) in _FONT_CHOICES.items():
@@ -292,6 +295,17 @@ class Theme:
         style.configure("BIO.TPanedwindow", background=c.bg)
         style.configure("Sash", sashthickness=self.px(SPACE_M), gripcount=0, background=c.bg, bordercolor=c.bg,
                         lightcolor=c.bg, darkcolor=c.bg)
+
+
+def text_font_families(app_language: str | None = None) -> tuple[str, ...]:
+    """The text font candidates (v0.4.4, owner decision Q7): Malgun Gothic for the Korean and the English app, so
+    Korean memory text never falls back to an arbitrary font; in the English app on a Japanese or Chinese Windows,
+    that Windows UI font first (Malgun Gothic after it). The theme is made before the app reads a language the user
+    chose, so a Korean app on a Japanese or Chinese Windows gets the Windows font (known limitation)."""
+    windows = cjk_ui_fonts()
+    if app_language != "ko" and windows and windows != ("Malgun Gothic",):
+        return windows + ("Malgun Gothic",)
+    return ("Malgun Gothic",)
 
 
 def cjk_ui_fonts() -> tuple[str, ...]:

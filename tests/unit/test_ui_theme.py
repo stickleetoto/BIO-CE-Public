@@ -7,7 +7,7 @@ import sys
 import unittest
 from unittest.mock import patch
 
-from bio_ce.ui.theme import Palette, cjk_ui_fonts
+from bio_ce.ui.theme import Palette, cjk_ui_fonts, text_font_families
 
 
 @unittest.skipUnless(sys.platform == "win32", "Windows language detection")
@@ -27,6 +27,22 @@ class ThemeLanguageTests(unittest.TestCase):
         self.assertEqual(self._fonts_for(0x0404), ("Microsoft JhengHei UI",))
         self.assertEqual(self._fonts_for(0x0409, locale=0x0412), ("Malgun Gothic",))
         self.assertEqual(self._fonts_for(0x0409), ())
+
+    def _text_fonts(self, ui_language: int, app_language: str) -> tuple[str, ...]:
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        with patch.object(kernel32, "GetUserDefaultUILanguage", return_value=ui_language), \
+                patch.object(kernel32, "GetUserDefaultLCID", return_value=ui_language):
+            return text_font_families(app_language)
+
+    def test_text_uses_malgun_gothic_in_both_app_languages(self):
+        """Owner decision Q7: an English Windows shows Korean memory text in Malgun Gothic too, not a fallback."""
+        self.assertEqual(self._text_fonts(0x0409, "en"), ("Malgun Gothic",))  # English Windows, English app
+        self.assertEqual(self._text_fonts(0x0409, "ko"), ("Malgun Gothic",))
+        self.assertEqual(self._text_fonts(0x0412, "en"), ("Malgun Gothic",))
+        self.assertEqual(self._text_fonts(0x0411, "en"), ("Yu Gothic UI", "Meiryo UI", "Malgun Gothic"))
+        self.assertEqual(self._text_fonts(0x0411, "ko"), ("Malgun Gothic",))  # Korean app: Hangul needs it
 
 
 class PaletteContrastTests(unittest.TestCase):
