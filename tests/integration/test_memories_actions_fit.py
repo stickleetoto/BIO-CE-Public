@@ -74,7 +74,7 @@ class MemoriesActionsFitTests(unittest.TestCase):
         if state == MEMORIES:
             drawer = hub.drawer
             found.update({f"drawer.{name}": getattr(drawer, name) for name in (
-                "edit_button", "move_button", "history_button", "delete_button", "close_button")})
+                "edit_button", "move_button", "delete_button", "copy_button", "close_button")})  # History: its row
         return found
 
     def check_every_width(self, label: str) -> None:

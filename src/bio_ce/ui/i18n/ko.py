@@ -113,6 +113,9 @@ STRINGS: dict[str, object] = {
     # Drawer
     "hub.drawer.close": "서랍 닫기 (Esc)",
     "hub.drawer.back": "← 목록",
+    "hub.drawer.version": "버전",
+    "hub.drawer.details_hint": "버전 · 출처 · ID · 날짜",
+    "hub.drawer.history_hint": {"one": "버전 {count}개", "other": "버전 {count}개"},
     "hub.drawer.edit_tip": "그 자리에서 수정 (E, Ctrl+E). 제목을 눌러도 됩니다",
     "hub.drawer.move": "이동 ▾",
     "hub.drawer.move_tip": "다른 공간으로 이동 (M). 먼저 백업을 만듭니다",

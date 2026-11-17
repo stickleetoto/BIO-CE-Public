@@ -132,7 +132,8 @@ class UniversalClientTests(unittest.TestCase):
         self.assertEqual((app.selected.revision_id, app.selected.title, app.selected.content,
                           app.selected.source_ref), (expected.revision_id, expected.title, expected.content,
                                                      expected.source.source_ref))
-        self.assertIn(expected.source.source_ref, app.memories.drawer.meta_label._full)
+        # A source the user typed is shown in Details since rc2 (POLISH §3.2: the meta line is "space · when").
+        self.assertIn(expected.source.source_ref, app.memories.drawer.detail_values["source"]._full)
         app.query.set("Parity body 1")
         app.memories.refresh()
         # The memory screen's search finds what has every word (v0.4.4 HubData); the service's word search ranks

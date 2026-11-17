@@ -114,7 +114,8 @@ class KoreanTextLeakTests(unittest.TestCase):
                       "settings", "export dialog", "shortcuts dialog"):
             self.assertIn(label, case.visited)
         seen = newline.join(case.seen)
-        self.assertIn("출처: 직접 추가", seen)  # D1: was "출처: user-input"
+        self.assertIn("직접 추가", seen)  # D1: the drawer said "출처: user-input" (Details' source row since rc2)
+        self.assertNotIn("user-input", seen)
         self.assertIn("코드 모드로 실행", seen)  # D2: the Codex card's explanation
         self.assertIn("Ctrl+클릭", seen)
 

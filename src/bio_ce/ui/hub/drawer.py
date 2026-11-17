@@ -144,13 +144,18 @@ class Drawer(tk.Frame):
         self.title_label.bind("<Button-1>", lambda _e: self._click_to_edit(), add="+")
         self.reader.bind("<Double-Button-1>", lambda _e: self._click_to_edit(), add="+")
 
+        # Summary first (POLISH §3.2): the title, the text, and "space · when"; the version, where it came from, the
+        # IDs and dates, and Forget completely are in Details; the earlier versions in History.
+        self.history_rule = divider(self.view, theme)
         self.history = Section(self.view, theme, t("hub.drawer.history"), on_open=self._fill_history)
         self.history.pack(fill="x", pady=(theme.px(SPACE_S), 0))
-        self.details = Section(self.view, theme, t("hub.drawer.details"))
+        self.details_rule = divider(self.view, theme)
+        self.details = Section(self.view, theme, t("hub.drawer.details"), hint=t("hub.drawer.details_hint"))
         self.details.pack(fill="x", pady=(theme.px(SPACE_XS), 0))
         self.detail_values: dict[str, tk.Label] = {}
-        rows = (("memory_id", t("hub.drawer.memory_id"), True), ("revision_id", t("hub.drawer.revision_id"), True),
-                ("source", t("hub.drawer.source"), False), ("recorded", t("hub.drawer.recorded"), False),
+        rows = (("version", t("hub.drawer.version"), False), ("source", t("hub.drawer.source"), False),
+                ("memory_id", t("hub.drawer.memory_id"), True), ("revision_id", t("hub.drawer.revision_id"), True),
+                ("recorded", t("hub.drawer.recorded"), False),
                 ("valid_from", t("hub.drawer.valid_from"), False), ("valid_until", t("hub.drawer.valid_until"), False))
         for index, (key, label, copyable) in enumerate(rows):
             tk.Label(self.details.body, text=label, font=theme.font("caption"), background=c.surface,
@@ -165,9 +170,11 @@ class Drawer(tk.Frame):
             self.detail_values[key] = value
         self.details.body.columnconfigure(1, weight=1)
 
-        # The danger area: "Forget completely" (D1, v0.4.4 §7.1). Shown only when the service can do it.
-        self.danger = tk.Frame(self.view, background=c.surface, highlightthickness=1, highlightbackground=c.danger,
-                               highlightcolor=c.danger)
+        # The danger area: "Forget completely" (D1, v0.4.4 §7.1), at the bottom of Details (POLISH §8 decision 2; the
+        # right-click menu keeps it too). Shown only when the service can do it; same words, same confirmation.
+        self.danger = tk.Frame(self.details.body, background=c.surface, highlightthickness=1,
+                               highlightbackground=c.danger, highlightcolor=c.danger)
+        self.danger_row = len(rows)
         danger_body = tk.Frame(self.danger, background=c.surface)
         danger_body.pack(fill="x", padx=theme.px(SPACE_M), pady=theme.px(SPACE_S))
         WrapLabel(danger_body, t("hub.drawer.danger_note"), font=theme.font("caption"),
@@ -223,39 +230,50 @@ class Drawer(tk.Frame):
             return False
         self.mode, self.item, self.record, self.revisions = MEMORIES, item, record, ()
         self._merge_proposal = None
-        self._show_actions({"edit", "move", "history", "copy", "delete"})
+        # History has its own row below (and Ctrl+H, right-click); it is no longer a button here too (§3.2).
+        self._show_actions({"edit", "move", "copy", "delete"})
         self.delete_button.set_text(t("hub.card.delete"))
         self.delete_button.set_enabled(self.app.allowed("retract").enabled)
         self.title_label.set_text(record.title)
-        meta = [space_label(item.space), t("hub.drawer.revision", number=record.revision_number),
-                t("hub.drawer.updated", when=when(record.recorded_at))]
-        meta.append(t("hub.drawer.source_short", source=source_text(record)))
-        self.meta_label.set_text(" · ".join(meta))
+        self.meta_label.set_text(" · ".join((space_label(item.space),
+                                             t("hub.drawer.updated", when=when(record.recorded_at)))))
         self.meta_label.pack(fill="x", pady=(self.theme.px(SPACE_XS), 0), after=self.title_label)
         self.inbox_meta.pack_forget()
         if record.content:
             self.reader.set(record.content)
         else:
             self.reader.set(t("hub.drawer.no_text"), "empty")
-        values = {"memory_id": middle_ellipsis(record.memory_id, 40),
+        values = {"version": str(record.revision_number), "source": source_text(record),
+                  "memory_id": middle_ellipsis(record.memory_id, 40),
                   "revision_id": middle_ellipsis(record.revision_id, 40),
-                  "source": source_text(record),
                   "recorded": format_timestamp(record.recorded_at),
                   "valid_from": format_timestamp(record.valid_from),
                   "valid_until": format_timestamp(record.valid_until)}
         for key, value in values.items():
             self.detail_values[key].set_text(value)
-        self.history.pack(fill="x", pady=(self.theme.px(SPACE_S), 0), after=self.reader)
-        self.details.pack(fill="x", pady=(self.theme.px(SPACE_XS), 0), after=self.history)
+        self._show_sections(True)
         self.history.set_label(t("hub.drawer.history"))
+        self.history.set_hint(t("hub.drawer.history_hint", count=record.revision_number))
         self.history.set_open(False)
         self.details.set_open(False)
         if hasattr(self.app.service, "forget"):
-            self.danger.pack(fill="x", pady=(self.theme.px(SPACE_L), 0))
+            self.danger.grid(row=self.danger_row, column=0, columnspan=3, sticky="we", pady=(self.theme.px(SPACE_M), 0))
         else:
-            self.danger.pack_forget()
+            self.danger.grid_remove()
         self._show(self.view)
         return True
+
+    def _show_sections(self, show: bool) -> None:
+        """History and Details, each under a line (POLISH §2.4)."""
+        parts = ((self.history_rule, SPACE_S), (self.history, SPACE_XS), (self.details_rule, SPACE_XS),
+                 (self.details, SPACE_XS))
+        previous = self.reader
+        for part, top in parts:
+            if show:
+                part.pack(fill="x", pady=(self.theme.px(top), 0), after=previous)
+                previous = part
+            else:
+                part.pack_forget()
 
     def show_inbox(self, item: HubItem) -> bool:
         self.mode, self.item, self.record, self.revisions = INBOX, item, None, ()
@@ -271,9 +289,7 @@ class Drawer(tk.Frame):
         self.inbox_meta.configure(text=inbox_meta(revision) if revision is not None else "")
         self.inbox_meta.pack(fill="x", pady=(self.theme.px(SPACE_XS), 0), after=self.meta_label)
         self.reader.set(item.text or "")
-        for section in (self.history, self.details):
-            section.pack_forget()
-        self.danger.pack_forget()
+        self._show_sections(False)
         self._show(self.view)
         return True
 
@@ -288,9 +304,7 @@ class Drawer(tk.Frame):
         self.inbox_meta.configure(text=t("hub.retracted.note"))
         self.inbox_meta.pack(fill="x", pady=(self.theme.px(SPACE_XS), 0), after=self.meta_label)
         self.reader.set(item.text or t("hub.drawer.no_text"))
-        for section in (self.history, self.details):
-            section.pack_forget()
-        self.danger.pack_forget()
+        self._show_sections(False)
         self._show(self.view)
         return True
 

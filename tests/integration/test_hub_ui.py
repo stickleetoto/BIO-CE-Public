@@ -241,6 +241,26 @@ class HubUiTests(unittest.TestCase):
         self.assertEqual(hub.content.winfo_manager(), "pack")
         self.assertEqual(hub.drawer.back_button.winfo_manager(), "")
 
+    def test_the_drawer_shows_a_summary_and_keeps_the_rest_in_details(self):
+        """POLISH §3.2: "space · when" above the text; version, source, IDs, dates, and Forget completely in Details;
+        earlier versions in History (a row with a count, not a button too)."""
+        hub = self.hub
+        hub.card_clicked(self.card(self.first.memory_id))
+        self.settle()
+        drawer = hub.drawer
+        meta = drawer.meta_label._full
+        self.assertTrue(meta.startswith("General · "))
+        self.assertNotIn("Version", meta)
+        self.assertNotIn("Source", meta)
+        self.assertFalse(drawer.history_button.winfo_ismapped())
+        self.assertEqual(drawer.history.hint_label.cget("text"), "1 version")
+        self.assertFalse(drawer.details.opened)
+        self.assertFalse(drawer.detail_values["source"].winfo_ismapped())
+        drawer.details.toggle.invoke()
+        self.settle()
+        self.assertTrue(drawer.detail_values["version"].winfo_ismapped())
+        self.assertTrue(drawer.danger.winfo_ismapped())
+
     def test_positive_control_a_drawer_placed_over_the_cards_is_caught(self):
         hub = self.hub
         hub.card_clicked(self.card(self.first.memory_id))
@@ -418,7 +438,11 @@ class HubUiTests(unittest.TestCase):
         hub = self.hub
         hub.card_clicked(self.card(self.first.memory_id))
         self.settle()
-        self.assertTrue(hub.drawer.danger.winfo_manager())  # the danger area, since the service can forget
+        # In Details since rc2 (POLISH §8 decision 2): hidden until Details is opened, then the same button.
+        self.assertFalse(hub.drawer.danger.winfo_ismapped())
+        hub.drawer.details.toggle.invoke()
+        self.settle()
+        self.assertTrue(hub.drawer.danger.winfo_ismapped())  # the danger area, since the service can forget
         with patch.object(self.app, "confirm", return_value=True) as asked, \
                 patch.object(self.app, "notify") as notice:
             hub.drawer.forget_button.invoke()

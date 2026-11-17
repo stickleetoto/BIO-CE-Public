@@ -116,6 +116,9 @@ STRINGS: dict[str, object] = {
     # Drawer
     "hub.drawer.close": "Close (Esc)",
     "hub.drawer.back": "← List",
+    "hub.drawer.version": "Version",
+    "hub.drawer.details_hint": "Version · source · IDs · dates",
+    "hub.drawer.history_hint": {"one": "{count} version", "other": "{count} versions"},
     "hub.drawer.edit_tip": "Edit here (E or Ctrl+E); you can also click the title",
     "hub.drawer.move": "Move ▾",
     "hub.drawer.move_tip": "Move to another space (M); a backup is made first",
