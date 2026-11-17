@@ -74,6 +74,9 @@ class ConveniencesTests(unittest.TestCase):
 
     def test_filters_narrow_the_cards_and_the_sort_orders_them(self):
         bar = self.hub.filter_bar
+        self.assertFalse(bar.winfo_ismapped())  # folded behind "Filters ▾" (POLISH §3.3)
+        self.hub.toggle_filters()
+        self.settle()
         self.assertTrue(bar.winfo_ismapped())
         self.assertEqual(len(self.hub.items), 4)  # positive control: everything without a filter
         for key, value, wanted in (("source", "imported", ["Clinic"]), ("source", "ai", None),
@@ -106,6 +109,26 @@ class ConveniencesTests(unittest.TestCase):
         self.assertEqual(self.titles()[-1], "Clinic")  # saved with a date 60 days back: the oldest
         bar.set("sort", "changed")
         self.assertEqual(self.titles()[-1], "Clinic")
+
+    def test_folded_filters_say_how_many_apply_and_offer_clear(self):
+        """POLISH §3.3, R2: a filter that applies is never hidden: "Filters 1" in the chosen style, and Clear."""
+        hub = self.hub
+        self.assertTrue(hub.filter_bar.sort_pair.winfo_ismapped())  # the sort stays at the end of the tab row
+        self.assertTrue(hub.filter_toggle.text.startswith("Filters"))
+        self.assertEqual(hub.filter_toggle.variant, "chip")
+        self.assertFalse(hub.filter_clear.winfo_ismapped())
+        hub.filter_bar.set("host", "codex")
+        self.settle()
+        self.assertFalse(hub.filter_bar.winfo_ismapped())  # still folded
+        self.assertTrue(hub.filter_toggle.text.startswith("Filters 1"))
+        self.assertEqual(hub.filter_toggle.variant, "chip_selected")
+        self.assertTrue(hub.filter_clear.winfo_ismapped())
+        self.assertEqual(self.titles(), ["Deploys"])
+        hub.filter_clear.invoke()
+        self.settle()
+        self.assertEqual(len(hub.items), 4)
+        self.assertFalse(hub.filter_clear.winfo_ismapped())
+        self.assertEqual(hub.filter_toggle.variant, "chip")
 
     def test_a_filter_with_no_match_says_so_and_offers_nothing_else(self):
         self.hub.filter_bar.set("host", "claude_desktop")

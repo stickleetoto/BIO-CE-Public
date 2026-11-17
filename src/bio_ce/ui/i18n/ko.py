@@ -269,6 +269,8 @@ STRINGS: dict[str, object] = {
     "hub.filter.sort.created": "최근 추가한 순",
     "hub.filter.sort.title": "제목 가나다순",
     "hub.filter.clear": "필터 지우기",
+    "hub.filter.toggle": "필터",
+    "hub.filter.toggle_count": {"other": "필터 {count}"},
     "hub.quick.placeholder": "빠른 추가: 기억을 쓰고 Enter",
     "hub.quick.secret": "비밀번호·토큰·키로 보이는 글이라 BIO CE가 저장하지 않습니다.",
     "hub.quick.not_saved": "저장 안 됨",

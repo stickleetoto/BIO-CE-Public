@@ -111,8 +111,18 @@ class HubPage(Page):
         self.chip_caption = self.chip_row.add(tk.Label(self.chip_row, text=t("hub.space"), background=c.bg,
                                                        font=theme.font("caption_strong"), foreground=c.text_muted))
         self.chips: dict[str, Button] = {}
-        self.tab_row = FlowFrame(self, gap=theme.px(SPACE_XS), background=c.bg)
-        self.tab_row.pack(fill="x")
+        # The tabs, and at their right end the folded filters and the sort (POLISH §3.3).
+        self.tab_bar = tk.Frame(self, background=c.bg)
+        self.tab_bar.pack(fill="x")
+        self.tab_tools = tk.Frame(self.tab_bar, background=c.bg)
+        self.tab_tools.pack(side="right", anchor="s", pady=(0, theme.px(SPACE_XS)))
+        self.filter_toggle = Button(self.tab_tools, theme, t("hub.filter.toggle"), variant="chip", padx=10, pady=3,
+                                    command=self.toggle_filters)
+        self.filter_clear = Button(self.tab_tools, theme, t("hub.filter.clear"), variant="link",
+                                   command=lambda: self.filter_bar.clear())
+        self._filters_open = False
+        self.tab_row = FlowFrame(self.tab_bar, gap=theme.px(SPACE_XS), background=c.bg)
+        self.tab_row.pack(side="left", fill="x", expand=True)
         # A line under the tabs ends the header part of the screen (POLISH §2.4): header → 16 → content.
         self.tab_rule = tk.Frame(self, height=1, background=c.border)
         self.tab_rule.pack(fill="x", pady=(0, theme.px(SPACE_L)))
@@ -141,7 +151,8 @@ class HubPage(Page):
         self.tools = tk.Frame(self.cards_view, background=c.bg)
         self.tools.pack(fill="x")
         self.quick_add = QuickAdd(self.tools, self)
-        self.filter_bar = FilterBar(self.tools, app, lambda _view: self.refresh())
+        self.filter_bar = FilterBar(self.tools, app, lambda _view: self.refresh(), sort_parent=self.tab_tools)
+        self.filter_bar.sort_pair.pack(side="right", padx=(theme.px(SPACE_M), 0))
         self.selection_bar = SelectionBar(self.tools, self)
         self._anchor_key: str | None = None
         self.cleanup = Card(self.cards_view, theme, padding=SPACE_L)
@@ -525,10 +536,33 @@ class HubPage(Page):
             part.pack_forget()
         if self.state == MEMORIES and self.app.allowed("create").enabled and not self._rail:
             self.quick_add.pack(fill="x", pady=(0, theme.px(SPACE_S)))
-        if self.state in filters.FILTERED_STATES and not self._rail:
+        if self.state in filters.FILTERED_STATES and not self._rail and self._filters_open:
             self.filter_bar.pack(fill="x", pady=(0, theme.px(SPACE_S)))
+        self._render_filter_toggle()
         self._update_selection_bar()
         self._shrink_empty_tools()
+
+    def toggle_filters(self) -> None:
+        """"Filters ▾" opens the four filters above the cards and closes them (not remembered, POLISH §3.0 R5)."""
+        self._filters_open = not self._filters_open
+        self._show_tools()
+
+    def _render_filter_toggle(self) -> None:
+        """The folded filters never hide that they apply (R2): "Filters 2" in the accent color, and Clear."""
+        shown = self.state in filters.FILTERED_STATES
+        for part in (self.filter_toggle, self.filter_clear, self.filter_bar.sort_pair):
+            part.pack_forget()
+        if not shown:
+            return
+        self.filter_bar.sort_pair.pack(side="right", padx=(self.theme.px(SPACE_M), 0))
+        count = filters.active_count(self.filter_bar.view)
+        arrow = "▴" if self._filters_open else "▾"
+        label = t("hub.filter.toggle_count", count=count) if count else t("hub.filter.toggle")
+        self.filter_toggle.set_text(f"{label} {arrow}")
+        self.filter_toggle.set_variant("chip_selected" if count else "chip")
+        self.filter_toggle.pack(side="right", before=self.filter_bar.sort_pair)
+        if count and not self._filters_open:
+            self.filter_clear.pack(side="right", before=self.filter_toggle, padx=(0, self.theme.px(SPACE_S)))
 
     def _shrink_empty_tools(self) -> None:
         # Tk keeps a frame at its last size when its last child is removed: an empty band stayed above the cards.

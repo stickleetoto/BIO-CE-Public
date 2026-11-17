@@ -125,20 +125,33 @@ def facts_for(app, items: list, view: dict) -> dict[str, dict]:
     return facts
 
 
-class FilterBar(FlowFrame):
-    """One row of drop-downs above the cards; ``on_change(view)`` runs on every choice."""
+FILTER_KEYS = ("source", "host", "period", "sensitive")
 
-    def __init__(self, master: tk.Misc, app, on_change) -> None:
+
+def active_count(view: dict) -> int:
+    """How many of the four filters are not "any" (shown on the folded "Filters" button, POLISH §3.3)."""
+    return sum(view.get(key, DEFAULT[key]) != DEFAULT[key] for key in FILTER_KEYS)
+
+
+class FilterBar(FlowFrame):
+    """One row of drop-downs above the cards; ``on_change(view)`` runs on every choice.
+
+    The sort box can sit elsewhere (``sort_parent``: the end of the tab row, POLISH §3.3); this bar still owns it,
+    so the saved view stays one."""
+
+    def __init__(self, master: tk.Misc, app, on_change, *, sort_parent: tk.Misc | None = None) -> None:
         theme = app.theme
         super().__init__(master, gap=theme.px(SPACE_S), background=theme.colors.bg)
         self.app, self.on_change = app, on_change
         self.view = self._saved_view()
         self.values: dict[str, tk.StringVar] = {}
         self.boxes: dict[str, ttk.Combobox] = {}
+        self.sort_pair: tk.Frame | None = None
         for key in ("source", "host", "period", "sensitive", "sort"):
             # A label and its box wrap together (self-check 2026-11-17: "Sort" stayed on one line, its box went to
             # the next), and the box is wide enough for its longest choice in either language.
-            pair = tk.Frame(self, background=theme.colors.bg)
+            apart = key == "sort" and sort_parent is not None
+            pair = tk.Frame(sort_parent if apart else self, background=theme.colors.bg)
             tk.Label(pair, text=t(f"hub.filter.{key}"), font=theme.font("caption_strong"), background=theme.colors.bg,
                      foreground=theme.colors.text_muted).pack(side="left", padx=(0, theme.px(4)))
             labels = [t(f"hub.filter.{key}.{value}") for value in CHOICES[key]]
@@ -147,7 +160,10 @@ class FilterBar(FlowFrame):
                                width=max(text_columns(label) for label in labels) + 3)
             box.bind("<<ComboboxSelected>>", lambda _e, k=key: self._chosen(k))
             box.pack(side="left")
-            self.add(pair)
+            if apart:
+                self.sort_pair = pair  # placed by the page
+            else:
+                self.add(pair)
             self.values[key], self.boxes[key] = variable, box
         self.clear_button = self.add(tk.Label(self, text=t("hub.filter.clear"), font=theme.font("caption"),
                                               background=theme.colors.bg, foreground=theme.colors.accent,

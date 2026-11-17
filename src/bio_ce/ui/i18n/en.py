@@ -284,6 +284,8 @@ STRINGS: dict[str, object] = {
     "hub.filter.sort.created": "Recently added",
     "hub.filter.sort.title": "Title A–Z",
     "hub.filter.clear": "Clear filters",
+    "hub.filter.toggle": "Filters",
+    "hub.filter.toggle_count": {"other": "Filters {count}"},
     "hub.quick.placeholder": "Quick add: type a memory and press Enter",
     "hub.quick.secret": "This text looks like a password, token, or key, so BIO CE won't store it.",
     "hub.quick.not_saved": "Not saved",

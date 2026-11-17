@@ -145,6 +145,9 @@ class LayoutAuditTests(unittest.TestCase):
 
     def memory_screens(self) -> list[str]:
         problems = self.state(MEMORIES, "memories (cards)")
+        self.hub.toggle_filters()
+        problems += self.visit("memories", "memories (filters open)")
+        self.hub.toggle_filters()
         self.app.open_memory(self.first.memory_id)
         problems += self.visit("memories", "memories (drawer)")
         self.hub.drawer.history.set_open(True)
