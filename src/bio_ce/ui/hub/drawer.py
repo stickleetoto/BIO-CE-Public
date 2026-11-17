@@ -32,6 +32,7 @@ from bio_ce.ui.widgets import (
     WrapLabel,
     copy_to_clipboard,
     divider,
+    round_corners,
 )
 
 
@@ -72,6 +73,7 @@ class Drawer(tk.Frame):
         theme, c = hub.theme, raised(hub.colors)  # one layer above the cards beside it (POLISH §2.3)
         super().__init__(master, background=c.surface, highlightthickness=1, highlightbackground=c.border_strong,
                          highlightcolor=c.border_strong)
+        self.corners = round_corners(self, theme, border=c.border_strong, fill=c.surface, outside=c.bg)
         self.hub = hub
         self.app = hub.app
         self.theme = theme

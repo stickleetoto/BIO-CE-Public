@@ -731,8 +731,69 @@ class FlowFrame(tk.Frame):
             self.configure(width=one_row)
 
 
+ROUND_CORNERS = True  # POLISH §2.5 V4: panels and big cards (not the memory cards: 20.9% slower to build, S1)
+CORNER_RADIUS = 8
+
+
+def _rgb(color: str) -> tuple[int, int, int]:
+    color = color.lstrip("#")
+    return int(color[0:2], 16), int(color[2:4], 16), int(color[4:6], 16)
+
+
+def corner_images(widget: tk.Misc, radius: int, outside: str, border: str, fill: str, ring: int) -> dict:
+    """Four anti-aliased corner images (nw, ne, sw, se): outside → a ``ring``-pixel border → fill. Drawn at run time
+    (no data files, D-1) and kept per Tk root, since an image belongs to its interpreter."""
+    root = widget._root()
+    cache = getattr(root, "_bio_corner_images", None)
+    if cache is None:
+        cache = {}
+        root._bio_corner_images = cache  # type: ignore[attr-defined]
+    key = (radius, outside, border, fill, ring)
+    if key in cache:
+        return cache[key]
+    o, b, f = _rgb(outside), _rgb(border), _rgb(fill)
+
+    def mix(a, z, amount):
+        return tuple(round(x + (y - x) * amount) for x, y in zip(a, z))
+
+    rows = []
+    for y in range(radius):
+        row = []
+        for x in range(radius):
+            distance = ((radius - (x + 0.5)) ** 2 + (radius - (y + 0.5)) ** 2) ** 0.5
+            inside_shape = min(1.0, max(0.0, radius - distance + 0.5))
+            inside_ring = min(1.0, max(0.0, radius - ring - distance + 0.5))
+            row.append("#%02x%02x%02x" % mix(mix(o, b, inside_shape), f, inside_ring))
+        rows.append(row)
+    images = {}
+    for name, flip_x, flip_y in (("nw", False, False), ("ne", True, False), ("sw", False, True), ("se", True, True)):
+        image = tk.PhotoImage(master=root, width=radius, height=radius)
+        data = [list(reversed(r)) if flip_x else list(r) for r in (list(reversed(rows)) if flip_y else rows)]
+        image.put(" ".join("{" + " ".join(r) + "}" for r in data), to=(0, 0))
+        images[name] = image
+    cache[key] = images
+    return images
+
+
+def round_corners(frame: tk.Frame, theme: Theme, *, border: str, fill: str, outside: str | None = None,
+                  radius: int = CORNER_RADIUS) -> list[tk.Label]:
+    """Rounded corners on a square ``frame`` with a 1 px border (POLISH §2.5): four small images placed over its
+    corners. The frame and its layout stay as they are; the images take no focus and pass clicks to the frame."""
+    if not ROUND_CORNERS:
+        return []
+    size = theme.px(radius)
+    images = corner_images(frame, size, outside or surface_of(frame.master), border, fill, theme.px(1))
+    covers = []
+    for anchor, relx, rely in (("nw", 0, 0), ("ne", 1, 0), ("sw", 0, 1), ("se", 1, 1)):
+        cover = tk.Label(frame, image=images[anchor], borderwidth=0, highlightthickness=0, takefocus=0)
+        cover.place(relx=relx, rely=rely, anchor=anchor, bordermode="outside")
+        cover.bindtags((str(frame),) + cover.bindtags()[1:])
+        covers.append(cover)
+    return covers
+
+
 class Card(tk.Frame):
-    """Raised surface with a 1px border. Put content in ``card.body``."""
+    """Raised surface with a 1px border and rounded corners. Put content in ``card.body``."""
 
     def __init__(self, master: tk.Misc, theme: Theme, *, padding: int = 20, background: str | None = None) -> None:
         c = theme.colors
@@ -741,6 +802,7 @@ class Card(tk.Frame):
                          highlightbackground=c.border, highlightcolor=c.border)
         self.body = tk.Frame(self, background=fill)
         self.body.pack(fill="both", expand=True, padx=theme.px(padding), pady=theme.px(padding))
+        self.corners = round_corners(self, theme, border=c.border, fill=fill)
 
 
 class Pill(tk.Label):
@@ -1310,7 +1372,11 @@ __all__ = [
     "AutoScrollbar",
     "Button",
     "Card",
+    "CORNER_RADIUS",
     "Disclosure",
+    "ROUND_CORNERS",
+    "corner_images",
+    "round_corners",
     "EmptyState",
     "Field",
     "IconButton",
