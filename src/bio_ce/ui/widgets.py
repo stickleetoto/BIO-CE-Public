@@ -1139,6 +1139,58 @@ class EmptyState(tk.Frame):
         self.configure(height=max(needed, 1))
 
 
+class Disclosure(tk.Frame):
+    """A part shown on request (POLISH §3.0): a row "Label ▸  what is inside" that opens and closes the body below.
+
+    The whole row takes the click; the label is a Button, so Tab reaches it and Enter or Space opens and closes it.
+    Closed is the default and nothing is remembered (R5). ``on_open`` runs before the body is shown (to fill it)."""
+
+    def __init__(self, master: tk.Misc, theme: Theme, label: str, on_open=None, *, hint: str = "") -> None:
+        background = surface_of(master)
+        super().__init__(master, background=background)
+        self.theme = theme
+        self.label = label
+        self.on_open = on_open
+        self.opened = False
+        self.head = tk.Frame(self, background=background, cursor="hand2")
+        self.head.pack(fill="x")
+        self.toggle = Button(self.head, theme, label, icon="chevron_right", variant="link", command=self.flip,
+                             anchor="w")
+        self.toggle.pack(side="left")
+        self.hint_label = tk.Label(self.head, text=hint, font=theme.font("caption"), background=background,
+                                   foreground=theme.colors.text_muted, anchor="w", cursor="hand2")
+        if hint:
+            self.hint_label.pack(side="left", padx=(theme.px(SPACE_XS), 0))
+        for part in (self.head, self.hint_label):
+            part.bind("<ButtonRelease-1>", lambda _e: self.flip(), add="+")
+        self.body = tk.Frame(self, background=background)
+
+    def set_label(self, label: str) -> None:
+        self.label = label
+        self.toggle.set_text(label)
+
+    def set_hint(self, hint: str) -> None:
+        self.hint_label.configure(text=hint)
+        if hint and not self.hint_label.winfo_manager():
+            self.hint_label.pack(side="left", padx=(self.theme.px(SPACE_XS), 0))
+        elif not hint and self.hint_label.winfo_manager():
+            self.hint_label.pack_forget()
+
+    def flip(self) -> None:
+        self.set_open(not self.opened)
+
+    def set_open(self, opened: bool) -> None:
+        self.opened = opened
+        if opened:
+            if self.on_open is not None:
+                self.on_open()
+            self.body.pack(fill="x", pady=(self.theme.px(SPACE_XS), 0))
+        else:
+            self.body.pack_forget()
+        if self.toggle.icon_label is not None:
+            self.toggle.icon_label.configure(text=self.theme.icon("chevron_down" if opened else "chevron_right"))
+
+
 class InfoBar(tk.Frame):
     """Inline notification for success, info, warning, and error messages."""
 
@@ -1258,6 +1310,7 @@ __all__ = [
     "AutoScrollbar",
     "Button",
     "Card",
+    "Disclosure",
     "EmptyState",
     "Field",
     "IconButton",

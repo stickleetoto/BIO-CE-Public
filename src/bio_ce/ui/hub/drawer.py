@@ -24,6 +24,7 @@ from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS, raise
 from bio_ce.ui.widgets import (
     Button,
     ClampLabel,
+    Disclosure,
     ElideLabel,
     FlowFrame,
     IconButton,
@@ -63,36 +64,7 @@ def inbox_meta(item) -> str:
     return " · ".join(parts)
 
 
-class Section(tk.Frame):
-    """A collapsible part of the drawer (History, Details): a link that opens and closes it."""
-
-    def __init__(self, master: tk.Misc, theme, label: str, on_open=None) -> None:
-        super().__init__(master, background=master.cget("background"))
-        self.theme = theme
-        self.label = label
-        self.on_open = on_open
-        self.opened = False
-        self.toggle = Button(self, theme, label, icon="chevron_right", variant="link", command=self.flip, anchor="w")
-        self.toggle.pack(anchor="w")
-        self.body = tk.Frame(self, background=master.cget("background"))
-
-    def set_label(self, label: str) -> None:
-        self.label = label
-        self.toggle.set_text(label)
-
-    def flip(self) -> None:
-        self.set_open(not self.opened)
-
-    def set_open(self, opened: bool) -> None:
-        self.opened = opened
-        if opened:
-            if self.on_open is not None:
-                self.on_open()
-            self.body.pack(fill="x", pady=(self.theme.px(SPACE_XS), 0))
-        else:
-            self.body.pack_forget()
-        if self.toggle.icon_label is not None:
-            self.toggle.icon_label.configure(text=self.theme.icon("chevron_down" if opened else "chevron_right"))
+Section = Disclosure  # the drawer's History and Details (moved to widgets.py for every screen, POLISH §3.0)
 
 
 class Drawer(tk.Frame):
