@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import subprocess
+import sys
 from typing import TYPE_CHECKING, Any, Callable
 import tkinter as tk
 from tkinter import filedialog
@@ -972,12 +973,27 @@ class BIOCEDesktop:
         self.notify("success", message, title=t("app.restore.restored"))
         return True
 
-    def close(self) -> None:
+    def restart(self) -> bool:
+        """Close BIO CE the usual way, then start it again (v0.4.4: a new language applies on the next start).
+
+        The new process waits until this one has let go of the single-instance lock. Nothing restarts when the
+        close is held up (a host change still running, or the user keeps editing)."""
+        if not self.close():
+            return False
+        flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        try:
+            subprocess.Popen(restart_command(), close_fds=True, creationflags=flags)  # noqa: S603 - our own program
+        except OSError:
+            return False
+        return True
+
+    def close(self) -> bool:
+        """Close the app; False when something holds it open (a host change, unsaved edits the user keeps)."""
         if self.tasks.busy:
             self.notify("warning", t("app.close.busy"), title=t("app.close.wait"))
-            return
+            return False
         if not self.memories.confirm_leave():
-            return
+            return False
         try:
             self.pending.flush()  # a delete waiting for Undo runs before the app closes
         except Exception:  # noqa: BLE001 - closing must go on; the delete reports its own failure
@@ -997,6 +1013,14 @@ class BIOCEDesktop:
         if callable(closer):
             closer()
         self.root.destroy()
+        return True
 
 
-__all__ = ["BIOCEDesktop", "NAVIGATION"]
+def restart_command() -> list[str]:
+    """How to start this app again: the packaged BIO-CE.exe, or ``python -m bio_ce desktop`` from source."""
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "--restarted"]
+    return [sys.executable, "-m", "bio_ce", "desktop", "--restarted"]
+
+
+__all__ = ["BIOCEDesktop", "NAVIGATION", "restart_command"]

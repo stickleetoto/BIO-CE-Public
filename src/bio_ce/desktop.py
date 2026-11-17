@@ -16,6 +16,8 @@ import json
 import logging
 import os
 from pathlib import Path
+import sys
+import time
 import tkinter as tk
 from tkinter import messagebox
 from typing import Mapping
@@ -506,15 +508,25 @@ class DesktopMemoryService:
         self._store.close()
 
 
-def claim_single_instance(name: str = INSTANCE_MUTEX_NAME) -> int | None:
+def claim_single_instance(name: str = INSTANCE_MUTEX_NAME, *, wait_seconds: float = 0.0) -> int | None:
     """Hold a per-session named mutex; return None if another BIO CE window owns it.
 
     Only one desktop process may hold the personal database open, so a second
     launch hands focus to the running window instead. The returned handle must
     stay referenced for the life of the process. Non-Windows platforms return 0.
+    ``wait_seconds``: keep trying that long (a restart waits for the closing process to end).
     """
     if os.name != "nt":
         return 0
+    deadline = time.monotonic() + max(0.0, wait_seconds)
+    while True:
+        handle = _try_claim(name)
+        if handle is not None or time.monotonic() >= deadline:
+            return handle
+        time.sleep(0.25)
+
+
+def _try_claim(name: str) -> int | None:
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel32.CreateMutexW.restype = ctypes.c_void_p
     kernel32.CreateMutexW.argtypes = (ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p)
@@ -543,9 +555,14 @@ def focus_existing_window(title: str = WINDOW_TITLE) -> bool:
     return bool(user32.SetForegroundWindow(ctypes.c_void_p(window)))
 
 
-def run_desktop() -> int:
-    """Start the Windows app after the user acknowledges the local data notice."""
-    instance = claim_single_instance()
+RESTART_WAIT_SECONDS = 20.0
+
+
+def run_desktop(argv: list[str] | None = None) -> int:
+    """Start the Windows app after the user acknowledges the local data notice. ``--restarted`` (the app restarting
+    itself, e.g. for a new language) waits for the closing window to end instead of handing focus to it."""
+    restarted = "--restarted" in (sys.argv[1:] if argv is None else argv)
+    instance = claim_single_instance(wait_seconds=RESTART_WAIT_SECONDS if restarted else 0.0)
     if instance is None:
         focus_existing_window()
         return 0

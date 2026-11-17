@@ -29,7 +29,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="bio-ce", description="BIO Community Edition tools")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("demo", help="run the synthetic-only local memory demonstration")
-    commands.add_parser("desktop", help="open the Windows local memory manager")
+    desktop = commands.add_parser("desktop", help="open the Windows local memory manager")
+    desktop.add_argument("--restarted", action="store_true", help=argparse.SUPPRESS)
     seed = commands.add_parser(
         "seed-synthetic-mcp-demo",
         help="create a fresh SQLite database containing only the fixed synthetic MCP fixture",
@@ -86,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "desktop":
         from bio_ce.desktop import run_desktop
 
-        return run_desktop()
+        return run_desktop(["--restarted"] if args.restarted else [])
     if args.command == "seed-synthetic-mcp-demo":
         from bio_ce.demo_fixture import (
             DEMO_NAMESPACE,

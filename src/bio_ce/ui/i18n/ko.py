@@ -1173,6 +1173,9 @@ STRINGS: dict[str, object] = {
     # ===== end of U5-C =====
     # ===== U5-L: App shell, formatting, service messages (app.py, format.py, theme.py, tasks.py, the rest) =====
     # Add this part's keys right below this line, in this block only (other parts merge around it).
+    "settings.language.restart_note": "다시 시작하면 적용됩니다.",
+    "settings.language.restart_now": "지금 다시 시작",
+    "settings.language.not_saved": "언어를 저장하지 못했습니다.",
     "app.engine.status_unreadable": "엔진 상태를 읽지 못했습니다.",
     "app.engine.none_connected": "연결된 기억 엔진이 없습니다.",
     "app.engine.unavailable": "기억 엔진을 쓸 수 없습니다.",

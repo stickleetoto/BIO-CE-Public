@@ -17,7 +17,7 @@ from bio_ce.ui.dialogs import TextViewerDialog
 from bio_ce.ui.format import file_size
 from bio_ce.engine.presentation import SEPARATE_DATABASES_NOTE, engine_rows
 from bio_ce.ui.hub.common import space_label
-from bio_ce.ui.i18n import t
+from bio_ce.ui.i18n import AUTO, NAMES, language, resolve, t
 from bio_ce.ui.pages import Page
 from bio_ce.ui.service_text import say
 from bio_ce.ui.shortcuts import SHORTCUTS
@@ -104,6 +104,7 @@ class SettingsPage(Page):
         self.scroll.pack(fill="both", expand=True)
         body = self.scroll.body
 
+        self._build_language_card(body)
         self._build_engine_card(body)
 
         storage = self._card(body, t("settings.storage.title"), t("settings.storage.description"))
@@ -219,6 +220,53 @@ class SettingsPage(Page):
         self.new_space_button.pack(side="left")
         self.space_rows: dict[str, tk.Frame] = {}
         self.render_spaces()
+
+    def _build_language_card(self, body: tk.Misc) -> None:
+        """v0.4.4: the app language (auto = Setup's choice, then Windows). It applies on the next start (owner
+        decision 2026-11-17, instead of redrawing every page at once); Restart now restarts BIO CE."""
+        theme, c = self.theme, self.colors
+        card = self._card(body, t("settings.language.title"), t("settings.language.note"))
+        control = self.spaces_control()
+        stored = control.ui_language() if control is not None and hasattr(control, "ui_language") else AUTO
+        self.language_choice = tk.StringVar(master=self, value=stored)
+        row = tk.Frame(card, background=c.surface)
+        row.pack(fill="x", pady=(theme.px(SPACE_M), 0))
+        self.language_buttons = {}
+        for key, label in ((AUTO, t("settings.language.auto")), ("ko", NAMES["ko"]), ("en", NAMES["en"])):
+            button = tk.Radiobutton(row, text=label, value=key, variable=self.language_choice,
+                                    command=self.choose_language, font=theme.font("body"), background=c.surface,
+                                    foreground=c.text, activebackground=c.surface, activeforeground=c.text,
+                                    selectcolor=c.surface_alt, highlightthickness=0, borderwidth=0)
+            button.pack(side="left", padx=(0, theme.px(SPACE_M)))
+            self.language_buttons[key] = button
+        self.restart_row = tk.Frame(card, background=c.surface)
+        self.restart_note = WrapLabel(self.restart_row, t("settings.language.restart_note"), font=theme.font("body"),
+                                      foreground=c.text_secondary)
+        self.restart_button = Button(self.restart_row, theme, t("settings.language.restart_now"), variant="primary",
+                                     command=self.app.restart)
+        self.restart_button.pack(side="right")
+        self.restart_note.pack(side="left", fill="x", expand=True)
+        self._show_restart()
+
+    def choose_language(self) -> None:
+        control = self.spaces_control()
+        choice = self.language_choice.get()
+        if control is None or not hasattr(control, "set_ui_language"):
+            return
+        try:
+            control.set_ui_language(choice)
+        except Exception as exc:  # noqa: BLE001 - shown to the user
+            self.app.notify("error", say(exc) or t("settings.language.not_saved"), title=t("settings.language.title"))
+            return
+        self._show_restart()
+
+    def _show_restart(self) -> None:
+        """The note and Restart now, while the chosen language is not the one the app shows."""
+        differs = resolve(self.language_choice.get()) != language()
+        if differs and not self.restart_row.winfo_manager():
+            self.restart_row.pack(fill="x", pady=(self.theme.px(SPACE_M), 0))
+        elif not differs and self.restart_row.winfo_manager():
+            self.restart_row.pack_forget()
 
     def spaces_control(self):
         return getattr(self.app.connection_manager, "control", None)
