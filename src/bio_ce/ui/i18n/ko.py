@@ -808,6 +808,199 @@ STRINGS: dict[str, object] = {
     # ===== end of U5-A =====
     # ===== U5-B: Settings and dialogs (src/bio_ce/ui/pages/settings.py, dialogs.py, pages/__init__.py) =====
     # Add this part's keys right below this line, in this block only (other parts merge around it).
+    "settings.subtitle": "데이터가 있는 곳과 보호하는 방법",
+    "settings.storage.title": "기억 데이터베이스",
+    "settings.storage.description": "기억은 이 파일에 저장됩니다. 다른 Windows 사용자가 읽지 못하도록 사용자 프로필 "
+                                    "안에 두세요.",
+    "settings.storage.open_folder": "폴더 열기",
+    "settings.storage.copy_path": "경로 복사",
+    "settings.storage.demo": "체험용 데이터는 {path}에 따로 두며 기억과 섞이지 않습니다.",
+    "settings.storage.active": {"other": "활성 기억 {count:,}개"},
+    "settings.storage.no_count": "기억 개수를 알 수 없음",
+    "settings.storage.on_disk": "디스크 사용 {size}",
+    "settings.storage.path_copied": "데이터베이스 경로를 클립보드에 복사했습니다.",
+    "settings.backup.title": "백업과 복원",
+    "settings.backup.description": "백업은 파일 두 개입니다. 기억 전체의 사본(name.sqlite3)과 연결 기록"
+                                   "(name.control.sqlite3)이며, 둘을 함께 두세요. 백업은 암호화되지 않고 개인 기억이 "
+                                   "들어 있을 수 있으니 남이 볼 수 없는 곳에 두고 공유하지 마세요.",
+    "settings.backup.create": "백업 만들기…",
+    "settings.backup.export": "기억을 텍스트로 내보내기…",
+    "settings.restore.title": "백업에서 복원",
+    "settings.restore.description": "복원하면 지금의 기억 전부가 백업의 기억으로 바뀝니다. BIO CE가 먼저 파일을 "
+                                    "확인합니다. 연결과 권한은 지금 그대로 남습니다. 복원하기 전에 연결된 AI 도구를 "
+                                    "닫고, 지금의 기억을 남기려면 먼저 백업을 만드세요.",
+    "settings.restore.button": "백업 복원…",
+    "settings.privacy.title": "개인정보와 보안",
+    "settings.privacy.local": "이 PC에만 저장",
+    "settings.privacy.local_text": "기억은 Windows 사용자 프로필 안의 SQLite 파일에 있습니다. BIO CE는 기억을 "
+                                   "업로드하거나 동기화하지 않습니다.",
+    "settings.privacy.no_recording": "몰래 기록하는 것 없음",
+    "settings.privacy.no_recording_text": "BIO CE는 대화를 기록하지 않습니다. AI 도구는 자동 기억을 켠 뒤에만 기억을 "
+                                          "저장할 수 있으며, BIO CE는 비밀 정보와 문서에서 가져온 내용을 거부합니다.",
+    "settings.privacy.control": "AI 접근은 사용자가 정함",
+    "settings.privacy.control_text": "자동 기억을 켜지 않으면 AI 도구는 읽기 전용입니다. 연결 화면에서 어느 AI 도구든 "
+                                     "일시 중지하거나 연결을 끊을 수 있습니다. 확실하지 않은 변경과 모든 철회 요청은 "
+                                     "그곳에서 검토를 기다립니다.",
+    "settings.privacy.no_encryption": "저장 데이터 암호화 없음",
+    "settings.privacy.no_encryption_text": "Windows 계정에 로그인할 수 있는 사람은 누구나 데이터베이스와 백업을 읽을 수 "
+                                           "있습니다. 계정을 잘 보호하세요.",
+    "settings.privacy.not_erase": "삭제는 안전한 지우기가 아님",
+    "settings.privacy.not_erase_text": "삭제한 기억은 BIO CE와 AI 도구에서 사라지지만, 이전 버전은 데이터베이스 파일에 "
+                                       "남습니다.",
+    "settings.privacy.host_backups": "연결 설정 백업",
+    "settings.privacy.host_backups_text": "AI 도구를 연결하거나 연결을 끊을 때 먼저 그 MCP 설정을 BIO CE 폴더에 복사해 "
+                                          "둡니다. 이 사본에는 다른 서버의 설정이나 환경 값이 들어 있을 수 있습니다. "
+                                          "더 필요 없으면 지우세요.",
+    "settings.privacy.open_backups": "설정 백업 폴더 열기",
+    "settings.about.title": "BIO CE 정보",
+    "settings.about.version": "BIO Community Edition {version} · {channel}",
+    "settings.about.preview": "개발자 미리보기",
+    "settings.about.candidate": "출시 후보",
+    "settings.about.release": "정식 출시",
+    "settings.about.copyright": "Copyright 2026 stickleetoto. Apache License 2.0에 따라 배포합니다. 이 빌드는 "
+                                "서명되지 않았으며 어떠한 보증도 없이 제공됩니다.",
+    "settings.about.view_license": "라이선스 보기",
+    "settings.about.license_name": "Apache License 2.0",
+    "settings.about.notices": "타사 고지",
+    "settings.about.file_failed": "BIO CE가 {name}을(를) 열지 못했습니다. BIO CE를 다시 설치하면 복원됩니다.",
+    "settings.about.file_failed_title": "파일을 열 수 없음",
+    "settings.spaces.title": "공간",
+    "settings.spaces.description": "일반에는 지금까지처럼 기억이 들어 있습니다. 프로젝트 공간은 한 프로젝트의 기억을 "
+                                   "따로 둡니다. 프로젝트 폴더를 연결해 두면 그 폴더에서 일할 때 세션 훅이 그 공간을 "
+                                   "씁니다. BIO CE는 폴더 경로의 지문과 폴더 이름만 저장합니다.",
+    "settings.spaces.new": "새 프로젝트 공간…",
+    "settings.spaces.unavailable": "지금은 공간을 쓸 수 없습니다.",
+    "settings.spaces.general_detail": "언제나 쓸 수 있습니다. 맞는 프로젝트 공간이 없을 때 씁니다.",
+    "settings.spaces.linked_folders": {"other": "연결한 폴더 {count:,}개"},
+    "settings.spaces.no_folder": "아직 연결한 폴더 없음",
+    "settings.spaces.archive": "보관 처리",
+    "settings.spaces.rename": "이름 바꾸기",
+    "settings.spaces.link_folder": "폴더 연결…",
+    "settings.spaces.unlink": "연결 해제",
+    "settings.spaces.change_failed": "BIO CE가 공간을 바꾸지 못했습니다.",
+    "settings.spaces.new_title": "새 프로젝트 공간",
+    "settings.spaces.name": "이름",
+    "settings.spaces.create": "공간 만들기",
+    "settings.spaces.new_note": "예: 프로젝트 이름. 나중에 바꿀 수 있습니다.",
+    "settings.spaces.not_created": "공간을 만들지 못함",
+    "settings.spaces.created": "“{name}” 공간을 만들었습니다. 훅이 이 공간을 쓰도록 폴더를 연결하세요.",
+    "settings.spaces.created_title": "공간 만듦",
+    "settings.spaces.rename_title": "공간 이름 바꾸기",
+    "settings.spaces.rename_note": "기억은 공간에 그대로 있고 이름만 바뀝니다.",
+    "settings.spaces.not_renamed": "공간 이름을 바꾸지 못함",
+    "settings.spaces.archive_title": "{name}을(를) 보관 처리할까요?",
+    "settings.spaces.archive_message": "AI 도구가 이 공간을 더는 읽거나 쓸 수 없고, 이 공간에 연결한 폴더도 더는 "
+                                       "쓰이지 않습니다.",
+    "settings.spaces.archive_point_kept": "기억은 데이터베이스와 백업에 남습니다.",
+    "settings.spaces.archive_point_general": "이 공간에 연결했던 폴더에서는 AI 도구가 일반을 씁니다.",
+    "settings.spaces.archive_confirm": "공간 보관 처리",
+    "settings.spaces.not_archived": "공간을 보관 처리하지 못함",
+    "settings.spaces.choose_folder": "{name}에 연결할 폴더 선택",
+    "settings.spaces.not_linked": "폴더를 연결하지 못함",
+    "settings.spaces.not_unlinked": "폴더 연결을 해제하지 못함",
+    "settings.personal.turn_off": "끄기…",
+    "settings.personal.turn_on": "개인 켜기…",
+    "settings.personal.on_detail": "켜짐. AI 도구는 연결 화면에서 AI 도구마다 준 권한이 있을 때만 읽습니다. 세션 훅은 "
+                                   "쓰지 않습니다.",
+    "settings.personal.off_detail": "꺼짐. 나에 관한 기억을 두는 곳입니다. 건강, 가족, 재정, 다닌 학교나 복무한 곳 "
+                                    "같은 것.",
+    "settings.personal.on_title": "개인을 켤까요?",
+    "settings.personal.on_message": "개인은 나에 관한 기억을 두는 별도의 공간입니다. AI 도구마다 허용하기 전까지는 "
+                                    "AI 도구 쪽에서 바뀌는 것이 없습니다.",
+    "settings.personal.on_point_allow": "연결 화면에서 허용하기 전까지 어떤 AI 도구도 개인을 읽거나 개인에 저장할 수 "
+                                        "없습니다.",
+    "settings.personal.on_point_hooks": "세션 훅은 개인 기억을 대화에 넣지 않습니다.",
+    "settings.personal.on_point_backups": "개인 기억도 다른 기억처럼 백업에 들어갑니다.",
+    "settings.personal.on_point_off": "나중에 끄면 기억은 남고 모든 AI 도구의 접근 권한이 없어집니다.",
+    "settings.personal.on_confirm": "개인 켜기",
+    "settings.personal.off_title": "개인을 끌까요?",
+    "settings.personal.off_message": "개인 기억은 데이터베이스에 남지만, 어떤 AI 도구도 쓸 수 없고 공간은 "
+                                     "숨겨집니다.",
+    "settings.personal.off_point": "모든 AI 도구의 개인 접근 권한이 없어집니다. 다시 켠 뒤 AI 도구마다 다시 "
+                                   "허용합니다.",
+    "settings.personal.off_confirm": "개인 끄기",
+    "settings.inbox.title": "수집함",
+    "settings.inbox.description": "수집 방식의 AI 도구는 수집함에 저장합니다. 쓰지 않는 항목은 버림 제안이 되고, "
+                                  "보관하지 않으면 그 뒤에 버려집니다. AI 도구가 파일에서 가져오는 글에는 크기 제한이 "
+                                  "있습니다.",
+    "settings.inbox.expire_label": "버림 제안까지",
+    "settings.inbox.expire_unit": "일 동안 쓰지 않으면 (7~365)",
+    "settings.inbox.wait_label": "그 뒤 버리기까지",
+    "settings.inbox.wait_unit": "일 더, 보관하지 않으면 (1~30)",
+    "settings.inbox.file_label": "파일 글자 수 제한",
+    "settings.inbox.file_unit": "자 (200~2000)",
+    "settings.inbox.save": "수집함 설정 저장",
+    "settings.inbox.save_failed": "{reason}. 그 뒤의 값은 저장하지 않았습니다.",
+    "settings.inbox.saved": "수집함 설정을 저장했습니다.",
+    "settings.inbox.saved_title": "수집함 설정",
+    "settings.engine.title": "기억 엔진",
+    "settings.engine.description": "엔진은 기억을 저장하고 찾습니다. BIO CE에는 Community Engine이 들어 있고, 다른 "
+                                   "엔진은 따로 설치합니다.",
+    "settings.engine.check": "다시 확인",
+    "settings.engine.check_tooltip": "엔진마다 상태를 다시 확인",
+    "settings.engine.in_use": "사용 중",
+    "settings.engine.use": "이 엔진 사용",
+    "settings.engine.switching_disabled": "이 버전의 BIO CE에서는 다른 엔진을 고를 수 없습니다. 기억은 Community "
+                                          "Engine에 그대로 있습니다.",
+    "settings.engine.checked": "기억 엔진 확인함",
+    "dialog.history.title": "버전 기록",
+    "dialog.history.subtitle": {"other": "{title} · 버전 {count}개"},
+    "dialog.history.none": "버전 없음",
+    "dialog.history.revision": "버전 {number} · {kind}",
+    "dialog.history.current": "현재",
+    "dialog.history.meta": "{time} · 출처: {source}",
+    "dialog.history.no_text": "기억 본문 없음",
+    "dialog.history.undo": "이 제안 되돌리기…",
+    "dialog.welcome.product": "BIO COMMUNITY EDITION",
+    "dialog.welcome.title": "BIO CE에 오신 것을 환영합니다",
+    "dialog.welcome.intro": "AI 도구를 위한 비공개 기억 관리 앱입니다. 시작하기 전에 데이터를 어떻게 다루는지 "
+                            "알려 드립니다.",
+    "dialog.welcome.local": "이 PC에만 있음",
+    "dialog.welcome.local_text": "저장한 기억은 Windows 사용자 프로필 안의 로컬 SQLite 파일에 저장됩니다. 아무것도 "
+                                 "업로드되지 않습니다.",
+    "dialog.welcome.allow": "허용한 것만",
+    "dialog.welcome.allow_text": "BIO CE는 대화를 기록하지 않습니다. 기억은 ‘저장’을 누를 때, 또는 AI 도구에 자동 "
+                                 "기억을 켜서 그 AI 도구가 BIO CE의 규칙에 따라 오래 갈 사실을 저장할 때 저장됩니다.",
+    "dialog.welcome.read_only": "AI 접근은 기본이 읽기 전용",
+    "dialog.welcome.read_only_text": "연결된 AI 도구는 기억을 검색하고 읽을 수 있습니다. 기억을 저장하거나 고치는 것은 "
+                                     "그 AI 도구에 자동 기억을 켠 뒤에만 할 수 있고, 사용자 없이 기억을 철회할 수는 "
+                                     "없습니다. AI 도구가 읽거나 저장한 기억은 그 대화의 일부가 되며, 그 AI 도구의 AI "
+                                     "모델 제공자에게 보내질 수 있습니다.",
+    "dialog.welcome.backups": "연결 백업은 이 PC에 남음",
+    "dialog.welcome.backups_text": "AI 도구를 연결하면 먼저 그 MCP 설정을 백업합니다. 이 백업에는 다른 서버의 설정이나 "
+                                   "환경 값이 들어 있을 수 있고, 암호화되지 않은 채 저장됩니다.",
+    "dialog.welcome.limits": "알아 둘 한계",
+    "dialog.welcome.limits_text": "데이터베이스는 암호화되지 않습니다. 삭제는 기억을 숨기지만 이전 버전을 안전하게 "
+                                  "지우지는 않습니다.",
+    "dialog.welcome.continue_note": "‘계속’을 누르면 이 PC에 BIO CE 데이터 폴더를 만듭니다.",
+    "dialog.welcome.continue": "계속",
+    "dialog.welcome.quit": "종료",
+    "dialog.review_edit.title": "저장 전에 수정",
+    "dialog.review_edit.reason": "AI 도구가 제안함: {reason}",
+    "dialog.review_edit.title_label": "제목",
+    "dialog.review_edit.memory_label": "기억",
+    "dialog.review_edit.save": "기억 저장",
+    "dialog.entry.title": "항목 수정",
+    "dialog.entry.date_cleared": "글을 바꾸면 출처 날짜({date})가 지워집니다. 그 날짜는 원래 글에 대한 것이었습니다. "
+                                 "언제 말했는지 알면 아래에 넣으세요.",
+    "dialog.entry.instruction_hint": "AI에게 하는 지시(“항상 한국어로 답하라”)는 내 선호(“나는 한국어 답변을 "
+                                     "선호한다”)로 바꿔 쓸 수 있습니다.",
+    "dialog.entry.said_on": "말한 날(선택, 예: 2025-03-14)",
+    "dialog.export.title": "기억 내보내기",
+    "dialog.export.description": "기억마다 “[날짜] - 기억” 한 줄씩 담긴 .md 파일입니다. 다른 AI에 붙여 넣거나 BIO CE로 "
+                                 "다시 가져오는 데 쓸 수 있습니다. 삭제한 기억, 검토 대기, 이전 버전은 빠집니다.",
+    "dialog.export.spaces": "공간",
+    "dialog.export.personal_space": "{name} (내 개인 기억)",
+    "dialog.export.personal_warning": "개인 기억이 파일에 들어갑니다.",
+    "dialog.export.what": "내보낼 것",
+    "dialog.export.include_inbox": "수집함도 (아직 정리하지 않은 항목)",
+    "dialog.export.sources": "출처",
+    "dialog.export.dates": "날짜 (선택, 예: 2025-01-01)",
+    "dialog.export.date_to": "~",
+    "dialog.export.include_claimed": "날짜를 확인하지 않은 가져온 기억에 출처 날짜 붙이기",
+    "dialog.export.button": "내보내기…",
+    "dialog.export.choose_first": "공간과 출처를 하나 이상씩 고르세요.",
+    "dialog.export.bad_date": "날짜는 2025-01-01처럼 쓰거나 비워 두세요.",
     #
     #
     #

@@ -857,6 +857,206 @@ STRINGS: dict[str, object] = {
     # ===== end of U5-A =====
     # ===== U5-B: Settings and dialogs (src/bio_ce/ui/pages/settings.py, dialogs.py, pages/__init__.py) =====
     # Add this part's keys right below this line, in this block only (other parts merge around it).
+    "settings.subtitle": "Where your data lives and how it is protected",
+    "settings.storage.title": "Memory database",
+    "settings.storage.description": "Your memories are stored in this file. Keep it in your user profile so other "
+                                    "Windows users can't read it.",
+    "settings.storage.open_folder": "Open folder",
+    "settings.storage.copy_path": "Copy path",
+    "settings.storage.demo": "Demo data is kept separately in {path} and is never mixed into your memories.",
+    "settings.storage.active": {"one": "{count:,} active memory", "other": "{count:,} active memories"},
+    "settings.storage.no_count": "Memory count unavailable",
+    "settings.storage.on_disk": "{size} on disk",
+    "settings.storage.path_copied": "Database path copied to the clipboard.",
+    "settings.backup.title": "Backup and restore",
+    "settings.backup.description": "A backup is two files: a complete copy of your memories (name.sqlite3) and your "
+                                   "connection records (name.control.sqlite3). Keep them together. Backups are not "
+                                   "encrypted and may contain personal memories, so store them somewhere private and "
+                                   "don't share them.",
+    "settings.backup.create": "Create backup…",
+    "settings.backup.export": "Export memories as text…",
+    "settings.restore.title": "Restore from a backup",
+    "settings.restore.description": "Restoring replaces all current memories with the backup. BIO CE checks the file "
+                                    "first. Connections and permissions stay as they are now. Close connected AI hosts "
+                                    "before restoring, and create a backup of your current memories if you want to "
+                                    "keep them.",
+    "settings.restore.button": "Restore from backup…",
+    "settings.privacy.title": "Privacy and security",
+    "settings.privacy.local": "Stored only on this PC",
+    "settings.privacy.local_text": "Memories live in a SQLite file in your Windows user profile. BIO CE does not "
+                                   "upload or sync them.",
+    "settings.privacy.no_recording": "Nothing is recorded behind your back",
+    "settings.privacy.no_recording_text": "BIO CE never records conversations. AI hosts can save memories only after "
+                                          "you turn on Auto memory, and BIO CE refuses secrets and content taken from "
+                                          "documents.",
+    "settings.privacy.control": "You control AI access",
+    "settings.privacy.control_text": "Hosts are read only unless you turn on Auto memory. Pause or disconnect any host "
+                                     "on the Connections page; uncertain changes and every retraction wait for your "
+                                     "review there.",
+    "settings.privacy.no_encryption": "No encryption at rest",
+    "settings.privacy.no_encryption_text": "Anyone who can sign in to your Windows account can read the database and "
+                                           "backups. Protect your account.",
+    "settings.privacy.not_erase": "Retraction is not secure erase",
+    "settings.privacy.not_erase_text": "Retracted memories disappear from BIO CE and AI hosts, but earlier revisions "
+                                       "remain in the database file.",
+    "settings.privacy.host_backups": "Connection settings backups",
+    "settings.privacy.host_backups_text": "Connecting or disconnecting a host first copies its MCP settings to your "
+                                          "BIO CE folder. The copies can include other servers’ settings or "
+                                          "environment values. Delete them when you no longer need them.",
+    "settings.privacy.open_backups": "Open settings backups folder",
+    "settings.about.title": "About BIO CE",
+    "settings.about.version": "BIO Community Edition {version} · {channel}",
+    "settings.about.preview": "Developer Preview",
+    "settings.about.candidate": "Release Candidate",
+    "settings.about.release": "Release",
+    "settings.about.copyright": "Copyright 2026 stickleetoto. Licensed under the Apache License 2.0. This build is "
+                                "unsigned and provided without warranty.",
+    "settings.about.view_license": "View license",
+    "settings.about.license_name": "Apache License 2.0",
+    "settings.about.notices": "Third-party notices",
+    "settings.about.file_failed": "BIO CE couldn't open {name}. Reinstall BIO CE to restore it.",
+    "settings.about.file_failed_title": "File unavailable",
+    "settings.spaces.title": "Spaces",
+    "settings.spaces.description": "General holds your memories as before. A project space keeps one project's "
+                                   "memories apart. Link a project folder and the session hooks use that space when "
+                                   "you work there. BIO CE stores only a fingerprint of the folder path and the "
+                                   "folder's name.",
+    "settings.spaces.new": "New project space…",
+    "settings.spaces.unavailable": "Spaces are unavailable right now.",
+    "settings.spaces.general_detail": "Always available. Used when no project space fits.",
+    "settings.spaces.linked_folders": {"one": "{count:,} linked folder", "other": "{count:,} linked folders"},
+    "settings.spaces.no_folder": "No folder linked yet",
+    "settings.spaces.archive": "Archive",
+    "settings.spaces.rename": "Rename",
+    "settings.spaces.link_folder": "Link folder…",
+    "settings.spaces.unlink": "Unlink",
+    "settings.spaces.change_failed": "BIO CE couldn't change the space.",
+    "settings.spaces.new_title": "New project space",
+    "settings.spaces.name": "Name",
+    "settings.spaces.create": "Create space",
+    "settings.spaces.new_note": "For example the project's name. You can rename it later.",
+    "settings.spaces.not_created": "Space not created",
+    "settings.spaces.created": "Created the space {name!r}. Link its folder so hooks pick it up.",
+    "settings.spaces.created_title": "Space created",
+    "settings.spaces.rename_title": "Rename space",
+    "settings.spaces.rename_note": "Memories stay in the space; only its name changes.",
+    "settings.spaces.not_renamed": "Space not renamed",
+    "settings.spaces.archive_title": "Archive {name}?",
+    "settings.spaces.archive_message": "AI hosts can no longer read or write this space, and its folder links stop "
+                                       "working.",
+    "settings.spaces.archive_point_kept": "Its memories stay in your database and in backups.",
+    "settings.spaces.archive_point_general": "Hosts use General for folders that were linked to it.",
+    "settings.spaces.archive_confirm": "Archive space",
+    "settings.spaces.not_archived": "Space not archived",
+    "settings.spaces.choose_folder": "Choose a folder for {name}",
+    "settings.spaces.not_linked": "Folder not linked",
+    "settings.spaces.not_unlinked": "Folder not unlinked",
+    "settings.personal.turn_off": "Turn off…",
+    "settings.personal.turn_on": "Turn on Personal…",
+    "settings.personal.on_detail": "On. Hosts read it only with the permission you give each one on the Connections "
+                                   "page; session hooks never use it.",
+    "settings.personal.off_detail": "Off. For memories about you: health, family, finances, where you studied or "
+                                    "served.",
+    "settings.personal.on_title": "Turn on Personal?",
+    "settings.personal.on_message": "Personal is a separate space for memories about you. Nothing changes for your "
+                                    "hosts until you allow each one.",
+    "settings.personal.on_point_allow": "No AI host can read or save Personal until you allow it on the Connections "
+                                        "page.",
+    "settings.personal.on_point_hooks": "Session hooks never add Personal memories to a conversation.",
+    "settings.personal.on_point_backups": "Personal memories are in your backups like all other memories.",
+    "settings.personal.on_point_off": "Turning it off later keeps its memories and removes every host's access.",
+    "settings.personal.on_confirm": "Turn on Personal",
+    "settings.personal.off_title": "Turn off Personal?",
+    "settings.personal.off_message": "Personal memories stay in your database, but no host can use them and the "
+                                     "space is hidden.",
+    "settings.personal.off_point": "Every host's Personal access is removed. You allow each host again after turning "
+                                   "it on.",
+    "settings.personal.off_confirm": "Turn off Personal",
+    "settings.inbox.title": "Inbox",
+    "settings.inbox.description": "Hosts in collect mode save to the inbox. Unused items are proposed for discarding "
+                                  "and then discarded unless you keep them. Text a host takes from a file has a size "
+                                  "limit.",
+    "settings.inbox.expire_label": "Propose discarding after",
+    "settings.inbox.expire_unit": "days unused (7–365)",
+    "settings.inbox.wait_label": "Then discard after",
+    "settings.inbox.wait_unit": "more days unless kept (1–30)",
+    "settings.inbox.file_label": "File text limit",
+    "settings.inbox.file_unit": "characters (200–2000)",
+    "settings.inbox.save": "Save inbox settings",
+    "settings.inbox.save_failed": "{reason}. Nothing after it was saved.",
+    "settings.inbox.saved": "Inbox settings saved.",
+    "settings.inbox.saved_title": "Inbox settings",
+    "settings.engine.title": "Memory engine",
+    "settings.engine.description": "The engine stores and finds your memories. BIO CE includes the Community Engine; "
+                                   "other engines are installed separately.",
+    "settings.engine.check": "Check again",
+    "settings.engine.check_tooltip": "Check each engine's status again",
+    "settings.engine.in_use": "In use",
+    "settings.engine.use": "Use this engine",
+    "settings.engine.switching_disabled": "Choosing another engine is not available in this version of BIO CE. Your "
+                                          "memories stay in the Community Engine.",
+    "settings.engine.checked": "Memory engine checked",
+    "dialog.history.title": "Revision history",
+    "dialog.history.subtitle": {"one": "{title} · {count} revision", "other": "{title} · {count} revisions"},
+    "dialog.history.none": "No revisions",
+    "dialog.history.revision": "Revision {number} · {kind}",
+    "dialog.history.current": "CURRENT",
+    "dialog.history.meta": "{time} · Source: {source}",
+    "dialog.history.no_text": "No memory text",
+    "dialog.history.undo": "Undo this suggestion…",
+    "dialog.welcome.product": "BIO COMMUNITY EDITION",
+    "dialog.welcome.title": "Welcome to BIO CE",
+    "dialog.welcome.intro": "A private memory manager for your AI tools. Before you start, here is how your data is "
+                            "handled.",
+    "dialog.welcome.local": "Stays on this PC",
+    "dialog.welcome.local_text": "Memories you save are stored in a local SQLite file in your Windows user profile. "
+                                 "Nothing is uploaded.",
+    "dialog.welcome.allow": "Only what you allow",
+    "dialog.welcome.allow_text": "BIO CE never records conversations. A memory is stored when you select Save, or "
+                                 "when you turn on Auto memory for an AI host and it saves a lasting fact under BIO "
+                                 "CE's rules.",
+    "dialog.welcome.read_only": "AI access is read only by default",
+    "dialog.welcome.read_only_text": "A connected AI host can search and read your memories. It can save or update "
+                                     "them only after you turn on Auto memory for it, and it can never retract one "
+                                     "without you. Memories a host reads or saves become part of that conversation and "
+                                     "may be sent to the host's AI model provider.",
+    "dialog.welcome.backups": "Connection backups stay local",
+    "dialog.welcome.backups_text": "Connecting a host first backs up its MCP settings. Those backups can contain "
+                                   "settings or environment values for other servers and are stored without "
+                                   "encryption.",
+    "dialog.welcome.limits": "Know the limits",
+    "dialog.welcome.limits_text": "The database is not encrypted. Retraction hides a memory but does not securely "
+                                  "erase earlier revisions.",
+    "dialog.welcome.continue_note": "Select Continue to create your local BIO CE data folder.",
+    "dialog.welcome.continue": "Continue",
+    "dialog.welcome.quit": "Quit",
+    "dialog.review_edit.title": "Edit before saving",
+    "dialog.review_edit.reason": "Suggested by an AI host: {reason}",
+    "dialog.review_edit.title_label": "Title",
+    "dialog.review_edit.memory_label": "Memory",
+    "dialog.review_edit.save": "Save memory",
+    "dialog.entry.title": "Edit entry",
+    "dialog.entry.date_cleared": "If you change the text, its source date ({date}) is cleared: that date was about "
+                                 "the original text. If you know when you said it, enter it below.",
+    "dialog.entry.instruction_hint": "An instruction to an AI (\"always answer in Korean\") can be rewritten as your "
+                                     "preference (\"I prefer answers in Korean\").",
+    "dialog.entry.said_on": "Said on (optional, for example 2025-03-14)",
+    "dialog.export.title": "Export memories",
+    "dialog.export.description": "A .md file with one \"[date] - memory\" line each, which you can paste into another "
+                                 "AI or import back into BIO CE. Retracted memories, the review queue, and older "
+                                 "versions are left out.",
+    "dialog.export.spaces": "Spaces",
+    "dialog.export.personal_space": "{name} (your personal memories)",
+    "dialog.export.personal_warning": "Personal memories will be in the file.",
+    "dialog.export.what": "What",
+    "dialog.export.include_inbox": "Also the inbox (items not sorted yet)",
+    "dialog.export.sources": "Sources",
+    "dialog.export.dates": "Dates (optional, for example 2025-01-01)",
+    "dialog.export.date_to": "to",
+    "dialog.export.include_claimed": "Add the source's date to imported memories whose date you haven't confirmed",
+    "dialog.export.button": "Export…",
+    "dialog.export.choose_first": "Choose at least one space and one source.",
+    "dialog.export.bad_date": "Use dates such as 2025-01-01, or leave them empty.",
     #
     #
     #

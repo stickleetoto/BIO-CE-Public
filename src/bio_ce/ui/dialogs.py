@@ -11,6 +11,8 @@ import tkinter as tk
 
 from bio_ce.engine.contract import MemoryView
 from bio_ce.ui.format import format_timestamp, revision_kind_label
+from bio_ce.ui.hub.common import space_label
+from bio_ce.ui.i18n import t
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS, Theme, apply_window_chrome
 from bio_ce.ui.widgets import Button, Field, ScrollFrame, TextArea, WrapLabel
 
@@ -96,7 +98,7 @@ class ConfirmDialog(Dialog):
         title: str,
         message: str,
         confirm_text: str,
-        cancel_text: str = "Cancel",
+        cancel_text: str | None = None,
         danger: bool = False,
         points: Sequence[str] = (),
         quote: str | None = None,
@@ -154,7 +156,7 @@ class ConfirmDialog(Dialog):
             self.finish(True)
 
         confirm = self.add_button(confirm_text, confirmed, variant="danger" if danger else "primary")
-        cancel = self.add_button(cancel_text, self.cancel)
+        cancel = self.add_button(t("common.cancel") if cancel_text is None else cancel_text, self.cancel)
         self.result = False
         self._default_focus = cancel if danger else confirm
 
@@ -177,14 +179,14 @@ class HistoryDialog(Dialog):
     def __init__(self, parent: tk.Misc, theme: Theme, revisions: Sequence[MemoryView], *,
                  undo: Callable[[], object] | None = None) -> None:
         """``undo``: when the current revision came from an approved suggestion, a button that undoes it."""
-        super().__init__(parent, theme, "Revision history", resizable=True)
+        super().__init__(parent, theme, t("dialog.history.title"), resizable=True)
         self._undo = undo
         c = theme.colors
         latest = revisions[-1] if revisions else None
-        tk.Label(self.content, text="Revision history", font=theme.font("title"), background=c.surface,
+        tk.Label(self.content, text=t("dialog.history.title"), font=theme.font("title"), background=c.surface,
                  foreground=c.text, anchor="w").pack(fill="x")
-        subtitle = (f"{latest.title} · {len(revisions)} revision{'s' if len(revisions) != 1 else ''}"
-                    if latest else "No revisions")
+        subtitle = (t("dialog.history.subtitle", title=latest.title, count=len(revisions))
+                    if latest else t("dialog.history.none"))
         tk.Label(self.content, text=subtitle, font=theme.font("body"), background=c.surface,
                  foreground=c.text_secondary, anchor="w", justify="left", wraplength=theme.px(640)).pack(
             fill="x", pady=(theme.px(SPACE_XS), theme.px(SPACE_M)))
@@ -205,13 +207,15 @@ class HistoryDialog(Dialog):
         for index, revision in enumerate(reversed(revisions)):
             if index:
                 text.insert(tk.END, "─" * 40 + "\n", "rule")
-            text.insert(tk.END, f"Revision {revision.revision_number} · {revision_kind_label(revision.kind)}", "heading")
+            text.insert(tk.END, t("dialog.history.revision", number=revision.revision_number,
+                                  kind=revision_kind_label(revision.kind)), "heading")
             if index == 0:
-                text.insert(tk.END, "   CURRENT", "current")
+                text.insert(tk.END, "   " + t("dialog.history.current"), "current")
             text.insert(tk.END, "\n")
             text.insert(
                 tk.END,
-                f"{format_timestamp(revision.recorded_at)} · Source: {revision.source_ref}\n",
+                t("dialog.history.meta", time=format_timestamp(revision.recorded_at), source=revision.source_ref)
+                + "\n",
                 "meta",
             )
             text.insert(tk.END, f"{revision.title}\n", "title")
@@ -219,12 +223,12 @@ class HistoryDialog(Dialog):
                 body = revision.content if len(revision.content) <= 4000 else revision.content[:4000] + "…"
                 text.insert(tk.END, body.rstrip() + "\n", "body")
             else:
-                text.insert(tk.END, "No memory text\n", "empty")
+                text.insert(tk.END, t("dialog.history.no_text") + "\n", "empty")
         text.configure(state="disabled")
         self.undo_button = None
         if undo is not None:
-            self.undo_button = self.add_button("Undo this suggestion…", self._undo_clicked, variant="secondary")
-        self.close_button = self.add_button("Close", self.cancel, variant="primary")
+            self.undo_button = self.add_button(t("dialog.history.undo"), self._undo_clicked, variant="secondary")
+        self.close_button = self.add_button(t("common.close"), self.cancel, variant="primary")
 
     def _undo_clicked(self) -> None:
         if self._undo is not None and self._undo():
@@ -249,7 +253,7 @@ class TextViewerDialog(Dialog):
         self.view.text.configure(padx=theme.px(SPACE_M), pady=theme.px(SPACE_S), spacing3=0, spacing2=0)
         self.view.set(body)
         self.view.pack(fill="both", expand=True)
-        self.close_button = self.add_button("Close", self.cancel, variant="primary")
+        self.close_button = self.add_button(t("common.close"), self.cancel, variant="primary")
 
     def show(self, *, modal: bool = False) -> "TextViewerDialog":
         """Non-modal by default; modal when opened from another modal dialog, which holds the input grab."""
@@ -261,7 +265,6 @@ class ShortcutsDialog(Dialog):
     """The keyboard shortcuts (v0.4.4 F3, the ? key), from the same table as the Settings list."""
 
     def __init__(self, parent: tk.Misc, theme: Theme) -> None:
-        from bio_ce.ui.i18n import t
         from bio_ce.ui.shortcuts import SHORTCUTS
 
         super().__init__(parent, theme, t("shortcut.dialog_title"))
@@ -285,21 +288,13 @@ class ShortcutsDialog(Dialog):
         return self
 
 
+#: (icon, heading key, text key) of the first-run notice; looked up when the notice is shown.
 WELCOME_POINTS = (
-    ("shield", "Stays on this PC",
-     "Memories you save are stored in a local SQLite file in your Windows user profile. Nothing is uploaded."),
-    ("edit", "Only what you allow",
-     "BIO CE never records conversations. A memory is stored when you select Save, or when you turn on Auto "
-     "memory for an AI host and it saves a lasting fact under BIO CE's rules."),
-    ("lock", "AI access is read only by default",
-     "A connected AI host can search and read your memories. It can save or update them only after you turn on "
-     "Auto memory for it, and it can never retract one without you. Memories a host reads or saves become part "
-     "of that conversation and may be sent to the host's AI model provider."),
-    ("backup", "Connection backups stay local",
-     "Connecting a host first backs up its MCP settings. Those backups can contain settings or environment values "
-     "for other servers and are stored without encryption."),
-    ("warning", "Know the limits",
-     "The database is not encrypted. Retraction hides a memory but does not securely erase earlier revisions."),
+    ("shield", "dialog.welcome.local", "dialog.welcome.local_text"),
+    ("edit", "dialog.welcome.allow", "dialog.welcome.allow_text"),
+    ("lock", "dialog.welcome.read_only", "dialog.welcome.read_only_text"),
+    ("backup", "dialog.welcome.backups", "dialog.welcome.backups_text"),
+    ("warning", "dialog.welcome.limits", "dialog.welcome.limits_text"),
 )
 
 
@@ -307,24 +302,24 @@ class ReviewEditDialog(Dialog):
     """Let the user correct an AI-suggested memory before approving it."""
 
     def __init__(self, parent: tk.Misc, theme: Theme, *, title: str, content: str, reason: str) -> None:
-        super().__init__(parent, theme, "Edit before saving", resizable=True)
+        super().__init__(parent, theme, t("dialog.review_edit.title"), resizable=True)
         c = theme.colors
-        tk.Label(self.content, text="Edit before saving", font=theme.font("title"), background=c.surface,
+        tk.Label(self.content, text=t("dialog.review_edit.title"), font=theme.font("title"), background=c.surface,
                  foreground=c.text, anchor="w").pack(fill="x")
-        WrapLabel(self.content, f"Suggested by an AI host: {reason}", font=theme.font("caption"),
+        WrapLabel(self.content, t("dialog.review_edit.reason", reason=reason), font=theme.font("caption"),
                   foreground=c.text_secondary).pack(fill="x", pady=(theme.px(SPACE_XS), theme.px(SPACE_M)))
-        tk.Label(self.content, text="Title", font=theme.font("body_strong"), background=c.surface,
-                 foreground=c.text, anchor="w").pack(fill="x")
+        tk.Label(self.content, text=t("dialog.review_edit.title_label"), font=theme.font("body_strong"),
+                 background=c.surface, foreground=c.text, anchor="w").pack(fill="x")
         self.title_value = tk.StringVar(master=self, value=title)
         self.title_field = Field(self.content, theme, textvariable=self.title_value)
         self.title_field.pack(fill="x", pady=(theme.px(SPACE_XS), theme.px(SPACE_M)))
-        tk.Label(self.content, text="Memory", font=theme.font("body_strong"), background=c.surface,
-                 foreground=c.text, anchor="w").pack(fill="x")
+        tk.Label(self.content, text=t("dialog.review_edit.memory_label"), font=theme.font("body_strong"),
+                 background=c.surface, foreground=c.text, anchor="w").pack(fill="x")
         self.body = TextArea(self.content, theme, height=8)
         self.body.set(content)
         self.body.pack(fill="both", expand=True, pady=(theme.px(SPACE_XS), 0))
-        self.add_button("Save memory", self._save, variant="primary")
-        self.add_button("Cancel", self.cancel)
+        self.add_button(t("dialog.review_edit.save"), self._save, variant="primary")
+        self.add_button(t("common.cancel"), self.cancel)
 
     def _save(self) -> None:
         title, content = self.title_value.get().strip(), self.body.get().strip()
@@ -342,7 +337,7 @@ class NameDialog(Dialog):
     """Ask for one short name (for example a space name)."""
 
     def __init__(self, parent: tk.Misc, theme: Theme, *, title: str, label: str, value: str = "",
-                 confirm_text: str = "Save", note: str = "") -> None:
+                 confirm_text: str | None = None, note: str = "") -> None:
         super().__init__(parent, theme, title)
         c = theme.colors
         tk.Label(self.content, text=title, font=theme.font("title"), background=c.surface,
@@ -356,8 +351,8 @@ class NameDialog(Dialog):
         self.field = Field(self.content, theme, textvariable=self.value)
         self.field.pack(fill="x", pady=(theme.px(SPACE_XS), 0))
         self.bind("<Return>", lambda _event: self._save() if self.armed else None)
-        self.add_button(confirm_text, self._save, variant="primary")
-        self.add_button("Cancel", self.cancel)
+        self.add_button(t("common.save") if confirm_text is None else confirm_text, self._save, variant="primary")
+        self.add_button(t("common.cancel"), self.cancel)
 
     def _save(self) -> None:
         name = " ".join(self.value.get().split())
@@ -376,30 +371,28 @@ class EntryEditDialog(Dialog):
 
     def __init__(self, parent: tk.Misc, theme: Theme, *, content: str, said_at: str = "", reasons: str = "",
                  source_date: str = "") -> None:
-        super().__init__(parent, theme, "Edit entry", resizable=True)
+        super().__init__(parent, theme, t("dialog.entry.title"), resizable=True)
         c = theme.colors
-        tk.Label(self.content, text="Edit entry", font=theme.font("title"), background=c.surface,
+        tk.Label(self.content, text=t("dialog.entry.title"), font=theme.font("title"), background=c.surface,
                  foreground=c.text, anchor="w").pack(fill="x")
         if reasons:
             WrapLabel(self.content, reasons, font=theme.font("caption"), foreground=c.text_secondary).pack(
                 fill="x", pady=(theme.px(SPACE_XS), 0))
         if source_date:  # owner rule 2026-11-16: a changed text doesn't keep a date that was about the old one
-            WrapLabel(self.content, f"If you change the text, its source date ({source_date}) is cleared: that "
-                      "date was about the original text. If you know when you said it, enter it below.",
+            WrapLabel(self.content, t("dialog.entry.date_cleared", date=source_date),
                       font=theme.font("caption"), foreground=c.warning).pack(fill="x", pady=(theme.px(SPACE_XS), 0))
-        WrapLabel(self.content, "An instruction to an AI (\"always answer in Korean\") can be rewritten as your "
-                  "preference (\"I prefer answers in Korean\").", font=theme.font("caption"),
+        WrapLabel(self.content, t("dialog.entry.instruction_hint"), font=theme.font("caption"),
                   foreground=c.text_muted).pack(fill="x", pady=(theme.px(SPACE_XS), 0))
         self.text = TextArea(self.content, theme, font="body")
         self.text.text.configure(height=6)
         self.text.set(content)
         self.text.pack(fill="both", expand=True, pady=(theme.px(SPACE_S), 0))
-        tk.Label(self.content, text="Said on (optional, for example 2025-03-14)", font=theme.font("body_strong"),
+        tk.Label(self.content, text=t("dialog.entry.said_on"), font=theme.font("body_strong"),
                  background=c.surface, foreground=c.text, anchor="w").pack(fill="x", pady=(theme.px(SPACE_M), 0))
         self.date = tk.StringVar(master=self, value=said_at)
         Field(self.content, theme, textvariable=self.date).pack(fill="x", pady=(theme.px(SPACE_XS), 0))
-        self.add_button("Save", self._save, variant="primary")
-        self.add_button("Cancel", lambda: self.finish(None))
+        self.add_button(t("common.save"), self._save, variant="primary")
+        self.add_button(t("common.cancel"), lambda: self.finish(None))
         self.result = None
 
     def _save(self) -> None:
@@ -419,13 +412,12 @@ class ExportDialog(Dialog):
 
     def __init__(self, parent: tk.Misc, theme: Theme, *, spaces: Sequence, current: str | None,
                  sources: Sequence[tuple[str, str]]) -> None:
-        super().__init__(parent, theme, "Export memories", resizable=True)
+        super().__init__(parent, theme, t("dialog.export.title"), resizable=True)
         c = theme.colors
-        tk.Label(self.content, text="Export memories", font=theme.font("title"), background=c.surface,
+        tk.Label(self.content, text=t("dialog.export.title"), font=theme.font("title"), background=c.surface,
                  foreground=c.text, anchor="w").pack(fill="x")
-        WrapLabel(self.content, "A .md file with one \"[date] - memory\" line each, which you can paste into another "
-                  "AI or import back into BIO CE. Retracted memories, the review queue, and older versions are left "
-                  "out.", font=theme.font("caption"), foreground=c.text_secondary).pack(fill="x")
+        WrapLabel(self.content, t("dialog.export.description"), font=theme.font("caption"),
+                  foreground=c.text_secondary).pack(fill="x")
 
         def check(master, label, value=False):
             variable = tk.BooleanVar(self, value=value)
@@ -438,36 +430,36 @@ class ExportDialog(Dialog):
             tk.Label(self.content, text=text, font=theme.font("body_strong"), background=c.surface,
                      foreground=c.text, anchor="w").pack(fill="x", pady=(theme.px(SPACE_M), 0))
 
-        heading("Spaces")
+        heading(t("dialog.export.spaces"))
         self.space_vars: dict[str, tk.BooleanVar] = {}
         for space in spaces:
-            label = space.display_name + (" (your personal memories)" if space.is_personal else "")
+            label = (t("dialog.export.personal_space", name=space_label(space)) if space.is_personal
+                     else space_label(space))
             self.space_vars[space.space_id] = check(self.content, label,
                                                     space.space_id == current and not space.is_personal)
             if space.is_personal:
                 self.personal_box = self.content.winfo_children()[-1]
-        self.personal_warning = WrapLabel(self.content, "Personal memories will be in the file.",
+        self.personal_warning = WrapLabel(self.content, t("dialog.export.personal_warning"),
                                           font=theme.font("caption"), foreground=c.warning)
         if "personal" in self.space_vars:
             self.space_vars["personal"].trace_add("write", lambda *_: self._sync_warning())
-        heading("What")
-        self.include_inbox = check(self.content, "Also the inbox (items not sorted yet)")
-        heading("Sources")
+        heading(t("dialog.export.what"))
+        self.include_inbox = check(self.content, t("dialog.export.include_inbox"))
+        heading(t("dialog.export.sources"))
         self.source_vars = {key: check(self.content, label, True) for key, label in sources}
-        heading("Dates (optional, for example 2025-01-01)")
+        heading(t("dialog.export.dates"))
         row = tk.Frame(self.content, background=c.surface)
         row.pack(fill="x")
         self.date_from, self.date_to = tk.StringVar(master=self), tk.StringVar(master=self)
         Field(row, theme, textvariable=self.date_from).pack(side="left", fill="x", expand=True)
-        tk.Label(row, text="to", font=theme.font("body"), background=c.surface, foreground=c.text_muted).pack(
-            side="left", padx=theme.px(SPACE_S))
+        tk.Label(row, text=t("dialog.export.date_to"), font=theme.font("body"), background=c.surface,
+                 foreground=c.text_muted).pack(side="left", padx=theme.px(SPACE_S))
         Field(row, theme, textvariable=self.date_to).pack(side="left", fill="x", expand=True)
-        self.include_claimed = check(self.content, "Add the source's date to imported memories whose date you "
-                                                   "haven't confirmed")
+        self.include_claimed = check(self.content, t("dialog.export.include_claimed"))
         self.error = WrapLabel(self.content, "", font=theme.font("caption"), foreground=c.danger)
         self.error.pack(fill="x")
-        self.add_button("Export…", self._done, variant="primary")
-        self.add_button("Cancel", lambda: self.finish(None))
+        self.add_button(t("dialog.export.button"), self._done, variant="primary")
+        self.add_button(t("common.cancel"), lambda: self.finish(None))
         self.result = None
 
     def _sync_warning(self) -> None:
@@ -482,10 +474,10 @@ class ExportDialog(Dialog):
         sources = frozenset(key for key, variable in self.source_vars.items() if variable.get())
         dates = (self.date_from.get().strip(), self.date_to.get().strip())
         if not spaces or not sources:
-            self.error.configure(text="Choose at least one space and one source.")
+            self.error.configure(text=t("dialog.export.choose_first"))
             return
         if any(value and not _re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) for value in dates):
-            self.error.configure(text="Use dates such as 2025-01-01, or leave them empty.")
+            self.error.configure(text=t("dialog.export.bad_date"))
             return
         self.finish({"space_ids": spaces, "include_inbox": bool(self.include_inbox.get()), "sources": sources,
                      "date_from": dates[0] or None, "date_to": dates[1] or None,
@@ -523,7 +515,7 @@ class ChoiceDialog(Dialog):
             WrapLabel(self.content, note, font=theme.font("caption"), foreground=c.text_muted).pack(
                 fill="x", pady=(theme.px(SPACE_M), 0))
         self.add_button(confirm_text, lambda: self.finish(self.choice.get() or None), variant="primary")
-        self.add_button("Cancel", lambda: self.finish(None))
+        self.add_button(t("common.cancel"), lambda: self.finish(None))
         self.result = None
 
     def ask(self) -> str | None:
@@ -544,14 +536,14 @@ def ask_privacy_consent(root: tk.Tk, theme: Theme) -> bool:
     scroll.pack(fill="both", expand=True)
     body = tk.Frame(scroll.body, background=c.surface)
     body.pack(fill="x", padx=theme.px(36), pady=(theme.px(32), theme.px(SPACE_XL)))
-    tk.Label(body, text="BIO COMMUNITY EDITION", font=theme.font("caption_strong"), background=c.surface,
+    tk.Label(body, text=t("dialog.welcome.product"), font=theme.font("caption_strong"), background=c.surface,
              foreground=c.accent_text, anchor="w").pack(fill="x")
-    tk.Label(body, text="Welcome to BIO CE", font=theme.font("display"), background=c.surface, foreground=c.text,
-             anchor="w").pack(fill="x", pady=(theme.px(SPACE_XS), 0))
-    WrapLabel(body, "A private memory manager for your AI tools. Before you start, here is how your data is handled.",
-              font=theme.font("body"), foreground=c.text_secondary).pack(
+    tk.Label(body, text=t("dialog.welcome.title"), font=theme.font("display"), background=c.surface,
+             foreground=c.text, anchor="w").pack(fill="x", pady=(theme.px(SPACE_XS), 0))
+    WrapLabel(body, t("dialog.welcome.intro"), font=theme.font("body"), foreground=c.text_secondary).pack(
         fill="x", pady=(theme.px(SPACE_S), theme.px(SPACE_L)))
-    for icon, heading, text in WELCOME_POINTS:
+    for icon, heading_key, text_key in WELCOME_POINTS:
+        heading, text = t(heading_key), t(text_key)
         row = tk.Frame(body, background=c.surface)
         row.pack(fill="x", pady=theme.px(7))
         tk.Label(row, text=theme.icon(icon), font=theme.icon_font("normal"), background=c.surface,
@@ -562,13 +554,15 @@ def ask_privacy_consent(root: tk.Tk, theme: Theme) -> bool:
         tk.Label(column, text=heading, font=theme.font("body_strong"), background=c.surface, foreground=c.text,
                  anchor="w").pack(fill="x")
         WrapLabel(column, text, font=theme.font("body"), foreground=c.text_secondary).pack(fill="x")
-    tk.Label(body, text="Select Continue to create your local BIO CE data folder.", font=theme.font("caption"),
+    tk.Label(body, text=t("dialog.welcome.continue_note"), font=theme.font("caption"),
              background=c.surface, foreground=c.text_muted, anchor="w").pack(fill="x", pady=(theme.px(SPACE_L), 0))
     buttons = tk.Frame(footer, background=c.bg)
     buttons.pack(side="right", padx=theme.px(SPACE_XL), pady=theme.px(SPACE_L))
-    proceed = Button(buttons, theme, "Continue", variant="primary", command=lambda: decision.set("accept"))
+    proceed = Button(buttons, theme, t("dialog.welcome.continue"), variant="primary",
+                     command=lambda: decision.set("accept"))
     proceed.pack(side="left")
-    Button(buttons, theme, "Quit", command=lambda: decision.set("decline")).pack(side="left", padx=(theme.px(SPACE_S), 0))
+    Button(buttons, theme, t("dialog.welcome.quit"), command=lambda: decision.set("decline")).pack(
+        side="left", padx=(theme.px(SPACE_S), 0))
     root.protocol("WM_DELETE_WINDOW", lambda: decision.set("decline"))
     root.bind("<Escape>", lambda _e: decision.set("decline"))
     root.deiconify()
