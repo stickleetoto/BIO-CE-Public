@@ -200,10 +200,10 @@ class HostCard(Card):
         self.capability = capability
         tk.Label(capability, text=t("connections.auto_support"), font=theme.font("caption_strong"),
                  background=c.surface, foreground=c.text_muted, anchor="w").pack(side="left")
-        self.support_pill = Pill(capability, theme, support.summary,
+        self.support_pill = Pill(capability, theme, say(support.summary),
                                  {"available": "success", "limited": "warning"}.get(support.level, "neutral"))
         self.support_pill.pack(side="left", padx=(theme.px(SPACE_S), 0))
-        self.support_detail = WrapLabel(body, support.detail, font=theme.font("caption"), foreground=c.text_muted)
+        self.support_detail = WrapLabel(body, say(support.detail), font=theme.font("caption"), foreground=c.text_muted)
         self.support_detail.pack(fill="x", pady=(theme.px(SPACE_XS), 0))
 
         self.access = tk.Frame(body, background=c.surface)
@@ -316,7 +316,7 @@ class HostCard(Card):
     def apply(self, status: HostStatus | None) -> None:
         self.status = status
         self.support = auto_memory_support(self.host, status.code_mode if status is not None else None)
-        self.support_detail.configure(text=self.support.detail)
+        self.support_detail.configure(text=say(self.support.detail))
         text, kind = host_pill(status)
         self.pill.set(text, kind)
         self.message.configure(text=host_message(self.host, status))
@@ -782,7 +782,7 @@ class ConnectionsPage(Page):
             title=t("connections.auto.title", name=name),
             message=t("connections.auto.message", name=name),
             points=(
-                *((t("connections.auto.point_support", name=name, detail=auto_memory_support(host).detail),)
+                *((t("connections.auto.point_support", name=name, detail=say(auto_memory_support(host).detail)),)
                   if auto_memory_support(host).level != "available" else ()),
                 t("connections.auto.point_what"),
                 t("connections.auto.point_refused"),

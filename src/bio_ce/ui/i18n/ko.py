@@ -52,6 +52,7 @@ STRINGS: dict[str, object] = {
     "shortcut.escape": "서랍 닫기, 수정 취소, 검색 지우기, 대화상자 닫기",
     "shortcut.history": "열린 기억의 버전 기록 보기",
     "shortcut.select": "카드 여러 개 선택(공간으로 끌어다 놓거나 M, Delete)",
+    "shortcut.click": "클릭",
     "shortcut.arrows": "카드 사이 이동",
     "shortcut.menu": "포커스가 있는 카드의 메뉴 열기(오른쪽 클릭과 같음)",
     "shortcut.refresh": "지금 화면 새로 고침",
@@ -151,8 +152,8 @@ STRINGS: dict[str, object] = {
     "hub.editor.title": "제목",
     "hub.editor.memory": "기억",
     "hub.editor.source": "출처",
-    "hub.editor.source_note": "회의, 문서, “user-input”처럼 어디서 왔는지 적습니다. 설명으로만 저장되며 기억을 더 믿을 "
-                              "만하게 만들지 않습니다.",
+    "hub.editor.source_note": "회의, 문서처럼 어디서 왔는지 적습니다. 비워 두면 ‘직접 추가’로 저장됩니다. 설명으로만 "
+                              "저장되며 기억을 더 믿을 만하게 만들지 않습니다.",
     "hub.editor.save": "기억 저장",
     "hub.editor.save_tip": "저장 (Ctrl+S, 본문에서는 Ctrl+Enter)",
     "hub.editor.cancel_tip": "저장하지 않고 돌아가기 (Esc)",
@@ -1257,6 +1258,30 @@ STRINGS: dict[str, object] = {
     "svc.outcome.rejected_message": "엔진의 규칙이 거부했습니다.",
     "svc.outcome.unavailable": "쓸 수 없음",
     "svc.outcome.unavailable_message": "이 엔진은 BIO CE를 통해 그 변경을 제공하지 않습니다.",
+    "svc.support.available": "사용 가능",
+    "svc.support.limited": "제한",
+    "svc.support.unverified": "확인 안 됨",
+    "svc.support.claude": "Claude Code 2.1.306에서 확인: 모델이 BIO CE 도구를 스스로 찾아 기억을 저장하고, 중복을 "
+                          "합치고, 고치고, 다시 불러왔습니다.",
+    "svc.support.claude_desktop": "Claude 데스크톱 앱에는 세션 훅이 없어 대화를 시작할 때 아무것도 자동으로 불러오지 "
+                                  "않습니다. 모델은 요청하면 BIO CE 도구를 쓰고 스스로 쓸 수도 있지만, 그것은 아직 "
+                                  "확인하지 않았습니다. 대화에서 저장과 검색은 2026-11-14에 확인했습니다.",
+    "svc.support.codex": "Codex는 기본 모델을 코드 모드로 실행하며, 코드 모드는 MCP 도구와 그 안내를 모델에 바로 "
+                         "보여 주지 않을 수 있습니다. Codex 0.166 이상에는 이를 보여 주는 옵션이 있고, BIO CE는 "
+                         "연결할 때(또는 아래 ‘적용’을 누르면) 이 옵션을 넣습니다. BIO CE 서버와 도구는 동작하며, "
+                         "모델이 쓰면 호출이 성공합니다. Codex 데스크톱 앱은 명령줄 도구와 같은 설정을 읽습니다.",
+    "svc.support.codex_shown": "Codex는 기본 모델을 코드 모드로 실행합니다. BIO CE가 서버에 Codex의 omit_tools_from = "
+                               "[\"code_mode\"] 옵션을 넣어 모델이 BIO CE 도구와 안내를 봅니다(Codex 0.166에서 확인). "
+                               "모델이 쓰면 호출이 동작하며, 스스로 기억을 쓰는지는 아직 확인하지 않았습니다. Codex "
+                               "데스크톱 앱은 명령줄 도구와 같은 설정을 읽습니다.",
+    "svc.support.codex_user_set": "Codex는 기본 모델을 코드 모드로 실행하며, 코드 모드는 MCP 도구와 그 안내를 모델에 "
+                                  "바로 보여 주지 않을 수 있습니다. Codex 설정이 이미 다른 방식으로 bio-ce의 "
+                                  "omit_tools_from을 정해 두어 BIO CE는 그대로 두었습니다. BIO CE 서버와 도구는 "
+                                  "동작하며, 모델이 쓰면 호출이 성공합니다.",
+    "svc.inbox.discard_notice": "BIO CE는 버린 항목을 앱이 할 수 있는 만큼 데이터베이스에서 지웁니다. 데이터베이스 "
+                                "파일과 그 로그에서 비워진 공간을 덮어씁니다. 드라이브 자체의 완전 삭제는 보장하지 "
+                                "않습니다(예: SSD 웨어 레벨링, Windows 페이지 파일, 파일 시스템 저널). 전에 만든 "
+                                "백업에는 이 항목이 남아 있으니, 더 이상 필요 없는 오래된 백업은 지우세요.",
     "svc.engine.using": "{name} 사용 중",
     "svc.engine.none": "연결된 기억 엔진 없음",
     "svc.engine.stopped": "BIO CE가 이전 엔진 사용을 멈췄습니다.",

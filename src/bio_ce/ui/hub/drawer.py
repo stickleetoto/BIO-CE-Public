@@ -17,6 +17,7 @@ from bio_ce.ui.format import format_timestamp, middle_ellipsis, preview, revisio
 from bio_ce.ui.hub.common import READING_WIDTH, AutoText, in_space, space_label, when
 from bio_ce.ui.hub.data import INBOX, MEMORIES, RETRACTED, HubItem
 from bio_ce.ui.hub.editor import DrawerEditor
+from bio_ce.ui.hub.filters import source_text
 from bio_ce.ui.hub.quick import copy_items
 from bio_ce.ui.i18n import t
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS
@@ -51,8 +52,10 @@ def inbox_meta(item) -> str:
     if meta.get("import_source"):
         return import_line(meta)
     parts = [t("hub.inbox.saved", when=format_timestamp(item.recorded_at))]
-    if meta.get("host"):
-        parts.append(t("hub.inbox.by_host", host=meta["host"]))
+    if meta.get("host"):  # the tool's name, not its key ("저장 · codex" in rc1)
+        host = meta["host"]
+        known = host in ("codex", "claude", "claude_desktop")
+        parts.append(t("hub.inbox.by_host", host=t(f"hub.filter.host.{host}") if known else host))
     if meta.get("guess"):
         parts.append(t("hub.inbox.guess"))
     if meta.get("evidence") == "external_content":
@@ -246,8 +249,7 @@ class Drawer(tk.Frame):
         self.title_label.set_text(record.title)
         meta = [space_label(item.space), t("hub.drawer.revision", number=record.revision_number),
                 t("hub.drawer.updated", when=when(record.recorded_at))]
-        if record.source_ref:
-            meta.append(t("hub.drawer.source_short", source=preview(record.source_ref, 48)))
+        meta.append(t("hub.drawer.source_short", source=source_text(record)))
         self.meta_label.set_text(" · ".join(meta))
         self.meta_label.pack(fill="x", pady=(self.theme.px(SPACE_XS), 0), after=self.title_label)
         self.inbox_meta.pack_forget()
@@ -257,7 +259,7 @@ class Drawer(tk.Frame):
             self.reader.set(t("hub.drawer.no_text"), "empty")
         values = {"memory_id": middle_ellipsis(record.memory_id, 40),
                   "revision_id": middle_ellipsis(record.revision_id, 40),
-                  "source": f"{record.source_type} · {record.source_ref}",
+                  "source": source_text(record),
                   "recorded": format_timestamp(record.recorded_at),
                   "valid_from": format_timestamp(record.valid_from),
                   "valid_until": format_timestamp(record.valid_until)}

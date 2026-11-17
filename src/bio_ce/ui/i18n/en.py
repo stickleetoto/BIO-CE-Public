@@ -54,6 +54,7 @@ STRINGS: dict[str, object] = {
     "shortcut.escape": "Close the drawer, cancel editing, clear the search, or close a dialog",
     "shortcut.history": "Show the revision history of the open memory",
     "shortcut.select": "Select several cards (then drag them onto a space, or press M or Delete)",
+    "shortcut.click": "click",
     "shortcut.arrows": "Move between cards",
     "shortcut.menu": "Open the menu of the card that has the focus (also right-click)",
     "shortcut.refresh": "Refresh the current page",
@@ -155,8 +156,8 @@ STRINGS: dict[str, object] = {
     "hub.editor.title": "Title",
     "hub.editor.memory": "Memory",
     "hub.editor.source": "Source",
-    "hub.editor.source_note": "Where this came from, such as a meeting, document, or “user-input”. It is stored as "
-                              "descriptive text and does not make a memory more trusted.",
+    "hub.editor.source_note": "Where this came from, such as a meeting or a document. Left empty, it is saved as "
+                              "“Added here”. It is stored as descriptive text and does not make a memory more trusted.",
     "hub.editor.save": "Save memory",
     "hub.editor.save_tip": "Save (Ctrl+S, or Ctrl+Enter in the text)",
     "hub.editor.cancel_tip": "Back without saving (Esc)",
@@ -1322,6 +1323,34 @@ STRINGS: dict[str, object] = {
     "svc.outcome.rejected_message": "The engine's policy refused it.",
     "svc.outcome.unavailable": "Not available",
     "svc.outcome.unavailable_message": "This engine does not offer that change through BIO CE.",
+    "svc.support.available": "Available",
+    "svc.support.limited": "Limited",
+    "svc.support.unverified": "Not verified",
+    "svc.support.claude": "Verified with Claude Code 2.1.306: the model found BIO CE's tools on its own and saved, "
+                          "deduplicated, corrected, and recalled memories.",
+    "svc.support.claude_desktop": "The Claude desktop app has no session hooks, so nothing is recalled automatically "
+                                  "at the start of a chat. Its model uses BIO CE's tools when you ask it to, and may "
+                                  "use them on its own; that has not been verified yet. Saving and searching from a "
+                                  "chat were verified on 2026-11-14.",
+    "svc.support.codex": "Codex runs its standard models in code mode, which may not show MCP tools or their "
+                         "instructions to the model directly. Codex 0.166 and later have an option that shows them; "
+                         "BIO CE adds it when you connect (or select Apply below). BIO CE's server and tools work, "
+                         "and calls succeed when the model uses them. The Codex desktop app reads the same settings "
+                         "as the command-line tool.",
+    "svc.support.codex_shown": "Codex runs its standard models in code mode. BIO CE set Codex's omit_tools_from = "
+                               "[\"code_mode\"] option for its server, so the model sees BIO CE's tools and "
+                               "instructions (verified with Codex 0.166). Calls work when the model uses them; "
+                               "whether it uses memory on its own has not been verified yet. The Codex desktop app "
+                               "reads the same settings as the command-line tool.",
+    "svc.support.codex_user_set": "Codex runs its standard models in code mode, which may not show MCP tools or "
+                                  "their instructions to the model directly. Your Codex settings already set "
+                                  "omit_tools_from for bio-ce in another way, so BIO CE left it as it is. BIO CE's "
+                                  "server and tools work, and calls succeed when the model uses them.",
+    "svc.inbox.discard_notice": "BIO CE removes discarded items from its database as far as the app can: it "
+                                "overwrites the freed space in the database file and its log. It cannot guarantee "
+                                "erasure from the drive itself (for example SSD wear leveling, the Windows page "
+                                "file, or file system journals). Backups you made earlier still contain these items; "
+                                "delete old backups you no longer need.",
     "svc.engine.using": "Using {name}",
     "svc.engine.none": "No memory engine connected",
     "svc.engine.stopped": "BIO CE stopped using the previous engine.",

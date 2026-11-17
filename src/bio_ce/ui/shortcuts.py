@@ -8,12 +8,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from bio_ce.ui.i18n import t
+
 
 @dataclass(frozen=True)
 class Shortcut:
-    keys: str  # as shown
+    keys: str  # key names as written on keyboards (Ctrl, Shift, Space) and the word "click"
     text: str  # i18n key of what it does
     sequences: tuple[str, ...] = ()  # Tk sequences bound on the window; empty for keys bound on one control
+
+    @property
+    def shown(self) -> str:
+        """The keys as the list shows them: key names stay as on the keyboard, "click" is in the app's language
+        ("Ctrl+click" stayed English in the Korean list in rc1)."""
+        return self.keys.replace("click", t("shortcut.click"))
 
 
 SHORTCUTS = (

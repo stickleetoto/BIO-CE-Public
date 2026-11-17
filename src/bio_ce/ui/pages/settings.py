@@ -177,7 +177,7 @@ class SettingsPage(Page):
         grid.pack(fill="x", pady=(theme.px(SPACE_S), 0))
         self.shortcut_rows = []
         for index, shortcut in enumerate(SHORTCUTS):  # one table for the keys and this list (v0.4.4 F3)
-            tk.Label(grid, text=shortcut.keys, font=theme.font("mono"), background=c.surface_alt, foreground=c.text,
+            tk.Label(grid, text=shortcut.shown, font=theme.font("mono"), background=c.surface_alt, foreground=c.text,
                      padx=theme.px(SPACE_S), pady=theme.px(1)).grid(row=index, column=0, sticky="w",
                                                                     pady=theme.px(3))
             label = WrapLabel(grid, t(shortcut.text), font=theme.font("body"), foreground=c.text_secondary)
@@ -454,7 +454,7 @@ class SettingsPage(Page):
             self.inbox_values[key] = value
         Button(card, theme, t("settings.inbox.save"), command=self.save_inbox_settings).pack(
             anchor="w", pady=(theme.px(SPACE_M), 0))
-        WrapLabel(card, DISCARD_NOTICE, font=theme.font("caption"), foreground=c.text_muted).pack(
+        WrapLabel(card, say(DISCARD_NOTICE), font=theme.font("caption"), foreground=c.text_muted).pack(
             fill="x", pady=(theme.px(SPACE_M), 0))
         self.render_inbox_settings()
 

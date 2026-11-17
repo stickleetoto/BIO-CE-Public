@@ -12,6 +12,7 @@ import tkinter as tk
 from bio_ce.engine.contract import MemoryView
 from bio_ce.ui.format import format_timestamp, revision_kind_label
 from bio_ce.ui.hub.common import space_label
+from bio_ce.ui.hub.filters import source_text
 from bio_ce.ui.i18n import t
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS, Theme, apply_window_chrome
 from bio_ce.ui.widgets import Button, Field, ScrollFrame, TextArea, WrapLabel
@@ -214,7 +215,7 @@ class HistoryDialog(Dialog):
             text.insert(tk.END, "\n")
             text.insert(
                 tk.END,
-                t("dialog.history.meta", time=format_timestamp(revision.recorded_at), source=revision.source_ref)
+                t("dialog.history.meta", time=format_timestamp(revision.recorded_at), source=source_text(revision))
                 + "\n",
                 "meta",
             )
@@ -278,7 +279,7 @@ class ShortcutsDialog(Dialog):
         grid.pack(fill="both", expand=True)
         self.rows = []
         for index, shortcut in enumerate(SHORTCUTS):
-            tk.Label(grid, text=shortcut.keys, font=theme.font("mono"), background=c.surface_alt, foreground=c.text,
+            tk.Label(grid, text=shortcut.shown, font=theme.font("mono"), background=c.surface_alt, foreground=c.text,
                      padx=theme.px(SPACE_S), pady=theme.px(1)).grid(row=index, column=0, sticky="w", pady=theme.px(3))
             label = WrapLabel(grid, t(shortcut.text), font=theme.font("body"), foreground=c.text_secondary)
             label.grid(row=index, column=1, sticky="we", padx=(theme.px(SPACE_M), 0))

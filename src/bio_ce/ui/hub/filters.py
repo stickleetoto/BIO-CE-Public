@@ -53,6 +53,25 @@ def host_of(record) -> str | None:
     return prefix if prefix in CHOICES["host"][1:] else None
 
 
+def source_text(record) -> str:
+    """Where a memory came from, in the words of the source filter: "Added here" (with the source the user typed, if
+    any), "Imported", or "Saved by AI · Codex". Never the stored values themselves ("user-input", "codex:conn-1"):
+    rc1 showed "Source: user-input" (owner GUI check, 2026-11-17)."""
+    from bio_ce.ui.format import DEFAULT_SOURCE, preview
+
+    group = source_group(_source_type(record))
+    text = t(f"hub.filter.source.{group}")
+    if group == "ai":
+        host = host_of(record)
+        if host is not None:
+            text += " · " + t(f"hub.filter.host.{host}")
+    elif group == "added":
+        typed = str(getattr(record, "source_ref", "") or "").strip()
+        if typed and typed != DEFAULT_SOURCE:
+            text += " · " + preview(typed, 40)
+    return text
+
+
 def _source_type(record) -> str:
     return str(getattr(record, "source_type", "") or getattr(getattr(record, "source", None), "source_type", ""))
 

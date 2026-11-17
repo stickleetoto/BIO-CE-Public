@@ -34,9 +34,11 @@ class DrawerEditor(tk.Frame):
         self.editing: MemoryView | None = None
         self.space = None
         self._spaces: list = []
-        self._baseline = ("", DEFAULT_SOURCE, "")
+        # The source field shows only what the user typed: the app's own default ("user-input") is never shown; an
+        # empty field saves it (rc1 GUI check 2026-11-17: the stored value showed through).
+        self._baseline = ("", "", "")
         self.title_value = tk.StringVar(master=self)
-        self.source_value = tk.StringVar(master=self, value=DEFAULT_SOURCE)
+        self.source_value = tk.StringVar(master=self, value="")
         self.space_value = tk.StringVar(master=self)
 
         self.heading = tk.Label(self, font=theme.font("title"), background=c.surface, foreground=c.text, anchor="w")
@@ -111,9 +113,11 @@ class DrawerEditor(tk.Frame):
         self._spaces = list(self.app.spaces())
         self.space = space if space is not None else self.app.current_space()
         if record is None:
-            title, source, body = "", DEFAULT_SOURCE, ""
+            title, source, body = "", "", ""
         else:
             title, source, body = record.title, record.source_ref, record.content or ""
+            if source == DEFAULT_SOURCE:
+                source = ""
         self.title_value.set(title)
         self.source_value.set(source)
         self.content.set(body)
@@ -189,6 +193,8 @@ class DrawerEditor(tk.Frame):
 
     def save_memory(self) -> MemoryView | None:
         title, source_ref, content = self.values()
+        if not source_ref.strip():
+            source_ref = DEFAULT_SOURCE  # the value the field used to start with (rc1 and earlier)
         self._clear_errors()
         created = self.editing is None
         if not self.app.require_action("create" if created else "edit"):

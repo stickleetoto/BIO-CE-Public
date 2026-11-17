@@ -295,6 +295,32 @@ TEMPLATES: tuple[tuple[str, str], ...] = (
     ("The engine's policy refused it.", "svc.outcome.rejected_message"),
     ("Not available", "svc.outcome.unavailable"),
     ("This engine does not offer that change through BIO CE.", "svc.outcome.unavailable_message"),
+    # connections.py: how well each AI tool's model can use BIO CE (the connection cards; rc1 GUI check D2), and
+    # inbox.py: the discard notice in Settings. Found by the shown-text scan (tests/integration/test_ui_text_leaks.py).
+    ("Available", "svc.support.available"),
+    ("Limited", "svc.support.limited"),
+    ("Not verified", "svc.support.unverified"),
+    ("Verified with Claude Code 2.1.306: the model found BIO CE's tools on its own and saved, deduplicated, "
+     "corrected, and recalled memories.", "svc.support.claude"),
+    ("The Claude desktop app has no session hooks, so nothing is recalled automatically at the start of a chat. "
+     "Its model uses BIO CE's tools when you ask it to, and may use them on its own; that has not been verified "
+     "yet. Saving and searching from a chat were verified on 2026-11-14.", "svc.support.claude_desktop"),
+    ("Codex runs its standard models in code mode, which may not show MCP tools or their instructions to the "
+     "model directly. Codex 0.166 and later have an option that shows them; BIO CE adds it when you connect "
+     "(or select Apply below). BIO CE's server and tools work, and calls succeed when the model uses them. "
+     "The Codex desktop app reads the same settings as the command-line tool.", "svc.support.codex"),
+    ("Codex runs its standard models in code mode. BIO CE set Codex's omit_tools_from = [\"code_mode\"] option "
+     "for its server, so the model sees BIO CE's tools and instructions (verified with Codex 0.166). Calls work "
+     "when the model uses them; whether it uses memory on its own has not been verified yet. The Codex desktop "
+     "app reads the same settings as the command-line tool.", "svc.support.codex_shown"),
+    ("Codex runs its standard models in code mode, which may not show MCP tools or their instructions to the "
+     "model directly. Your Codex settings already set omit_tools_from for bio-ce in another way, so BIO CE left "
+     "it as it is. BIO CE's server and tools work, and calls succeed when the model uses them.",
+     "svc.support.codex_user_set"),
+    ("BIO CE removes discarded items from its database as far as the app can: it overwrites the freed space in "
+     "the database file and its log. It cannot guarantee erasure from the drive itself (for example SSD wear "
+     "leveling, the Windows page file, or file system journals). Backups you made earlier still contain these "
+     "items; delete old backups you no longer need.", "svc.inbox.discard_notice"),
 )
 
 _compiled: list[tuple[re.Pattern[str], str]] | None = None
