@@ -40,6 +40,13 @@ class KoreanImportDashboardAuditTests(unittest.TestCase):
             case.app.tasks.wait(30)
             self.assertIsNotNone(importer.preview)
             self.assertIn("새 항목", importer.summary.cget("text"))  # the preview is shown in Korean
+            # U5-S: the importer's English reason is shown in Korean (the instruction line of the sample).
+            blocked = next(item for item in importer.preview.items if item.reasons and "instruction" in item.reasons[0])
+            importer.tree.selection_set(str(blocked.key))
+            importer._show_detail()
+            self.assertIn("AI에게 하는 지시처럼 읽힙니다", importer.detail.cget("text"))
+            importer.tree.selection_set(())
+            importer._show_detail()
             problems += [p.replace("import:", "import preview (ko):", 1) for p in case.visit("import")]
             newline = chr(10)
             self.assertEqual(problems, [], f"{len(problems)} problems:{newline}" + newline.join(problems))

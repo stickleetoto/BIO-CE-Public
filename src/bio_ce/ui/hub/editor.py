@@ -18,6 +18,7 @@ from bio_ce.engine.presentation import outcome_message
 from bio_ce.ui.format import CONTENT_LIMIT, DEFAULT_SOURCE, SOURCE_LIMIT, TITLE_LIMIT, preview, validation_feedback
 from bio_ce.ui.hub.common import in_space, space_label
 from bio_ce.ui.i18n import t
+from bio_ce.ui.service_text import say
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS
 from bio_ce.ui.widgets import Button, Field, FlowFrame, TextArea, WrapLabel
 
@@ -219,7 +220,7 @@ class DrawerEditor(tk.Frame):
             self.app.notify("error", t("hub.editor.engine_down"), title=t("hub.engine_down_title"))
             return None
         except UnsupportedCapability as exc:
-            self.app.notify("warning", str(exc), title=t("hub.not_available"))
+            self.app.notify("warning", say(exc), title=t("hub.not_available"))
             return None
         except Exception:  # noqa: BLE001 - shown to the user
             self.app.notify("error", t("hub.editor.failed"), title=t("hub.editor.failed_title"))

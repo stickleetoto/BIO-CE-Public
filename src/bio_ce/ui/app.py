@@ -33,6 +33,7 @@ from bio_ce.ui.dialogs import ChoiceDialog, ConfirmDialog, ExportDialog, NameDia
 from bio_ce.ui.format import HOSTS
 from bio_ce.ui.i18n import resolve, set_language, t
 from bio_ce.ui.pending import PendingDeletes
+from bio_ce.ui.service_text import say
 from bio_ce.ui.hub.common import space_label
 from bio_ce.ui.hub.data import ALL_SPACES, INBOX, SUGGESTIONS
 from bio_ce.ui.hub.page import HubPage
@@ -611,7 +612,7 @@ class BIOCEDesktop:
         try:
             control.set_personal_enabled(enabled)
         except Exception as exc:  # noqa: BLE001 - shown to the user
-            self.notify("error", str(exc) or t("app.personal_failed"), title=t("space.personal"))
+            self.notify("error", say(exc) or t("app.personal_failed"), title=t("space.personal"))
             return False
         if not enabled and self._space_id == PERSONAL_SPACE.space_id:
             general = next((space for space in self.spaces() if space.is_general), None)
@@ -651,7 +652,7 @@ class BIOCEDesktop:
             result = self.service.export_text(self.spaces(), options, personal_allowed=personal and
                                               self.personal_enabled())
         except ExportRefused as exc:
-            self.notify("warning", str(exc), title=t("hub.selection.not_exported"))
+            self.notify("warning", say(exc), title=t("hub.selection.not_exported"))
             return None
         except Exception:  # noqa: BLE001 - shown to the user
             self.notify("error", t("app.export.read_failed"), title=t("hub.selection.not_exported"))
@@ -665,7 +666,7 @@ class BIOCEDesktop:
         try:
             written = write_export(path, result.text)
         except ExportRefused as exc:
-            self.notify("warning", str(exc), title=t("hub.selection.not_exported"))
+            self.notify("warning", say(exc), title=t("hub.selection.not_exported"))
             return None
         except OSError:
             self.notify("error", t("app.export.write_failed"), title=t("hub.selection.not_exported"))
@@ -908,7 +909,7 @@ class BIOCEDesktop:
         try:
             created = self.service.create_backup(destination)
         except BackupError as exc:
-            self.notify("error", str(exc), title=t("app.backup.not_created"))
+            self.notify("error", say(exc), title=t("app.backup.not_created"))
             return None
         except Exception:
             self.notify("error", t("app.backup.write_failed"), title=t("app.backup.not_created"))
@@ -949,7 +950,7 @@ class BIOCEDesktop:
         try:
             report = self.service.restore_backup(source, control=getattr(self.connection_manager, "control", None))
         except BackupError as exc:
-            self.notify("error", f"{exc} " + t("app.restore.unchanged"), title=t("app.restore.failed"))
+            self.notify("error", f"{say(exc)} " + t("app.restore.unchanged"), title=t("app.restore.failed"))
             return False
         except Exception:
             self.notify("error", t("app.restore.replace_failed"), title=t("app.restore.failed"))

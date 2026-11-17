@@ -16,6 +16,7 @@ from bio_ce.ui.format import preview
 from bio_ce.ui.hub.common import control_of, in_space, space_label
 from bio_ce.ui.hub.data import INBOX, MEMORIES, HubItem
 from bio_ce.ui.i18n import t
+from bio_ce.ui.service_text import say
 
 
 def by_space(items: list[HubItem]) -> list[tuple[object, list[HubItem]]]:
@@ -213,7 +214,7 @@ class HubActions:
                 result = self.app.service.move_inbox(control, item.item_id, title=title, content=content,
                                                      update=update)
         except Exception as exc:  # noqa: BLE001 - shown to the user (a secret is refused with its reason)
-            self.app.notify("error", str(exc) or t("hub.inbox.move_failed"), title=t("hub.inbox.move_failed_title"))
+            self.app.notify("error", say(exc) or t("hub.inbox.move_failed"), title=t("hub.inbox.move_failed_title"))
             return False
         self.hub.close_drawer_for([item.item_id])
         self.app.data_changed()
@@ -237,7 +238,7 @@ class HubActions:
             self.app.notify("warning", t("hub.inbox.undo_changed"), title=t("hub.inbox.undo_failed_title"))
             return False
         except Exception as exc:  # noqa: BLE001 - shown to the user
-            self.app.notify("error", str(exc) or t("hub.inbox.undo_failed"), title=t("hub.inbox.undo_failed_title"))
+            self.app.notify("error", say(exc) or t("hub.inbox.undo_failed"), title=t("hub.inbox.undo_failed_title"))
             return False
         self.app.data_changed()
         self.app.notify("success", t("hub.inbox.undone", title=preview(item.title, 50)),
@@ -253,7 +254,7 @@ class HubActions:
         try:
             control.keep_items(int(proposal["item_id"]))
         except Exception as exc:  # noqa: BLE001
-            self.app.notify("error", str(exc), title=t("hub.cleanup.not_kept"))
+            self.app.notify("error", say(exc), title=t("hub.cleanup.not_kept"))
             return False
         self.app.notify("success", t("hub.cleanup.kept", count=len(proposal["memory_ids"])),
                         title=t("hub.cleanup.kept_title"))
@@ -311,7 +312,7 @@ class HubActions:
             with in_space(self.app, item.space):
                 result = self.app.service.forget(record, control=control)
         except Exception as exc:  # noqa: BLE001 - shown to the user
-            self.app.notify("error", str(exc) or t("hub.forget.failed"), title=t("hub.forget.failed_title"))
+            self.app.notify("error", say(exc) or t("hub.forget.failed"), title=t("hub.forget.failed_title"))
             self.app.data_changed()
             return False
         self.hub.close_drawer_for([record.memory_id])

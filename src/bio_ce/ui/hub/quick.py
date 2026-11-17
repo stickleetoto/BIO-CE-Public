@@ -16,6 +16,7 @@ from bio_ce.ui.format import preview
 from bio_ce.ui.hub.common import in_space, space_label
 from bio_ce.ui.hub.data import INBOX, MEMORIES
 from bio_ce.ui.i18n import t
+from bio_ce.ui.service_text import say
 from bio_ce.ui.theme import SPACE_S
 from bio_ce.ui.widgets import Button, Field, FlowFrame
 
@@ -82,14 +83,15 @@ class QuickAdd(Field):
                 outcome = engine.create(title=title, content=content, source_ref="bio-ce-quick-add")
                 saved = engine.get(outcome.memory_id) if outcome.persisted else None
         except ValidationError as exc:
-            self.app.notify("error", str(exc), title=t("hub.quick.not_saved"))
+            self.app.notify("error", say(exc), title=t("hub.quick.not_saved"))
             return None
         except (EngineUnavailable, UnsupportedCapability):
             self.app.notify("error", t("hub.editor.engine_down"), title=t("hub.engine_down_title"))
             return None
         if saved is None:
             kind = "info" if outcome.status is WriteStatus.PENDING_REVIEW else "warning"
-            self.app.notify(kind, "; ".join(outcome.reasons) or t("hub.quick.not_saved"), title=t("hub.quick.not_saved"))
+            self.app.notify(kind, say("; ".join(outcome.reasons)) or t("hub.quick.not_saved"),
+                            title=t("hub.quick.not_saved"))
             return None
         self.text.set("")
         self.hub.state = MEMORIES

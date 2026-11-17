@@ -37,6 +37,7 @@ from bio_ce.ui.format import format_timestamp, preview as short
 from bio_ce.ui.hub.common import space_label
 from bio_ce.ui.hub.data import INBOX, SUGGESTIONS
 from bio_ce.ui.i18n import t
+from bio_ce.ui.service_text import say
 from bio_ce.ui.pages import Page
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS
 from bio_ce.ui.tree_text import ElidedColumn, RowTooltip
@@ -299,7 +300,7 @@ class ImportPage(Page):
         try:
             text, encoding = read_import_file(path)
         except (ImportRejected, OSError) as exc:
-            self.app.notify("error", str(exc) or t("import.open_failed"), title=t("import.open_failed_title"))
+            self.app.notify("error", say(exc) or t("import.open_failed"), title=t("import.open_failed_title"))
             return
         self.set_text(text, encoding)
 
@@ -386,7 +387,7 @@ class ImportPage(Page):
         if isinstance(error, ImportCancelled):
             self.app.notify("info", t("import.cancelled"), title=t("import.cancelled_title"))
             return
-        self.app.notify("error", str(error) if isinstance(error, (ImportRejected, ValueError)) else
+        self.app.notify("error", say(error) if isinstance(error, (ImportRejected, ValueError)) else
                         t("import.preview_failed"), title=t("import.preview_failed_title"))
 
     def _preview_done(self, preview) -> None:
@@ -576,7 +577,8 @@ class ImportPage(Page):
         item = self.preview.by_key(keys[0])
         before_said, before_how = item.said_at or "", item.said_at_confirmed
         answer = EntryEditDialog(self.app.root, self.theme, content=item.content, said_at=before_said,
-                                 reasons="; ".join(item.reasons), source_date=item.claimed_date or "").ask()
+                                 reasons="; ".join(say(reason) for reason in item.reasons),
+                                 source_date=item.claimed_date or "").ask()
         if answer is None:
             return
         content, said_at = answer
@@ -587,7 +589,7 @@ class ImportPage(Page):
             try:
                 self.planner.set_date(self.preview, item.key, said_at)
             except ValueError as exc:
-                self.app.notify("warning", str(exc), title=t("import.set_date.not_changed"))
+                self.app.notify("warning", say(exc), title=t("import.set_date.not_changed"))
         self.render_items()
 
     def entry_to_note(self) -> None:
@@ -618,7 +620,7 @@ class ImportPage(Page):
             self.detail.configure(text="")
             return
         item = self.preview.by_key(keys[0])
-        parts = list(item.reasons)
+        parts = [say(reason) for reason in item.reasons]
         if item.match_title:
             parts.append(t("import.detail.existing", title=short(item.match_title, 60)))
         if item.project_hint:
@@ -692,7 +694,7 @@ class ImportPage(Page):
 
     def _import_failed(self, error: BaseException) -> None:
         self._sync_buttons()
-        self.app.notify("error", str(error) if isinstance(error, ImportRejected) else
+        self.app.notify("error", say(error) if isinstance(error, ImportRejected) else
                         t("import.failed"), title=t("import.failed_title"))
 
     # History --------------------------------------------------------------------------------------------
@@ -758,7 +760,7 @@ class ImportPage(Page):
         try:
             outcome = service.undo(batch_id)
         except Exception as exc:  # noqa: BLE001 - shown to the user
-            self.app.notify("error", str(exc) or t("import.undo.failed"), title=t("import.undo.failed_title"))
+            self.app.notify("error", say(exc) or t("import.undo.failed"), title=t("import.undo.failed_title"))
             return None
         self.app.data_changed()
         self.render_history()

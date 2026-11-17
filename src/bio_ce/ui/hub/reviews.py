@@ -27,6 +27,7 @@ from bio_ce.ui.format import host_name, preview
 from bio_ce.ui.hub.common import AutoText, control_of, in_space, space_label, when
 from bio_ce.ui.hub.data import REVIEWS, HubItem
 from bio_ce.ui.i18n import t
+from bio_ce.ui.service_text import say
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS
 from bio_ce.ui.widgets import Button, Card, EmptyState, FlowFrame, Pill, ScrollFrame, WrapLabel
 
@@ -134,7 +135,7 @@ class ReviewsView(tk.Frame):
         Pill(head, theme, t(KIND_KEYS.get(review.kind, "hub.review.kind_update")),
              "warning" if review.kind != "create" else "info").pack(side="left", anchor="n")
         line = t("hub.review.line", host=host_name(review.host), when=when(review.created_at),
-                 reason=review.review_reason, space=space_label(item.space))
+                 reason=say(review.review_reason), space=space_label(item.space))
         WrapLabel(head, line, font=theme.font("caption"), foreground=c.text_muted).pack(
             side="left", fill="x", expand=True, padx=(theme.px(SPACE_S), 0))
         if review.kind == "update" and current is not None:
@@ -207,7 +208,7 @@ class ReviewsView(tk.Frame):
         title, content = review.title, review.content
         if edit:
             edited = ReviewEditDialog(self, self.theme, title=review.title, content=review.content or "",
-                                      reason=review.review_reason).ask()
+                                      reason=say(review.review_reason)).ask()
             if edited is None:
                 return False
             title, content = edited
@@ -226,7 +227,7 @@ class ReviewsView(tk.Frame):
                     revision = self.app.service.approve_review(control, review.review_id, title=title,
                                                                content=content)
         except Exception as exc:  # noqa: BLE001 - conflicts, secrets, or a stale request
-            self.app.notify("warning", str(exc) or t("hub.review.failed"), title=t("hub.review.failed_title"))
+            self.app.notify("warning", say(exc) or t("hub.review.failed"), title=t("hub.review.failed_title"))
             self.app.data_changed()
             return False
         self.app.data_changed()
@@ -299,7 +300,7 @@ class ReviewsView(tk.Frame):
                 with in_space(self.app, item.space):
                     self.app.service.reject_review(control, review.review_id)
             except Exception as exc:  # noqa: BLE001 - a stale card: the item was already handled
-                self.app.notify("warning", str(exc), title=t("hub.review.reject_failed"))
+                self.app.notify("warning", say(exc), title=t("hub.review.reject_failed"))
             self.app.data_changed()
 
         self.app.pending.defer([item.key], run, message=t("hub.review.rejected", title=preview(review.title, 50)),

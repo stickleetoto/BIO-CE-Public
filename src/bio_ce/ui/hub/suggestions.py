@@ -20,6 +20,7 @@ from bio_ce.ui.format import format_timestamp, preview as short
 from bio_ce.ui.hub.common import control_of, space_label
 from bio_ce.ui.hub.data import ALL_SPACES
 from bio_ce.ui.i18n import t
+from bio_ce.ui.service_text import say
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS
 from bio_ce.ui.widgets import Button, Card, EmptyState, FlowFrame, Pill, ScrollFrame, TextArea, WrapLabel
 
@@ -126,7 +127,7 @@ class SuggestionsView(tk.Frame):
              "info" if suggestion.action == MERGE else "success").pack(side="left")
         space = spaces.get(suggestion.space_id)
         name = space_label(space) if space is not None else suggestion.space_id
-        tk.Label(head, text=f"{name} · {suggestion.reason}", font=theme.font("caption"), background=c.surface,
+        tk.Label(head, text=f"{name} · {say(suggestion.reason)}", font=theme.font("caption"), background=c.surface,
                  foreground=c.text_muted).pack(side="left", padx=(theme.px(SPACE_S), 0))
         originals = service.originals(suggestion) if service is not None else []
         if suggestion.action == UPDATE_EXISTING and suggestion.target:
@@ -227,7 +228,7 @@ class SuggestionsView(tk.Frame):
         try:
             service.approve(proposal_id, **options)
         except CurationError as exc:
-            self.app.notify("warning", str(exc), title=t("hub.sugg.not_approved"))
+            self.app.notify("warning", say(exc), title=t("hub.sugg.not_approved"))
             self.hub.refresh()
             return False
         except Exception:  # noqa: BLE001 - shown to the user
@@ -256,7 +257,7 @@ class SuggestionsView(tk.Frame):
                 service.undo(proposal_id)
                 done += 1
             except CurationError as exc:
-                refused.append(str(exc))
+                refused.append(say(exc))
             except Exception:  # noqa: BLE001 - shown to the user
                 refused.append(t("hub.sugg.undo_failed"))
         self.app.data_changed()
