@@ -209,10 +209,17 @@ class ConveniencesTests(unittest.TestCase):
 
     # F1 and F3 --------------------------------------------------------------------------------------------------
 
+    def got_the_window_asked_for(self) -> bool:
+        """Whether the screen could show the 1300 px window setUp asks for. The CI runner's 1024x768 at 150% can't
+        (about 680 px), and there the header has no room for the search above the page (D-17: it is shown only where
+        it fits). Mirror CI 2026-11-17: the tests had assumed a wide screen."""
+        return self.root.winfo_width() >= self.app.theme.px(1300) - 2
+
     def test_the_search_above_other_pages_opens_the_results_on_the_memory_screen(self):
         self.app.show_page("dashboard")
         self.settle()
-        self.assertTrue(self.app.header_search.winfo_ismapped())
+        if self.got_the_window_asked_for():  # smaller: shown only if the header still has room (see the test below)
+            self.assertTrue(self.app.header_search.winfo_ismapped())
         self.app.header_query.set("Fridays")
         self.app._search_from_header()
         self.settle()
@@ -223,9 +230,10 @@ class ConveniencesTests(unittest.TestCase):
     def test_slash_and_ctrl_f_go_to_the_search_and_question_mark_lists_the_keys(self):
         self.app.show_page("dashboard")
         self.settle()
-        with patch.object(self.app.header_search, "focus_set") as focused:
-            self.app.focus_search()
-        focused.assert_called_once()
+        if self.app.header_search.winfo_manager():  # without room: the test below
+            with patch.object(self.app.header_search, "focus_set") as focused:
+                self.app.focus_search()
+            focused.assert_called_once()
         self.app.show_page("memories")
         with patch.object(self.hub.search, "focus_set") as focused:
             self.app.focus_search()
@@ -238,6 +246,19 @@ class ConveniencesTests(unittest.TestCase):
             self.assertEqual(len(dialog.rows), len(SHORTCUTS))
         finally:
             dialog.destroy()
+
+    def test_without_room_for_the_search_above_the_page_ctrl_f_opens_the_memory_screens_search(self):
+        self.hub.query.set("Fridays")
+        self.app.show_page("dashboard")
+        self.settle()
+        self.app.header_search.pack_forget()  # as on a screen too small for it (D-17)
+        with patch.object(self.app.header_search, "focus_set") as header_focused, \
+                patch.object(self.hub.search, "focus_set") as hub_focused:
+            self.app.focus_search()
+        header_focused.assert_not_called()
+        hub_focused.assert_called()
+        self.assertIs(self.app.current, self.hub)
+        self.assertEqual(self.titles(), ["Deploys"])  # the search kept its words
 
     def test_single_keys_type_in_a_text_box_instead_of_acting(self):
         self.hub.search.entry.focus_set()

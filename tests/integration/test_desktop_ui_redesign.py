@@ -228,7 +228,11 @@ class RedesignedDesktopTests(unittest.TestCase):
         self.assertEqual(len(app.memories.grid.cards), 1)
         app.open_search("zzznomatchword")
         self.root.update()
-        self.assertTrue(app.memories.no_results.winfo_ismapped())
+        # Packed, not "mapped": on a screen below the minimum window size (the CI runner's 1024x768 at 150%, about
+        # 680 px) Tk's packer has no height left for it and unmaps it (mirror CI 2026-11-17). Which notice is chosen
+        # is what this test is about; the layout audit checks the heights where the screen can show the window.
+        self.assertEqual(app.memories.no_results.winfo_manager(), "pack")
+        self.assertFalse(app.memories.empty_all.winfo_manager())
         self.assertIn("0 results", app.memories.result_label.cget("text"))
         app.memories.search.clear()
         self.root.update()
