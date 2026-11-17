@@ -554,4 +554,10 @@ STRINGS: dict[str, object] = {
     "app.close.busy": "AI 도구 연결을 바꾸는 중입니다. 끝난 뒤에 BIO CE를 닫으세요.",
     "app.close.wait": "잠시 기다리세요",
     # ===== end of U5-L =====
+    # ===== U5-S: service messages (src/bio_ce/ui/service_text.py TEMPLATES; keys start with svc.) =====
+    # Add this part's keys right below this line, in this block only (other parts merge around it).
+    #
+    #
+    #
+    # ===== end of U5-S =====
 }

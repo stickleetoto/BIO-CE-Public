@@ -593,4 +593,10 @@ STRINGS: dict[str, object] = {
     "app.close.busy": "A host connection change is still running. Wait for it to finish, then close BIO CE.",
     "app.close.wait": "Please wait",
     # ===== end of U5-L =====
+    # ===== U5-S: service messages (src/bio_ce/ui/service_text.py TEMPLATES; keys start with svc.) =====
+    # Add this part's keys right below this line, in this block only (other parts merge around it).
+    #
+    #
+    #
+    # ===== end of U5-S =====
 }
