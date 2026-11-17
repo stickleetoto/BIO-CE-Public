@@ -39,9 +39,12 @@ from bio_ce.ui.hub.data import (
     HubData,
     HubItem,
 )
+from bio_ce.ui.hub import filters
 from bio_ce.ui.hub.dragdrop import DragController
 from bio_ce.ui.hub.drawer import Drawer
+from bio_ce.ui.hub.filters import FilterBar
 from bio_ce.ui.hub.keys import HubKeys
+from bio_ce.ui.hub.quick import QuickAdd, SelectionBar, copy_items
 from bio_ce.ui.hub.reviews import ReviewsView
 from bio_ce.ui.hub.suggestions import SuggestionsView
 from bio_ce.ui.i18n import t
@@ -128,6 +131,14 @@ class HubPage(Page):
         self.drawer = Drawer(self.body, self)
 
         self.cards_view = tk.Frame(self.content, background=c.bg)
+        # Above the cards (v0.4.4 U4): quick add (F5, Memories tab), filters and sort (F4), and the bar for several
+        # chosen cards (F7).
+        self.tools = tk.Frame(self.cards_view, background=c.bg)
+        self.tools.pack(fill="x")
+        self.quick_add = QuickAdd(self.tools, self)
+        self.filter_bar = FilterBar(self.tools, app, lambda _view: self.refresh())
+        self.selection_bar = SelectionBar(self.tools, self)
+        self._anchor_key: str | None = None
         self.cleanup = Card(self.cards_view, theme, padding=SPACE_L)
         section_label(self.cleanup.body, theme, t("hub.cleanup.title")).pack(fill="x")
         WrapLabel(self.cleanup.body, t("hub.cleanup.note"), font=theme.font("caption"),
@@ -233,10 +244,13 @@ class HubPage(Page):
         if self.state in (MEMORIES, INBOX, RETRACTED):
             self.cards_view.pack(fill="both", expand=True)
             try:
-                self.items = self.data.items(self.state, self.space_filter, query)
+                found = self.data.items(self.state, self.space_filter, query)
+                view = self.filter_bar.view
+                self.items = filters.apply(found, view, filters.facts_for(self.app, found, view))
             except Exception:  # noqa: BLE001
                 self.items = []
             self.selected_keys &= {item.key for item in self.items}
+            self._show_tools()
             self.grid.set_items(self.items)
             self._render_cleanup()
             self._empty_states(query)
@@ -264,7 +278,7 @@ class HubPage(Page):
             self.scroll.pack(fill="both", expand=True)
             return
         self.scroll.pack_forget()
-        if query:
+        if query or filters.is_filtered(self.filter_bar.view):
             chosen = self.no_results
         elif self.state == RETRACTED:
             chosen = self.empty_retracted
@@ -446,13 +460,48 @@ class HubPage(Page):
         key = card_or_key if isinstance(card_or_key, str) else card_or_key.key
         return next((item for item in self.items if item.key == key), None)
 
-    def card_clicked(self, card, *, toggle: bool = False) -> None:
+    def _show_tools(self) -> None:
+        """Quick add on the Memories tab, the filters where they apply, and the bar for several chosen cards."""
+        theme = self.theme
+        for part in (self.quick_add, self.filter_bar, self.selection_bar):
+            part.pack_forget()
+        if self.state == MEMORIES and self.app.allowed("create").enabled:
+            self.quick_add.pack(fill="x", pady=(0, theme.px(SPACE_S)))
+        if self.state in filters.FILTERED_STATES:
+            self.filter_bar.pack(fill="x", pady=(0, theme.px(SPACE_S)))
+        self._update_selection_bar()
+
+    def _update_selection_bar(self) -> None:
+        chosen = [item for item in (self.item_of(key) for key in self.selected_keys) if item is not None]
+        if self.selection_bar.show_for(chosen):
+            if not self.selection_bar.winfo_manager():
+                self.selection_bar.pack(fill="x", pady=(0, self.theme.px(SPACE_S)))
+        elif self.selection_bar.winfo_manager():
+            self.selection_bar.pack_forget()
+
+    def clear_selection(self) -> None:
+        self.selected_keys = set()
+        for card in self.grid.card_list():
+            card.set_state(selected=False)
+        self._update_selection_bar()
+
+    def card_clicked(self, card, *, toggle: bool = False, extend: bool = False) -> None:
+        if extend and self._anchor_key in self.grid.cards:  # Shift+click: every card from the last one clicked
+            order = [other.key for other in self.grid.card_list()]
+            start, end = sorted((order.index(self._anchor_key), order.index(card.key)))
+            self.selected_keys |= set(order[start:end + 1])
+            for other in self.grid.card_list():
+                other.set_state(selected=other.key in self.selected_keys)
+            self._update_selection_bar()
+            return
+        self._anchor_key = card.key
         if toggle:
             self.toggle_select(card)
             return
         self.selected_keys = {card.key}
         for other in self.grid.card_list():
             other.set_state(selected=other.key in self.selected_keys)
+        self._update_selection_bar()
         if self.open_key == card.key and self.drawer_open and not self.drawer.editing:
             self.close_drawer()
             return
@@ -464,6 +513,7 @@ class HubPage(Page):
         else:
             self.selected_keys.add(card.key)
         card.set_state(selected=card.key in self.selected_keys)
+        self._update_selection_bar()
 
     def card_focused(self, card) -> None:
         self.focus_key = card.key
@@ -575,6 +625,8 @@ class HubPage(Page):
         menu.add_cascade(label=t("hub.menu.move_to"), menu=spaces,
                          state="normal" if items and spaces.index("end") is not None and allowed("edit").enabled
                          else "disabled")
+        if items and all(item.state in (MEMORIES, INBOX) for item in items):
+            menu.add_command(label=t("hub.copy"), command=lambda: copy_items(self.app, items))
         menu.add_separator()
         delete = t("hub.card.discard") if items and items[0].state == INBOX else t("hub.card.delete")
         menu.add_command(label=delete, command=lambda: self.do.delete(items),

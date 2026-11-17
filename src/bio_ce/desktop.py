@@ -25,6 +25,7 @@ from bio_ce import __version__
 from bio_ce.auto_memory import ReviewService
 from bio_ce.control_store import AUTO_BACKUP_KEEP, ControlStore, control_database_for
 from bio_ce.core.models import (
+    MemoryNotFoundError,
     MemoryRevision,
     MemoryScope,
     SearchHit,
@@ -356,6 +357,28 @@ class DesktopMemoryService:
         """Commits and undoes imports through this app's single writable connection."""
         from bio_ce.importer import ImportService
         return ImportService(self._store, control, spaces)
+
+    def memory_facts(self) -> dict[str, dict]:
+        """For the memory screen's sort and filter (v0.4.4 F4), this space: memory id -> when it was first saved
+        and whether an import marked it sensitive. Reading only."""
+        created = self._store.created_dates(self.scope)
+        sensitive = self._store.marked_sensitive(self.scope)
+        return {memory_id: {"created_at": when, "sensitive": memory_id in sensitive}
+                for memory_id, when in created.items()}
+
+    def export_selected(self, memory_ids: list[str] | tuple[str, ...]) -> str:
+        """The chosen memories of this space as export lines (v0.4.4 F7), in the export's own format."""
+        from bio_ce.exporter import export_line
+
+        created = self._store.created_dates(self.scope)
+        lines = []
+        for memory_id in memory_ids:
+            try:
+                revision = self._store.read(self.scope, memory_id)
+            except MemoryNotFoundError:
+                continue
+            lines.append(export_line(revision, created.get(memory_id), include_claimed=False))
+        return "\n".join(lines)
 
     def export_text(self, spaces, options, *, personal_allowed: bool):
         """The text of an export (v0.4.3 D); reading only."""

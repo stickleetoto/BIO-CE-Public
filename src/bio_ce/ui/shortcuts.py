@@ -19,7 +19,8 @@ class Shortcut:
 SHORTCUTS = (
     Shortcut("Ctrl+1 – Ctrl+4", "shortcut.pages", ("<Control-Key-1>", "<Control-Key-2>", "<Control-Key-3>",
                                                     "<Control-Key-4>")),
-    Shortcut("Ctrl+F", "shortcut.search", ("<Control-f>",)),
+    Shortcut("Ctrl+F / /", "shortcut.search", ("<Control-f>", "<slash>")),
+    Shortcut("?", "shortcut.list", ("<question>",)),
     Shortcut("Ctrl+N", "shortcut.new", ("<Control-n>",)),
     Shortcut("E / Ctrl+E", "shortcut.edit", ("<KeyPress-e>", "<Control-e>")),
     Shortcut("M", "shortcut.move", ("<KeyPress-m>",)),
@@ -29,7 +30,7 @@ SHORTCUTS = (
     Shortcut("Enter", "shortcut.enter"),
     Shortcut("Esc", "shortcut.escape", ("<Escape>",)),
     Shortcut("Ctrl+H", "shortcut.history", ("<Control-h>",)),
-    Shortcut("Ctrl+click / Space", "shortcut.select"),
+    Shortcut("Ctrl+click / Shift+click / Space", "shortcut.select"),
     Shortcut("← ↑ → ↓", "shortcut.arrows"),
     Shortcut("Shift+F10", "shortcut.menu"),
     Shortcut("F5", "shortcut.refresh", ("<F5>",)),

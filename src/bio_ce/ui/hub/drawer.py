@@ -17,6 +17,7 @@ from bio_ce.ui.format import format_timestamp, middle_ellipsis, preview, revisio
 from bio_ce.ui.hub.common import READING_WIDTH, AutoText, in_space, space_label, when
 from bio_ce.ui.hub.data import INBOX, MEMORIES, RETRACTED, HubItem
 from bio_ce.ui.hub.editor import DrawerEditor
+from bio_ce.ui.hub.quick import copy_items
 from bio_ce.ui.i18n import t
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS
 from bio_ce.ui.widgets import (
@@ -129,6 +130,10 @@ class Drawer(tk.Frame):
                                                         command=lambda: self.item is not None
                                                         and hub.delete_items([self.item]),
                                                         tooltip=t("hub.drawer.delete_tip")))
+        self.copy_button = self.action_row.add(Button(self.action_row, theme, t("hub.copy"), variant="subtle",
+                                                      command=lambda: self.item is not None
+                                                      and copy_items(self.app, [self.item]),
+                                                      tooltip=t("hub.copy_tip")))
         self.undo_merge_button = self.action_row.add(Button(self.action_row, theme, t("hub.inbox.undo_merge"),
                                                             variant="link", command=self.undo_merge))
         self.forget_action = self.action_row.add(Button(self.action_row, theme, t("hub.drawer.forget"),
@@ -208,7 +213,7 @@ class Drawer(tk.Frame):
     def _show_actions(self, keys: set[str]) -> None:
         buttons = {"edit": self.edit_button, "to_memories": self.to_memories_button, "move": self.move_button,
                    "history": self.history_button, "delete": self.delete_button, "undo_merge": self.undo_merge_button,
-                   "forget": self.forget_action}
+                   "forget": self.forget_action, "copy": self.copy_button}
         for key, button in buttons.items():
             self.action_row.set_visible(button, key in keys)
 
@@ -235,7 +240,7 @@ class Drawer(tk.Frame):
             return False
         self.mode, self.item, self.record, self.revisions = MEMORIES, item, record, ()
         self._merge_proposal = None
-        self._show_actions({"edit", "move", "history", "delete"})
+        self._show_actions({"edit", "move", "history", "copy", "delete"})
         self.delete_button.set_text(t("hub.card.delete"))
         self.delete_button.set_enabled(self.app.allowed("retract").enabled)
         self.title_label.set_text(record.title)
@@ -275,7 +280,7 @@ class Drawer(tk.Frame):
         revision = item.record
         allowed = self.app.allowed("review").enabled
         self._merge_proposal = self.hub.merge_proposal_of(item) if allowed else None
-        keys = {"to_memories", "move", "delete"} | ({"undo_merge"} if self._merge_proposal is not None else set())
+        keys = {"to_memories", "move", "copy", "delete"} | ({"undo_merge"} if self._merge_proposal is not None else set())
         self._show_actions(keys)
         self.delete_button.set_text(t("hub.card.discard"))
         self.delete_button.set_enabled(allowed)

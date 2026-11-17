@@ -257,6 +257,34 @@ class TextViewerDialog(Dialog):
         return self
 
 
+class ShortcutsDialog(Dialog):
+    """The keyboard shortcuts (v0.4.4 F3, the ? key), from the same table as the Settings list."""
+
+    def __init__(self, parent: tk.Misc, theme: Theme) -> None:
+        from bio_ce.ui.i18n import t
+        from bio_ce.ui.shortcuts import SHORTCUTS
+
+        super().__init__(parent, theme, t("shortcut.dialog_title"))
+        c = theme.colors
+        tk.Label(self.content, text=t("shortcut.dialog_title"), font=theme.font("title"), background=c.surface,
+                 foreground=c.text, anchor="w").pack(fill="x", pady=(0, theme.px(SPACE_M)))
+        grid = tk.Frame(self.content, background=c.surface)
+        grid.pack(fill="both", expand=True)
+        self.rows = []
+        for index, shortcut in enumerate(SHORTCUTS):
+            tk.Label(grid, text=shortcut.keys, font=theme.font("mono"), background=c.surface_alt, foreground=c.text,
+                     padx=theme.px(SPACE_S), pady=theme.px(1)).grid(row=index, column=0, sticky="w", pady=theme.px(3))
+            label = WrapLabel(grid, t(shortcut.text), font=theme.font("body"), foreground=c.text_secondary)
+            label.grid(row=index, column=1, sticky="we", padx=(theme.px(SPACE_M), 0))
+            self.rows.append(label)
+        grid.columnconfigure(1, weight=1)
+        self.close_button = self.add_button(t("common.close"), self.cancel, variant="primary")
+
+    def show(self) -> ShortcutsDialog:
+        self.present(focus=self.close_button, modal=False, size=(self.theme.px(560), self.theme.px(620)))
+        return self
+
+
 WELCOME_POINTS = (
     ("shield", "Stays on this PC",
      "Memories you save are stored in a local SQLite file in your Windows user profile. Nothing is uploaded."),

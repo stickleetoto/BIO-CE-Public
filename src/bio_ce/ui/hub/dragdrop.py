@@ -48,8 +48,8 @@ class DragController:
     def release(self, card, event) -> None:
         if not self.dragging:
             self._card = None
-            control = bool(int(getattr(event, "state", 0)) & 0x0004)
-            self.hub.card_clicked(card, toggle=control)
+            state = int(getattr(event, "state", 0))
+            self.hub.card_clicked(card, toggle=bool(state & 0x0004), extend=bool(state & 0x0001))  # Ctrl / Shift
             return
         self.finish(self.hub.chip_at(int(event.x_root), int(event.y_root)))
 

@@ -216,6 +216,9 @@ UI_LANGUAGE_KEY = "ui_language"  # v0.4.4: app_settings row, no schema change
 UI_LANGUAGES = ("auto", "en", "ko")
 AUTO_BACKUP_KEEP_KEY = "auto_backup_keep"  # v0.4.4 §7.2: app_settings row, no schema change
 AUTO_BACKUP_KEEP = (10, 1, 100)  # default, lowest, highest
+HUB_VIEW_KEY = "hub_view"  # v0.4.4 F4: the memory screen's filters and sort, an app_settings row (JSON)
+HUB_VIEW = {"source": ("any", "added", "imported", "ai"), "host": ("any", "codex", "claude", "claude_desktop"),
+            "period": ("any", "7d", "30d", "1y"), "sensitive": ("any", "only"), "sort": ("changed", "created", "title")}
 # The only control tables a restore reads from the backup's pair file. Everything else (connections, their space
 # permissions and settings, the audit log, the review queue, app_settings) keeps its current rows.
 RESTORED_FROM_BACKUP = ("spaces", "space_folders", "inbox_usage", "curation_items")
@@ -866,6 +869,35 @@ class ControlStore:
                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
                 (AUTO_BACKUP_KEEP_KEY, str(keep), _now()))
         return keep
+
+    # The memory screen's filters (v0.4.4 F4) -------------------------------------------------------------------
+
+    def hub_view(self) -> dict[str, str]:
+        """The filters and sort the user last chose on the memory screen; anything unknown reads as the default."""
+        with self._lock:
+            row = self._connection.execute("SELECT value FROM app_settings WHERE key = ?",
+                                           (HUB_VIEW_KEY,)).fetchone()
+        try:
+            stored = json.loads(row[0]) if row is not None else {}
+        except ValueError:
+            stored = {}
+        stored = stored if isinstance(stored, dict) else {}
+        return {key: stored.get(key) if stored.get(key) in choices else choices[0]
+                for key, choices in HUB_VIEW.items()}
+
+    def set_hub_view(self, view: dict[str, str]) -> dict[str, str]:
+        clean = {}
+        for key, choices in HUB_VIEW.items():
+            value = view.get(key, choices[0])
+            if value not in choices:
+                raise ValueError(f"{key} is one of {', '.join(choices)}")
+            clean[key] = value
+        with self._write():
+            self._connection.execute(
+                "INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+                (HUB_VIEW_KEY, json.dumps(clean, sort_keys=True), _now()))
+        return clean
 
     def personal_access(self, connection_id: str) -> tuple[bool, bool]:
         """The stored Personal permission for one connection (before its mode): (can_read, can_write)."""

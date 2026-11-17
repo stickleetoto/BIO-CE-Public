@@ -19,7 +19,7 @@ from tests.i18n_scan import ui_literals, used_keys
 
 # The number of English texts still written directly in the UI. It may only go down (v0.4.4 moves them to keys);
 # lower it when a change removes some. At the end of v0.4.4 only an allowlist remains.
-LITERAL_BASELINE = 829  # 2026-11-17, v0.4.4 U1+U2 memory screen (was 1139 at the v0.4.3-rc1 UI)
+LITERAL_BASELINE = 828  # 2026-11-17, v0.4.4 U1+U2 memory screen (was 1139 at the v0.4.3-rc1 UI)
 
 
 def placeholders(value) -> set[str]:

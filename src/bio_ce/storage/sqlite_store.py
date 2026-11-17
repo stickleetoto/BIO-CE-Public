@@ -617,6 +617,25 @@ class SQLiteMemoryStore:
                 "AND current_revision_id IS NOT NULL", ("%" + INBOX_SUFFIX,)).fetchall()
         return [(str(r[0]), str(r[1]), str(r[2]), str(r[3])) for r in rows]
 
+    def marked_sensitive(self, scope: MemoryScope) -> set[str]:
+        """Current memories in one scope whose source names sensitive labels (an import marks them, v0.4.3)."""
+        _validate_scope(scope)
+        with self._read_transaction():
+            rows = self._connection.execute(
+                """SELECT m.memory_id, r.source_metadata_json FROM memories AS m
+                   JOIN revisions AS r ON r.revision_id = m.current_revision_id
+                   WHERE m.project = ? AND m.namespace = ? AND r.kind IN ('assertion', 'revision')
+                     AND r.source_metadata_json LIKE '%"sensitive"%'""",
+                (scope.project, scope.namespace)).fetchall()
+        found = set()
+        for memory_id, metadata in rows:
+            try:
+                if json.loads(metadata).get("sensitive"):
+                    found.add(str(memory_id))
+            except (ValueError, AttributeError):
+                continue
+        return found
+
     def created_dates(self, scope: MemoryScope) -> dict[str, str]:
         """memory_id -> when the memory was first saved, for one scope (exports use the first save day)."""
         _validate_scope(scope)

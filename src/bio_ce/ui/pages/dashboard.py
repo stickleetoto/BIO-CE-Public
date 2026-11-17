@@ -22,7 +22,6 @@ from bio_ce.ui.widgets import (
     Pill,
     RowButton,
     ScrollFrame,
-    SearchBox,
     WrapLabel,
     caption_label,
     section_label,
@@ -71,11 +70,6 @@ class DashboardPage(Page):
         self.scroll = ScrollFrame(self, theme)
         self.scroll.pack(fill="both", expand=True)
         body = self.scroll.body
-        self.query = tk.StringVar(master=self)
-        self.search = SearchBox(body, theme, self.query, "Search your memories and press Enter")
-        self.search.entry.bind("<Return>", lambda _e: self._search())
-        self.search.entry.bind("<KP_Enter>", lambda _e: self._search())
-        self.search.pack(fill="x", pady=(0, theme.px(SPACE_L)))
 
         stats = tk.Frame(body, background=c.bg)
         stats.pack(fill="x")
@@ -179,13 +173,7 @@ class DashboardPage(Page):
         self._apply_layout("wide", 4)
 
     def focus_default(self) -> None:
-        self.search.focus_set()
-
-    def _search(self) -> str:
-        query = self.query.get().strip()
-        self.query.set("")
-        self.app.open_search(query)
-        return "break"
+        self.app.header_search.focus_set()  # the search above every page (v0.4.4 F1)
 
     def _card_need(self) -> int:
         """The width a status card needs: its widest button or badge, which can't wrap, plus the card's padding."""

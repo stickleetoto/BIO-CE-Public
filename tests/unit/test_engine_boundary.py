@@ -36,6 +36,8 @@ ALLOWED_SERVICE_CALLS = {
     "forget", "retracted", "retracted_count",
     # v0.4.4 move table: undo "To memories"; a proposed change added as a new memory (Community-only)
     "undo_move_inbox", "approve_review_as_new",
+    # v0.4.4 U4: sort and filter facts (created date, sensitive mark), export of the chosen cards (read only)
+    "memory_facts", "export_selected",
 }
 
 

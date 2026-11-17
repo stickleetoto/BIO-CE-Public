@@ -57,7 +57,7 @@ from bio_ce.ui.theme import (
     app_icon,
     apply_window_chrome,
 )
-from bio_ce.ui.widgets import InfoBar, NavItem, Tooltip, WrapLabel, install_mousewheel
+from bio_ce.ui.widgets import InfoBar, NavItem, SearchBox, Tooltip, WrapLabel, install_mousewheel
 
 if TYPE_CHECKING:
     from bio_ce.desktop import AppDataPaths, DesktopMemoryService
@@ -144,7 +144,16 @@ class BIOCEDesktop:
         # button (a cut-off button ignores clicks).
         self.header_actions = tk.Frame(header, background=c.bg)
         self.header_actions.pack(side="right", anchor="s")
+        # v0.4.4 F1: a search above every page; Enter shows the results on the memory screen (which has its own
+        # search box in the same place, so this one hides there).
+        self.header_query = tk.StringVar(master=root)
+        self.header_search = SearchBox(header, self.theme, self.header_query, t("search.everywhere"))
+        self.header_search.entry.configure(width=30)
+        self.header_search.entry.bind("<Return>", lambda _e: (self._search_from_header(), "break")[1])
+        self.header_search.entry.bind("<KP_Enter>", lambda _e: (self._search_from_header(), "break")[1])
+        header.bind("<Configure>", self._fit_header_search, add="+")  # shown by _fit_header_search
         titles = tk.Frame(header, background=c.bg)
+        self._header_titles = titles
         titles.pack(side="left", fill="x", expand=True)
         self.header_title = tk.Label(titles, font=self.theme.font("display"), background=c.bg,
                                      foreground=c.text, anchor="w")
@@ -299,6 +308,7 @@ class BIOCEDesktop:
         self.current = target
         target.pack(fill="both", expand=True)
         target.actions.pack(side="right")
+        self._fit_header_search()
         for nav_key, item in self.nav.items():
             item.set_selected(nav_key == target.nav_key)
         self.refresh_badges()
@@ -306,6 +316,50 @@ class BIOCEDesktop:
         target.on_show()
         target.focus_default()
         return True
+
+    def _fit_header_search(self, _event=None) -> None:
+        """The search above the page only where the header has room for it beside the title and the page's
+        buttons (a title is never cut for it), and never on the memory screen, which has its own."""
+        try:
+            # The title must fit; the subtitle wraps under it, so it doesn't count.
+            free = (self.header_search.master.winfo_width() - self.header_title.winfo_reqwidth()
+                    - self.header_actions.winfo_reqwidth() - 2 * self.theme.px(SPACE_M))
+        except tk.TclError:
+            return
+        show = self.current is not self.memories and free >= self.header_search.winfo_reqwidth()
+        if show and not self.header_search.winfo_manager():
+            self.header_search.pack(side="right", anchor="s", padx=(0, self.theme.px(SPACE_M)),
+                                    before=self._header_titles)
+        elif not show and self.header_search.winfo_manager():
+            self.header_search.pack_forget()
+
+    def _search_from_header(self) -> None:
+        query = self.header_query.get().strip()
+        self.header_query.set("")
+        self.open_search(query)
+
+    def focus_search(self) -> None:
+        """Ctrl+F and / (v0.4.4 F1): the memory screen's search there, the search above the page elsewhere."""
+        if self.current is not self.memories and self.header_search.winfo_manager():
+            self.header_search.focus_set()
+        elif self.current is self.memories:
+            self.memories.search.focus_set()
+            self.memories.search.entry.icursor(tk.END)
+        else:  # no room for the search above this page: the memory screen's search
+            self.open_search(self.memories.query.get())
+
+    def show_shortcuts(self):
+        from bio_ce.ui.dialogs import ShortcutsDialog
+        return ShortcutsDialog(self.root, self.theme).show()
+
+    def typing(self) -> bool:
+        """True while a text box has the keyboard focus (single-letter keys then type, they don't act)."""
+        from bio_ce.ui.hub.keys import TYPING_CLASSES
+        try:
+            widget = self.root.focus_get() or self.root.focus_lastfor()
+        except (KeyError, tk.TclError):
+            return False
+        return widget is not None and widget.winfo_class() in TYPING_CLASSES
 
     def refresh_header(self) -> None:
         if self.current is None:
@@ -350,7 +404,9 @@ class BIOCEDesktop:
         for index, (key, *_rest) in enumerate(NAVIGATION, start=1):
             root.bind(f"<Control-Key-{index}>", lambda _e, target=key: self._shortcut(lambda: self.show_page(target)))
         root.bind("<Control-n>", lambda _e: self._shortcut(self.start_new_memory))
-        root.bind("<Control-f>", lambda _e: self._shortcut(lambda: self.open_search(self.memories.query.get())))
+        root.bind("<Control-f>", lambda _e: self._shortcut(self.focus_search))
+        root.bind("<slash>", lambda _e: None if self.typing() else self._shortcut(self.focus_search))
+        root.bind("<question>", lambda _e: None if self.typing() else self._shortcut(self.show_shortcuts))
         root.bind("<F5>", lambda _e: self._shortcut(self.refresh_current))
 
     def _shortcut(self, action: Callable[[], Any] | None) -> str:
