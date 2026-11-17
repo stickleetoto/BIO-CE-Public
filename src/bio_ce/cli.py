@@ -8,11 +8,24 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys
 
 from bio_ce.demo import run_demo
 
 
+def utf8_output() -> None:
+    """Output sent to a file or a pipe is UTF-8 (v0.4.4 U5). Windows would use the console code page (CP949 on a
+    Korean PC), so text it can't hold would stop the command; a console window already gets Unicode."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            if not stream.isatty():
+                stream.reconfigure(encoding="utf-8", errors="backslashreplace")  # type: ignore[union-attr]
+        except (AttributeError, ValueError, OSError):
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    utf8_output()
     parser = argparse.ArgumentParser(prog="bio-ce", description="BIO Community Edition tools")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("demo", help="run the synthetic-only local memory demonstration")
