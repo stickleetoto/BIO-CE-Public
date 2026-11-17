@@ -22,6 +22,40 @@
 - Source provenance: the full local BIO Core source, history, and its private remote were compared with BIO CE on 2026-10-25 and no BIO Core code was found. The owner decisions and residual risks (for example, AI-assisted code was not checked against public code databases) are listed in the [provenance audit](audit/source-provenance.md).
 - GitHub Actions CI: **PASS** on commit `9a59ed4` ([run 40283656213](https://github.com/stickleetoto/BIO-CE-Public/actions/runs/40283656213), 2026-10-26, `windows-2025`, CPython 3.12.10): 100 passed, 3 skipped. The skips are expected on a hosted runner: two host-connection tests need the Codex and Claude Code CLIs, and the packaged-EXE test needs a local installer build; all three pass locally. The CI runner has no display scaling, no real desktop session, and no AI host CLIs, so it does not replace the installer E2E. Windows 10 remains NOT RUN.
 
+## v0.4.4 (in development — draft)
+
+- The installer and the programs it installs are **not code-signed**.
+- **Delete and Forget completely are different.** Deleting a memory hides it from BIO CE's searches and your AI
+  tools; it stays in **Deleted memories** (and in the database file) until you use **Forget completely**. Forget
+  completely erases the memory, every earlier version, the inbox items kept for it, and the review items about it from
+  BIO CE's files as far as the app can, with no undo. BIO CE cannot guarantee erasure from the drive itself (SSD wear
+  leveling, the Windows page file, file system journals); backups and exports made earlier still contain it, and what
+  an AI tool already read stays in that conversation.
+- **Discard really deletes.** A discarded inbox item can be brought back with Undo for 8 seconds; after that it can't
+  be undone.
+- Automatic backups: BIO CE keeps the newest automatic backup pairs (10 by default; Settings → Backups) and removes
+  older ones by overwriting them with zeros and then deleting them, as far as the app can (the same drive caveat
+  applies). Only files with the names BIO CE gives its own automatic backups are removed; backups you saved yourself
+  are never touched.
+- Running BIO CE MCP servers: Connections shows how many are running for each AI tool. **End idle servers…** ends the
+  ones without a request for 12 hours, only when you ask; BIO CE never ends them on its own, because it is not known
+  whether every AI tool starts a new server for a conversation whose server was ended. A conversation that used an
+  ended server may fail its next memory call until the AI tool starts a new one.
+- The memory screen's search finds memories that contain every word you type, in the tab you are on; it is not ranked
+  the way your AI tools' search is.
+- Undoing **To memories** or an approved review gives a memory its earlier text back only if it hasn't changed since;
+  otherwise it is left as it is.
+- Korean and English: the app follows the language chosen in Setup, then the Windows language. Text uses Malgun Gothic
+  in both languages. In the Korean app on a Japanese or Chinese Windows, the Windows UI font is used, which may not
+  show Hangul evenly. What AI tools read from BIO CE (tool texts, server instructions, the memory skill) stays in
+  English. A rare service message BIO CE doesn't know yet is shown in English in the Korean app.
+- Big screens (1920x1080, 2560x1440) and the Korean text widths were checked with simulated screen sizes in the layout
+  tests, not on real monitors of those sizes.
+- Fixed since v0.4.3-rc1: the reading-pane height on small screens (the drawer scrolls), the import preview's TEXT
+  column (long text ends in "…", hover a row for all of it), Suggestions now follow the space you choose, **Set
+  date…** in the import preview, automatic backups no longer pile up, long titles end in "…", and a merge draft keeps
+  the most detailed item.
+
 ## v0.3 Auto memory (v0.3.0-rc1)
 
 - Real-model behavior was checked once per host with a short synthetic conversation ([evaluation](real-model-memory-evaluation.md)): Claude Code saved, deduplicated, corrected, and recalled memories as intended; Codex never saw BIO CE's tools. Six and three conversations are too few to generalize. Server-side dedupe, the secret filter, and the review queue were exercised only by synthetic and mock-model tests.
