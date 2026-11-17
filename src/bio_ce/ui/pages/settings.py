@@ -576,7 +576,7 @@ class SettingsPage(Page):
     def _card(self, body: tk.Misc, title: str, description: str | None) -> tk.Frame:
         theme, c = self.theme, self.colors
         card = Card(body, theme, padding=SPACE_L + 4)
-        card.pack(fill="x", pady=(0, theme.px(SPACE_M)))
+        card.pack(fill="x", pady=(0, theme.px(SPACE_L)))  # page cards 16 apart (POLISH §2.4)
         section_label(card.body, theme, title).pack(fill="x")
         if description:
             WrapLabel(card.body, description, font=theme.font("body"), foreground=c.text_secondary).pack(

@@ -60,9 +60,18 @@ class PaletteContrastTests(unittest.TestCase):
         palette = Palette()
         for foreground in (palette.text, palette.text_secondary, palette.text_muted, palette.accent_text,
                            palette.danger, palette.success, palette.warning):
-            for background in (palette.bg, palette.surface, palette.surface_alt):
+            for background in (palette.bg, palette.surface, palette.surface_raised, palette.surface_alt):
                 with self.subTest(foreground=foreground, background=background):
                     self.assertGreaterEqual(self._contrast(foreground, background), 4.5)
+
+    def test_the_background_layers_are_told_apart(self):
+        """POLISH §2.3: each layer is brighter than the one under it (window < cards < drawer < fields)."""
+        palette = Palette()
+        layers = (palette.bg, palette.surface, palette.surface_raised, palette.surface_alt)
+        for lower, upper in zip(layers, layers[1:]):
+            self.assertGreater(self._luminance(upper), self._luminance(lower))
+        self.assertGreaterEqual(self._contrast(palette.surface, palette.bg), 1.2)
+        self.assertGreaterEqual(self._contrast(palette.surface_raised, palette.bg), 1.35)
         self.assertGreaterEqual(self._contrast(palette.on_accent, palette.accent), 4.5)
         self.assertGreaterEqual(self._contrast(palette.on_accent, palette.danger_solid), 4.5)
 

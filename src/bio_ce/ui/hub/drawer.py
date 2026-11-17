@@ -20,7 +20,7 @@ from bio_ce.ui.hub.editor import DrawerEditor
 from bio_ce.ui.hub.filters import source_text
 from bio_ce.ui.hub.quick import copy_items
 from bio_ce.ui.i18n import t
-from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS
+from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS, raised
 from bio_ce.ui.widgets import (
     Button,
     ClampLabel,
@@ -97,7 +97,7 @@ class Section(tk.Frame):
 
 class Drawer(tk.Frame):
     def __init__(self, master: tk.Misc, hub) -> None:
-        theme, c = hub.theme, hub.colors
+        theme, c = hub.theme, raised(hub.colors)  # one layer above the cards beside it (POLISH §2.3)
         super().__init__(master, background=c.surface, highlightthickness=1, highlightbackground=c.border_strong,
                          highlightcolor=c.border_strong)
         self.hub = hub

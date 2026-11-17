@@ -110,7 +110,8 @@ class Button(tk.Frame):
     """Flat button with hover, pressed, disabled, and keyboard focus states.
 
     Variants: ``primary``, ``secondary``, ``subtle``, ``danger``,
-    ``danger_subtle``, and ``link``.
+    ``danger_subtle``, ``link``, and the roles of POLISH §2.2: ``tab`` / ``tab_selected`` (words, underlined when
+    chosen) and ``chip`` / ``chip_selected`` (a light pill).
     """
 
     def __init__(
@@ -141,6 +142,8 @@ class Button(tk.Frame):
         )
         self.command = command
         self.variant = variant
+        self._font = font
+        self._underline: tk.Frame | None = None
         self._state = "normal"
         self._hover = False
         self._pressed = False
@@ -223,6 +226,15 @@ class Button(tk.Frame):
             return fill, c.text, fill
         if self.variant == "link":
             return surface, c.text if hot else c.accent_text, surface
+        # Roles that looked like buttons in rc1 (POLISH §2.2): a tab is words with an underline when chosen, a chip a
+        # light pill. Only the main action of an area stays a filled blue button.
+        if self.variant in ("tab", "tab_selected"):
+            return surface, c.text if (hot or self.variant == "tab_selected") else c.text_secondary, surface
+        if self.variant == "chip":
+            fill = c.surface_hover if hot else surface
+            return fill, c.text if hot else c.text_secondary, fill
+        if self.variant == "chip_selected":
+            return c.selection, c.accent_text, c.chip_border
         fill = c.surface_active if self._pressed else c.surface_hover if self._hover else c.surface_alt
         return fill, c.text, c.border_strong
 
@@ -234,6 +246,17 @@ class Button(tk.Frame):
         self.label.configure(background=fill, foreground=foreground)
         if self.icon_label is not None:
             self.icon_label.configure(background=fill, foreground=foreground)
+        tab = self.variant in ("tab", "tab_selected")
+        if tab and self._underline is None:
+            self._underline = tk.Frame(self.body, height=self.theme.px(2))
+            self._underline.pack(side="bottom", fill="x", before=self._inner)
+        if self._underline is not None:
+            chosen = self.variant == "tab_selected"
+            self._underline.configure(background=self.theme.colors.accent if chosen else fill)
+            if not tab:
+                self._underline.pack_forget()
+                self._underline = None
+            self.label.configure(font=self.theme.font("body_strong" if chosen else self._font))
 
     def _on_enter(self, _event=None) -> None:
         if self._state == "normal" and not self._hover:

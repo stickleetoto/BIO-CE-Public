@@ -24,24 +24,28 @@ from bio_ce.ui.i18n import language
 class Palette:
     """Graphite dark palette. Text colors meet WCAG AA on ``surface``."""
 
-    bg: str = "#17181b"
-    sidebar: str = "#1d1f23"
-    surface: str = "#212328"
-    surface_alt: str = "#272a30"
-    surface_hover: str = "#2d3037"
-    surface_active: str = "#343841"
-    border: str = "#30343b"
-    border_strong: str = "#434852"
+    # Background layers (POLISH §2.3): the window, then cards, then the drawer, menus and notices one layer brighter,
+    # then fields. rc1's layers were 1.08-1.23 apart from the window, so areas told apart only by 1 px lines.
+    bg: str = "#0f1013"
+    sidebar: str = "#17191d"
+    surface: str = "#202328"
+    surface_raised: str = "#282c33"
+    surface_alt: str = "#2d3139"
+    surface_hover: str = "#343943"
+    surface_active: str = "#3c424d"
+    border: str = "#2b2f36"
+    border_strong: str = "#4a505c"
     text: str = "#e6e8eb"
     text_secondary: str = "#a6acb5"
-    text_muted: str = "#8a919b"
+    text_muted: str = "#969da7"
     text_disabled: str = "#5d636c"
     accent: str = "#3b6fd4"
     accent_hover: str = "#4a7cdf"
     accent_pressed: str = "#3263c2"
     accent_text: str = "#8aaef5"
     on_accent: str = "#ffffff"
-    selection: str = "#2a3a57"
+    selection: str = "#253655"
+    chip_border: str = "#35508a"  # a chosen space chip (POLISH §2.2)
     focus: str = "#8aaef5"
     success: str = "#5cbf8f"
     success_bg: str = "#1a2e25"
@@ -54,6 +58,14 @@ class Palette:
     danger_solid_pressed: str = "#a3332f"
     info: str = "#8aaef5"
     info_bg: str = "#1e2a3f"
+
+
+def raised(colors: Palette) -> Palette:
+    """The palette for a raised panel (the drawer, POLISH §2.3): its "surface" is ``surface_raised``, so a panel built
+    with it reads as one layer above the cards beside it."""
+    from dataclasses import replace
+
+    return replace(colors, surface=colors.surface_raised)
 
 
 SPACE_XS = 4
@@ -391,6 +403,7 @@ def app_icon(window: tk.Misc, colors: Palette) -> tk.PhotoImage | None:
 __all__ = [
     "ICONS",
     "Palette",
+    "raised",
     "READING_MAX_WIDTH",
     "SIDEBAR_COMPACT_BELOW",
     "SIDEBAR_COMPACT_WIDTH",

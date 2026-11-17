@@ -19,13 +19,13 @@ from bio_ce.ui.format import CONTENT_LIMIT, DEFAULT_SOURCE, SOURCE_LIMIT, TITLE_
 from bio_ce.ui.hub.common import in_space, space_label
 from bio_ce.ui.i18n import t
 from bio_ce.ui.service_text import say
-from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS
+from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS, raised
 from bio_ce.ui.widgets import Button, Field, FlowFrame, TextArea, WrapLabel
 
 
 class DrawerEditor(tk.Frame):
     def __init__(self, master: tk.Misc, hub) -> None:
-        theme, c = hub.theme, hub.colors
+        theme, c = hub.theme, raised(hub.colors)  # inside the drawer
         super().__init__(master, background=c.surface)
         self.hub = hub
         self.app = hub.app

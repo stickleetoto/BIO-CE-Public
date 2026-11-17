@@ -84,7 +84,7 @@ class HubPage(Page):
 
         # Toolbar: search, Add, Import…, Export… -------------------------------------------------------------
         toolbar = tk.Frame(self, background=c.bg)
-        toolbar.pack(fill="x", pady=(0, theme.px(SPACE_M)))
+        toolbar.pack(fill="x", pady=(0, theme.px(SPACE_L)))  # between areas 16, within an area 8 (POLISH §2.4)
         self.query = tk.StringVar(master=self)
         self.export_button = Button(toolbar, theme, t("hub.export"), variant="secondary",
                                     command=app.export_memories, tooltip=t("hub.export_tip"))
@@ -112,11 +112,14 @@ class HubPage(Page):
                                                        font=theme.font("caption_strong"), foreground=c.text_muted))
         self.chips: dict[str, Button] = {}
         self.tab_row = FlowFrame(self, gap=theme.px(SPACE_XS), background=c.bg)
-        self.tab_row.pack(fill="x", pady=(0, theme.px(SPACE_M)))
+        self.tab_row.pack(fill="x")
+        # A line under the tabs ends the header part of the screen (POLISH §2.4): header → 16 → content.
+        self.tab_rule = tk.Frame(self, height=1, background=c.border)
+        self.tab_rule.pack(fill="x", pady=(0, theme.px(SPACE_L)))
         self.tabs: dict[str, Button] = {}
         for state in STATES:
-            self.tabs[state] = self.tab_row.add(Button(self.tab_row, theme, t(TAB_KEYS[state]), variant="subtle",
-                                                       command=lambda s=state: self.show_state(s)))
+            self.tabs[state] = self.tab_row.add(Button(self.tab_row, theme, t(TAB_KEYS[state]), variant="tab",
+                                                       padx=10, command=lambda s=state: self.show_state(s)))
         # Retracted memories: a view reached from here, not a fifth tab (decision logged in the U1+U2 report).
         self.retracted_tab = self.tab_row.add(Button(self.tab_row, theme, t("hub.tab.retracted"), variant="link",
                                                      command=lambda: self.show_state(RETRACTED),
@@ -234,11 +237,11 @@ class HubPage(Page):
         for state, button in self.tabs.items():
             count = self.counts.get(state, 0)
             button.set_text(f"{t(TAB_KEYS[state])} {count:,}")
-            button.set_variant("primary" if state == self.state else "subtle")
+            button.set_variant("tab_selected" if state == self.state else "tab")
         retracted = self.data.retracted_count(self.space_filter)
         self.retracted_tab.set_text(f"{t('hub.tab.retracted')} {retracted:,}")
         self.tab_row.set_visible(self.retracted_tab, bool(retracted) or self.state == RETRACTED)
-        self.retracted_tab.set_variant("primary" if self.state == RETRACTED else "link")
+        self.retracted_tab.set_variant("tab_selected" if self.state == RETRACTED else "link")
         self.tab_row.relayout()
         for view in (self.cards_view, self.suggestions, self.reviews):
             view.pack_forget()
@@ -322,7 +325,7 @@ class HubPage(Page):
             self.chips = {}
             for space_id, label in [(ALL_SPACES, t("space.all"))] + [(s.space_id, self._chip_label(s))
                                                                     for s in spaces]:
-                chip = Button(self.chip_row, self.theme, label, variant="subtle", padx=10, pady=3,
+                chip = Button(self.chip_row, self.theme, label, variant="chip", padx=10, pady=3,
                               command=lambda sid=space_id: self.set_space_filter(sid))
                 chip.space_id = space_id  # type: ignore[attr-defined]
                 self.chips[space_id] = self.chip_row.add(chip)
@@ -723,11 +726,11 @@ class HubPage(Page):
         self.drop_highlight, self.drop_over = set(targets), over
         for space_id, chip in self.chips.items():
             if targets:
-                chip.set_variant("primary" if space_id == over else "secondary" if space_id in targets else "subtle")
+                chip.set_variant("primary" if space_id == over else "secondary" if space_id in targets else "chip")
                 chip.set_enabled(space_id in targets)
             else:
                 chip.set_enabled(True)
-                chip.set_variant("primary" if space_id == self.space_filter else "subtle")
+                chip.set_variant("chip_selected" if space_id == self.space_filter else "chip")
 
     def chip_at(self, x: int, y: int) -> str | None:
         try:

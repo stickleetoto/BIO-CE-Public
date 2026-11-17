@@ -220,7 +220,7 @@ class HostCard(Card):
         for mode in (MODE_READ_ONLY, MODE_AUTO_MEMORY, MODE_PAUSED):
             button = Button(modes, theme, MODE_TEXTS[mode], tooltip=tips[mode],
                             command=lambda m=mode: page.set_mode(host, m))
-            button.pack(side="left", padx=(0, theme.px(SPACE_XS)))
+            button.pack(side="left")  # one joined control, not three separate buttons (POLISH §2.2)
             self.mode_buttons[mode] = button
         spaces = tk.Frame(self.access, background=c.surface)
         spaces.pack(fill="x", pady=(theme.px(SPACE_S), 0))
@@ -478,12 +478,12 @@ class ConnectionsPage(Page):
         self.cards: dict[str, HostCard] = {}
         for host in HOSTS:
             card = HostCard(self, body, host)
-            card.pack(fill="x", pady=(theme.px(SPACE_M), 0))
+            card.pack(fill="x", pady=(theme.px(SPACE_L), 0))  # page cards 16 apart (POLISH §2.4)
             self.cards[host] = card
 
         # v0.4.4: what hosts ask to change is reviewed on the memory screen (Memories → Reviews), not here.
         self.activity_card = Card(body, theme, padding=SPACE_L + 4)
-        self.activity_card.pack(fill="x", pady=(theme.px(SPACE_M), 0))
+        self.activity_card.pack(fill="x", pady=(theme.px(SPACE_L), 0))
         activity_head = tk.Frame(self.activity_card.body, background=c.surface)
         activity_head.pack(fill="x")
         self.reviews_link = Button(activity_head, theme, t("connections.open_reviews"), variant="link",
@@ -497,7 +497,7 @@ class ConnectionsPage(Page):
 
         # v0.4.4 §9.2: the running BIO CE MCP servers of all connections, and ending the long-idle ones on request.
         servers = Card(body, theme, padding=SPACE_L + 4)
-        servers.pack(fill="x", pady=(theme.px(SPACE_M), 0))
+        servers.pack(fill="x", pady=(theme.px(SPACE_L), 0))
         servers_row = tk.Frame(servers.body, background=c.surface)
         servers_row.pack(fill="x")
         servers_column = tk.Frame(servers_row, background=c.surface)
@@ -513,7 +513,7 @@ class ConnectionsPage(Page):
         self.end_idle_button.pack(side="right", anchor="n", padx=(theme.px(SPACE_L), 0))
 
         backups = Card(body, theme, padding=SPACE_L + 4)
-        backups.pack(fill="x", pady=(theme.px(SPACE_M), theme.px(SPACE_S)))
+        backups.pack(fill="x", pady=(theme.px(SPACE_L), theme.px(SPACE_S)))
         row = tk.Frame(backups.body, background=c.surface)
         row.pack(fill="x")
         column = tk.Frame(row, background=c.surface)
