@@ -121,7 +121,6 @@ STRINGS: dict[str, object] = {
     "hub.drawer.move_tip": "다른 공간으로 이동 (M). 먼저 백업을 만듭니다",
     "hub.drawer.history": "기록",
     "hub.drawer.history_tip": "모든 버전 보기 (Ctrl+H)",
-    "hub.drawer.history_count": {"other": "기록 (버전 {count}개)"},
     "hub.drawer.delete_tip": "삭제 (Delete). 8초 동안 실행 취소할 수 있습니다",
     "hub.drawer.details": "세부 정보",
     "hub.drawer.memory_id": "기억 ID",

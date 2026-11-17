@@ -354,7 +354,7 @@ class Drawer(tk.Frame):
         except Exception:  # noqa: BLE001
             self.app.notify("error", t("hub.drawer.history_failed"), title=t("hub.drawer.history_failed_title"))
             return
-        self.history.set_label(t("hub.drawer.history_count", count=len(self.revisions)))
+        self.history.set_hint(t("hub.drawer.history_hint", count=len(self.revisions)))  # the count once, as a hint
         for index, revision in enumerate(reversed(self.revisions)):
             row = tk.Frame(self.history.body, background=c.surface)
             row.pack(fill="x", pady=(0, theme.px(SPACE_S)))

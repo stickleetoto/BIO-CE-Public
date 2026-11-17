@@ -124,7 +124,6 @@ STRINGS: dict[str, object] = {
     "hub.drawer.move_tip": "Move to another space (M); a backup is made first",
     "hub.drawer.history": "History",
     "hub.drawer.history_tip": "See every revision (Ctrl+H)",
-    "hub.drawer.history_count": {"one": "History ({count} revision)", "other": "History ({count} revisions)"},
     "hub.drawer.delete_tip": "Delete (Delete key); Undo for 8 seconds",
     "hub.drawer.details": "Details",
     "hub.drawer.memory_id": "Memory ID",

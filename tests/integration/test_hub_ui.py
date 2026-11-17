@@ -314,7 +314,7 @@ class HubUiTests(unittest.TestCase):
         self.assertEqual(hub.drawer.record.title, "Editor (helix)")
         hub.drawer.open_history()
         self.settle()
-        self.assertIn("2 revisions", hub.drawer.history.label)
+        self.assertEqual(hub.drawer.history.hint_label.cget("text"), "2 versions")  # the count, once, as the hint
 
     def test_ctrl_n_adds_to_the_space_chosen_in_the_form(self):
         self.hub.keys.app.start_new_memory()

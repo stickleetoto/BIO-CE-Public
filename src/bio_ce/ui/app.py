@@ -242,7 +242,8 @@ class BIOCEDesktop:
         tk.Label(row, text=theme.icon("shield"), font=theme.icon_font("small"), background=c.sidebar,
                  foreground=c.success).pack(side="left", anchor="n", pady=(theme.px(2), 0))
         self.sidebar_footer_text = tk.Frame(row, background=c.sidebar)
-        self.sidebar_footer_text.pack(side="left", fill="x", padx=(theme.px(SPACE_S), 0))
+        # expand: the footer line wraps at the sidebar's width, not at its own (it broke after every word).
+        self.sidebar_footer_text.pack(side="left", fill="x", expand=True, padx=(theme.px(SPACE_S), 0))
         # One line (POLISH §3.5): "Local only · Version …". The engine's name is in Settings; this line says it only
         # when the engine has a problem (R2).
         # Wraps: in Korean and with large text the line is wider than the sidebar (the audit found it cut).
@@ -287,8 +288,8 @@ class BIOCEDesktop:
             if compact:
                 frame.pack_forget()
             elif not frame.winfo_manager():
-                frame.pack(side="left", fill="x", padx=(self.theme.px(SPACE_S if frame is self.sidebar_footer_text
-                                                                       else SPACE_M - 2), 0))
+                frame.pack(side="left", fill="x", expand=frame is self.sidebar_footer_text,
+                           padx=(self.theme.px(SPACE_S if frame is self.sidebar_footer_text else SPACE_M - 2), 0))
 
     @property
     def compact(self) -> bool:
