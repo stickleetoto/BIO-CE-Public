@@ -74,7 +74,7 @@ Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"
 
 [Messages]
 english.ConfirmUninstall=Remove %1 from this Windows user?%n%nYour memories, settings, and backups in your AppData\Local\BIO-CE folder are kept unless you choose to remove them in the next step. Disconnect Codex or Claude on the BIO CE Connections page first; uninstall does not edit host MCP settings.
-korean.ConfirmUninstall=이 Windows 사용자에서 %1을(를) 제거할까요?%n%nAppData\Local\BIO-CE 폴더의 기억, 설정, 백업은 다음 단계에서 삭제를 직접 선택하지 않는 한 보존됩니다. Codex 또는 Claude 연결은 먼저 BIO CE의 Connections 화면에서 해제하세요. 제거 프로그램은 호스트 MCP 설정을 수정하지 않습니다.
+korean.ConfirmUninstall=이 Windows 사용자에서 %1을(를) 제거할까요?%n%nAppData\Local\BIO-CE 폴더의 기억, 설정, 백업은 다음 단계에서 삭제를 직접 선택하지 않는 한 보존됩니다. Codex 또는 Claude 연결은 먼저 BIO CE의 연결 화면에서 해제하세요. 제거 프로그램은 AI 도구의 MCP 설정을 수정하지 않습니다.
 
 ; The finish page says that open AI host conversations need a new start after an update: Setup closes the
 ; running BIO CE MCP servers, and Codex does not start them again in the same conversation.
@@ -95,17 +95,19 @@ english.HostClaude=Claude Code
 english.HostClaudeDesktop=Claude desktop app
 english.PartMcp=MCP server
 english.PartHooks=session hooks
+english.ShortcutComment=Local BIO CE memory manager
 korean.LaunchApp=BIO CE 시작
 korean.RemoveDataPrompt=BIO CE 로컬 데이터(기억, 설정, MCP 설정 백업)도 삭제할까요?%n%n%1%n%n안전 삭제가 아니며 되돌릴 수 없습니다. 데이터를 보존하려면 [아니요]를 선택하세요.
-korean.RemoveDataFailed=사용 중인 파일이 있어 일부 BIO CE 데이터를 삭제하지 못했습니다. BIO CE를 사용하는 AI 호스트를 종료한 뒤 다음 폴더를 직접 삭제하세요:%n%n%1
+korean.RemoveDataFailed=사용 중인 파일이 있어 일부 BIO CE 데이터를 삭제하지 못했습니다. BIO CE를 사용하는 AI 도구를 종료한 뒤 다음 폴더를 직접 삭제하세요:%n%n%1
 korean.DataDirRefused=BIO CE 데이터 폴더 밖의 프로그램 폴더를 선택하세요:%n%n%1
 korean.HostsStillConnected=BIO CE가 아직 다음에 연결되어 있습니다:%n%n%1%n제거해도 이 설정은 바뀌지 않으므로, 삭제된 프로그램을 계속 가리켜 시작 오류가 날 수 있습니다.%n%n먼저 연결을 해제할 수 있도록 제거를 취소할까요?%n%n[예]: 제거 취소%n[아니요]: 그래도 제거
-korean.DisconnectFirst=BIO CE를 열고 Connections에서 각 호스트의 연결을 해제한 뒤 다시 제거하세요.
+korean.DisconnectFirst=BIO CE를 열고 연결 화면에서 각 AI 도구의 연결을 해제한 뒤 다시 제거하세요.
 korean.HostCodex=Codex (CLI · 데스크톱 앱)
 korean.HostClaude=Claude Code
-korean.HostClaudeDesktop=Claude 데스크톱 앱
+korean.HostClaudeDesktop=Claude 앱
 korean.PartMcp=MCP 서버
 korean.PartHooks=세션 훅
+korean.ShortcutComment=이 PC의 BIO CE 기억 관리
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -121,12 +123,14 @@ Type: files; Name: "{app}\uninstall.ps1"; Check: IsBioCeInstallDir
 Source: "{#PayloadDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\BIO CE\BIO CE"; Filename: "{app}\BIO-CE.exe"; WorkingDir: "{app}"; Comment: "Local BIO CE memory manager"
-Name: "{autodesktop}\BIO CE"; Filename: "{app}\BIO-CE.exe"; WorkingDir: "{app}"; Comment: "Local BIO CE memory manager"; Tasks: desktopicon
+Name: "{autoprograms}\BIO CE\BIO CE"; Filename: "{app}\BIO-CE.exe"; WorkingDir: "{app}"; Comment: "{cm:ShortcutComment}"
+Name: "{autodesktop}\BIO CE"; Filename: "{app}\BIO-CE.exe"; WorkingDir: "{app}"; Comment: "{cm:ShortcutComment}"; Tasks: desktopicon
 
 [Registry]
 ; Remove the uninstall entry written by the unreleased IExpress developer preview.
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\BIO-CE"; ValueType: none; Flags: deletekey dontcreatekey
+; v0.4.4: the language chosen in setup; the app's "auto" language uses it before the Windows language.
+Root: HKCU; Subkey: "Software\BIO CE"; ValueType: string; ValueName: "InstallLanguage"; ValueData: "{language}"; Flags: uninsdeletevalue uninsdeletekeyifempty
 
 [Run]
 Filename: "{app}\BIO-CE.exe"; Description: "{cm:LaunchApp}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent

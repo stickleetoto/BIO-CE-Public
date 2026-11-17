@@ -5,9 +5,11 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import re
 import string
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -68,6 +70,30 @@ class TextKeyTests(unittest.TestCase):
             self.assertEqual(i18n.resolve(None), "ko")
         self.assertEqual(i18n.resolve("en"), "en")
         self.assertEqual(i18n.resolve("ko"), "ko")
+
+    @unittest.skipUnless(sys.platform == "win32", "the installer's language is in the Windows registry")
+    def test_auto_speaks_the_language_chosen_in_setup_first(self):
+        """The installer writes HKCU\\Software\\BIO CE\\InstallLanguage; "auto" uses it before the Windows language.
+        The registry calls are faked here: the test never reads or writes the real registry."""
+        import winreg
+
+        class Key:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
+        env = {key: value for key, value in os.environ.items() if key != "BIO_CE_UI_LANGUAGE"}
+        for stored, wanted in (("korean", "ko"), ("english", "en"), ("Korean ", "ko"), ("french", None)):
+            with self.subTest(stored=stored), mock.patch.object(winreg, "OpenKey", return_value=Key()), \
+                    mock.patch.object(winreg, "QueryValueEx", return_value=(stored, winreg.REG_SZ)):
+                self.assertEqual(i18n.setup_language(), wanted)
+                with mock.patch.dict("os.environ", env, clear=True), \
+                        mock.patch("ctypes.windll.kernel32.GetUserDefaultUILanguage", return_value=0x0409):
+                    self.assertEqual(i18n.detect_language(), wanted or "en")
+        with mock.patch.object(winreg, "OpenKey", side_effect=OSError("no key")):
+            self.assertIsNone(i18n.setup_language())  # not installed by setup: the Windows language decides
 
     def test_the_choice_is_kept_in_the_connection_file(self):
         with tempfile.TemporaryDirectory() as temp:

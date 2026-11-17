@@ -35,6 +35,9 @@ def detect_language() -> str:
         return forced
     if sys.platform != "win32":
         return "en"
+    chosen = setup_language()
+    if chosen is not None:
+        return chosen
     try:
         import ctypes
 
@@ -42,6 +45,25 @@ def detect_language() -> str:
     except Exception:  # noqa: BLE001 - no Windows API: English
         return "en"
     return "ko" if language_id & 0x3FF == 0x12 else "en"
+
+
+SETUP_LANGUAGE_KEY = r"Software\BIO CE"  # HKCU; the installer writes InstallLanguage (v0.4.4)
+_SETUP_LANGUAGES = {"korean": "ko", "english": "en"}
+
+
+def setup_language() -> str | None:
+    """The language chosen in the installer ("ko" or "en"), or None: what "auto" uses before the Windows language,
+    so the app first speaks the language the user picked in setup. Reads only."""
+    if sys.platform != "win32":
+        return None
+    try:
+        import winreg
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, SETUP_LANGUAGE_KEY) as key:
+            value, _kind = winreg.QueryValueEx(key, "InstallLanguage")
+    except OSError:
+        return None
+    return _SETUP_LANGUAGES.get(str(value).strip().lower())
 
 
 def resolve(choice: str | None) -> str:

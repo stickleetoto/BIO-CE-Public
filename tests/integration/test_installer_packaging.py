@@ -127,6 +127,28 @@ class InnoScriptPolicyTests(unittest.TestCase):
                     self.assertIn(note, lines[0])
                     self.assertIn("[name]", lines[0])
 
+    def test_every_message_has_korean_in_the_glossary_terms_and_setup_hands_its_language_to_the_app(self):
+        """v0.4.4 U5: each english.X has a korean.X; the Korean names screens as the app shows them ("연결") and uses
+        the glossary ("AI 도구", never "호스트"); shortcuts describe themselves in the setup language; and the
+        language chosen in setup goes to HKCU\\Software\\BIO CE\\InstallLanguage for the app's "auto" choice."""
+        english = set(re.findall(r"^english\.(\w+)=", self.script, re.MULTILINE))
+        korean = set(re.findall(r"^korean\.(\w+)=", self.script, re.MULTILINE))
+        self.assertTrue(english)
+        self.assertEqual(english, korean)
+        for line in self.script.splitlines():
+            if line.startswith("korean."):
+                with self.subTest(line=line[:40]):
+                    self.assertNotIn("Connections", line)
+                    self.assertNotIn("호스트", line)
+        icons = [line for line in self.script.splitlines() if line.startswith("Name: ") and "Comment:" in line]
+        self.assertTrue(icons)
+        self.assertTrue(all('Comment: "{cm:ShortcutComment}"' in line for line in icons), icons)
+        registry = [line for line in self.script.splitlines() if 'ValueName: "InstallLanguage"' in line]
+        self.assertEqual(len(registry), 1)
+        self.assertIn('Subkey: "Software\\BIO CE"', registry[0])
+        self.assertIn('ValueData: "{language}"', registry[0])
+        self.assertIn("uninsdeletevalue", registry[0])
+
     def test_program_folder_cannot_overlap_the_data_folder(self):
         self.assertIn("function PrepareToInstall", self.script)
         self.assertIn("OverlapsDataRoot(ExpandConstant('{app}'))", self.script)
