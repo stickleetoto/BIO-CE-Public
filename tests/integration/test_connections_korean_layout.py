@@ -37,6 +37,11 @@ class KoreanConnectionsLayoutTests(unittest.TestCase):
             card = page.cards["codex"]
             self.assertTrue(card.access.winfo_manager())  # the access rows of a connected host are shown
             problems = case.visit("connections")
+            for each in page.cards.values():  # POLISH §3.1: the rows are in each card's details
+                each.details.set_open(True)
+            page.callout_more.set_open(True)
+            page.advanced.set_open(True)
+            problems += case.visit("connections", "connections (details opened)")
             newline = chr(10)
             self.assertEqual(problems, [], f"{len(problems)} problems:{newline}" + newline.join(problems))
             card.diagnose_button.set_text("아주 긴 진단 실행 단추 이름 " * 8)  # positive control in Korean

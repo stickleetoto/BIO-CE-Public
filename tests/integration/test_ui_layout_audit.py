@@ -190,6 +190,12 @@ class LayoutAuditTests(unittest.TestCase):
         problems += [p.replace("import:", "import preview:", 1) for p in self.visit("import")]
         self.app.pages["connections"].refresh()
         problems += self.visit("connections")
+        connections = self.app.pages["connections"]  # POLISH §3.1: every card's details, the callout, Advanced
+        for card in connections.cards.values():
+            card.details.set_open(True)
+        connections.callout_more.set_open(True)
+        connections.advanced.set_open(True)
+        problems += self.visit("connections", "connections (details opened)")
         problems += self.visit("settings")
         dialog = ExportDialog(self.root, self.app.theme, spaces=self.app.spaces(), current="general",
                               sources=[(key, SOURCE_LABELS[key]) for key in SOURCE_KINDS])

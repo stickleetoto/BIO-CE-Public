@@ -1532,4 +1532,24 @@ STRINGS: dict[str, object] = {
     #
     #
     # ===== end of U5-S =====
+    # POLISH §3.1 connections (rc2)
+    "connections.details": "세부 정보",
+    "connections.details.hint_connected": "상태 · 공간 · 세션 훅 · 기억 스킬 · 연결 끊기 · 진단",
+    "connections.details.hint_new": "설명 · 상태 · 진단",
+    "connections.attention": "확인 필요: {reasons}",
+    "connections.attention.conflict": "설정 충돌",
+    "connections.attention.legacy": "옛 방식으로 연결됨",
+    "connections.attention.limited": "자동 기억 제한",
+    "connections.attention.unverified": "자동 기억 확인 안 됨",
+    "connections.attention.code_mode": "코드 모드 옵션 꺼짐",
+    "connections.attention.skill_outdated": "기억 스킬 업데이트 있음",
+    "connections.attention.skill_modified": "기억 스킬을 직접 수정함",
+    "connections.attention.diagnostics": {"other": "진단 {count}개 실패"},
+    "connections.line.personal": "개인 {access}",
+    "connections.callout.more": "자세히",
+    "connections.activity.all": {"other": "모두 보기({count})"},
+    "connections.activity.fewer": "줄여 보기",
+    "connections.advanced": "고급",
+    "connections.advanced.hint": "{servers} · 설정 백업",
+    "connections.advanced.servers": {"other": "실행 중인 서버 {count}개"},
 }

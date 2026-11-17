@@ -38,7 +38,17 @@ from bio_ce.ui.pages import Page
 from bio_ce.ui.pages.dashboard import host_pill
 from bio_ce.ui.service_text import say
 from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS
-from bio_ce.ui.widgets import Button, Card, Pill, ScrollFrame, WrapLabel, caption_label, section_label
+from bio_ce.ui.widgets import (
+    Button,
+    Card,
+    ClampLabel,
+    Disclosure,
+    Pill,
+    ScrollFrame,
+    WrapLabel,
+    caption_label,
+    section_label,
+)
 
 
 class _Texts(Mapping):
@@ -109,6 +119,8 @@ MODE_TEXTS = _Texts(lambda: {
 # asks: whether a host starts a new server after one is ended (spike S-MCP) is not known yet, so nothing ends
 # servers on its own.
 IDLE_SERVER_SECONDS = 12 * 3600
+# Recent AI activity shows this many lines until the user asks for all (POLISH §3.1).
+ACTIVITY_LINES = 5
 _OUTCOME_STYLE = {
     "pass": ("success", "success"),
     "fail": ("error", "danger"),
@@ -165,6 +177,10 @@ ACTIVITY_LABELS = _Texts(lambda: {
 
 
 class HostCard(Card):
+    """One AI tool. The summary (POLISH §3.1): name and status, the access segment, one settings line, a "Needs
+    attention" line when there is something to act on (R2), and Connect or Reconnect. Everything else, including
+    Disconnect and Diagnose (R3), is under "Details ▸", which starts closed and is never remembered (R5)."""
+
     def __init__(self, page: ConnectionsPage, master: tk.Misc, host: str) -> None:
         theme = page.theme
         super().__init__(master, theme, padding=SPACE_L + 4)
@@ -173,10 +189,13 @@ class HostCard(Card):
         self.host = host
         self.status: HostStatus | None = None
         self.busy = False
+        self.checks: tuple[DiagnosticCheck, ...] = ()
         body = self.body
 
+        # Summary ------------------------------------------------------------
         header = tk.Frame(body, background=c.surface)
         header.pack(fill="x")
+        self.header = header
         tile = tk.Frame(header, background=c.surface_alt, width=theme.px(40), height=theme.px(40))
         tile.pack(side="left", anchor="n")
         tile.pack_propagate(False)
@@ -185,26 +204,11 @@ class HostCard(Card):
         names = tk.Frame(header, background=c.surface)
         names.pack(side="left", fill="x", expand=True, padx=(theme.px(SPACE_M + 2), 0))
         section_label(names, theme, host_name(host)).pack(fill="x")
-        caption_label(names, theme, HOST_DESCRIPTIONS[host], muted=True).pack(fill="x")
+        # What the tool is, in one line, only while it is not connected; the whole paragraph is in the details.
+        self.desc_line = ClampLabel(names, theme, HOST_DESCRIPTIONS[host], max_lines=1, font=theme.font("caption"),
+                                    foreground=c.text_muted)
         self.pill = Pill(header, theme, t("connections.checking"), "info")
         self.pill.pack(side="right", anchor="n")
-
-        self.message = WrapLabel(body, font=theme.font("body"), foreground=c.text_secondary)
-        self.message.pack(fill="x", pady=(theme.px(SPACE_M + 2), 0))
-
-        # Being connected and the host's model being able to use Auto memory are shown separately.
-        support = auto_memory_support(host)
-        self.support = support
-        capability = tk.Frame(body, background=c.surface)
-        capability.pack(fill="x", pady=(theme.px(SPACE_S + 2), 0))
-        self.capability = capability
-        tk.Label(capability, text=t("connections.auto_support"), font=theme.font("caption_strong"),
-                 background=c.surface, foreground=c.text_muted, anchor="w").pack(side="left")
-        self.support_pill = Pill(capability, theme, say(support.summary),
-                                 {"available": "success", "limited": "warning"}.get(support.level, "neutral"))
-        self.support_pill.pack(side="left", padx=(theme.px(SPACE_S), 0))
-        self.support_detail = WrapLabel(body, say(support.detail), font=theme.font("caption"), foreground=c.text_muted)
-        self.support_detail.pack(fill="x", pady=(theme.px(SPACE_XS), 0))
 
         self.access = tk.Frame(body, background=c.surface)
         modes = tk.Frame(self.access, background=c.surface)
@@ -222,7 +226,56 @@ class HostCard(Card):
                             command=lambda m=mode: page.set_mode(host, m))
             button.pack(side="left")  # one joined control, not three separate buttons (POLISH §2.2)
             self.mode_buttons[mode] = button
-        spaces = tk.Frame(self.access, background=c.surface)
+        # Spaces, Personal, and the saving mode in one line; the rows that change them are in the details.
+        self.settings_line = WrapLabel(self.access, font=theme.font("body"), foreground=c.text_secondary)
+        self.settings_line.pack(fill="x", pady=(theme.px(SPACE_S), 0))
+
+        # Something to act on (R2): one line, decided only from the status values below; selecting it opens the
+        # details where the fix is.
+        self.attention = tk.Frame(body, background=c.surface, cursor="hand2")
+        attention_icon = tk.Label(self.attention, text=theme.icon("warning") or "!", font=theme.icon_font("small"),
+                                  background=c.surface, foreground=c.warning, cursor="hand2")
+        attention_icon.pack(side="left", anchor="n", pady=(theme.px(2), 0))
+        self.attention_label = WrapLabel(self.attention, font=theme.font("body_strong"), foreground=c.text,
+                                         cursor="hand2")
+        self.attention_label.pack(side="left", fill="x", expand=True, padx=(theme.px(SPACE_S), 0))
+        for part in (self.attention, attention_icon, self.attention_label):
+            part.bind("<ButtonRelease-1>", lambda _e: self.open_details(), add="+")
+
+        self.progress = ttk.Progressbar(body, mode="indeterminate", style="BIO.Horizontal.TProgressbar")
+        self.summary_actions = tk.Frame(body, background=c.surface)
+        self.connect_button = Button(self.summary_actions, theme, t("connections.action.connect"), icon="connections",
+                                     variant="primary", command=lambda: page.connect_host(host))
+        self.connect_button.pack(side="left")
+
+        self.details = Disclosure(body, theme, t("connections.details"), hint=t("connections.details.hint_new"))
+        self.details.pack(fill="x", pady=(theme.px(SPACE_M), 0))
+        details = self.details.body
+
+        # Details ------------------------------------------------------------
+        self.description = WrapLabel(details, HOST_DESCRIPTIONS[host], font=theme.font("caption"),
+                                     foreground=c.text_muted)
+        self.description.pack(fill="x", pady=(theme.px(SPACE_XS), 0))
+        self.message = WrapLabel(details, font=theme.font("body"), foreground=c.text_secondary)
+        self.message.pack(fill="x", pady=(theme.px(SPACE_S), 0))
+
+        # Being connected and the host's model being able to use Auto memory are shown separately.
+        support = auto_memory_support(host)
+        self.support = support
+        capability = tk.Frame(details, background=c.surface)
+        capability.pack(fill="x", pady=(theme.px(SPACE_S + 2), 0))
+        self.capability = capability
+        tk.Label(capability, text=t("connections.auto_support"), font=theme.font("caption_strong"),
+                 background=c.surface, foreground=c.text_muted, anchor="w").pack(side="left")
+        self.support_pill = Pill(capability, theme, say(support.summary),
+                                 {"available": "success", "limited": "warning"}.get(support.level, "neutral"))
+        self.support_pill.pack(side="left", padx=(theme.px(SPACE_S), 0))
+        self.support_detail = WrapLabel(details, say(support.detail), font=theme.font("caption"),
+                                        foreground=c.text_muted)
+        self.support_detail.pack(fill="x", pady=(theme.px(SPACE_XS), 0))
+
+        self.rows = tk.Frame(details, background=c.surface)
+        spaces = tk.Frame(self.rows, background=c.surface)
         spaces.pack(fill="x", pady=(theme.px(SPACE_S), 0))
         tk.Label(spaces, text=t("connections.row.spaces"), font=theme.font("body_strong"), background=c.surface,
                  foreground=c.text, width=12, anchor="w").pack(side="left")
@@ -232,7 +285,7 @@ class HostCard(Card):
         self.spaces_button = Button(spaces, theme, t("connections.spaces.use_general_only"), variant="link",
                                     command=lambda: page.toggle_projects(host))
         self.spaces_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
-        self.personal_row = tk.Frame(self.access, background=c.surface)
+        self.personal_row = tk.Frame(self.rows, background=c.surface)
         tk.Label(self.personal_row, text=t("space.personal"), font=theme.font("body_strong"), background=c.surface,
                  foreground=c.text, width=12, anchor="w").pack(side="left")
         self.personal_label = tk.Label(self.personal_row, text="", font=theme.font("body"), background=c.surface,
@@ -241,7 +294,7 @@ class HostCard(Card):
         self.personal_button = Button(self.personal_row, theme, t("connections.personal.allow"), variant="link",
                                       command=lambda: page.change_personal(host))
         self.personal_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
-        saving = tk.Frame(self.access, background=c.surface)
+        saving = tk.Frame(self.rows, background=c.surface)
         saving.pack(fill="x", pady=(theme.px(SPACE_S), 0))
         self.saving_row = saving
         tk.Label(saving, text=t("connections.row.saving"), font=theme.font("body_strong"), background=c.surface,
@@ -252,7 +305,7 @@ class HostCard(Card):
         self.saving_button = Button(saving, theme, t("connections.saving.to_collect"), variant="link",
                                     command=lambda: page.toggle_save_mode(host))
         self.saving_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
-        hooks = tk.Frame(self.access, background=c.surface)
+        hooks = tk.Frame(self.rows, background=c.surface)
         if host != DESKTOP:
             hooks.pack(fill="x", pady=(theme.px(SPACE_S), 0))
         tk.Label(hooks, text=t("connections.row.hooks"), font=theme.font("body_strong"), background=c.surface,
@@ -266,7 +319,7 @@ class HostCard(Card):
         self.code_mode_label: tk.Label | None = None
         self.code_mode_button: Button | None = None
         if host == "codex":
-            code_mode = tk.Frame(self.access, background=c.surface)
+            code_mode = tk.Frame(self.rows, background=c.surface)
             code_mode.pack(fill="x", pady=(theme.px(SPACE_S), 0))
             tk.Label(code_mode, text=t("connections.row.code_mode"), font=theme.font("body_strong"),
                      background=c.surface, foreground=c.text, width=12, anchor="w").pack(side="left")
@@ -275,7 +328,7 @@ class HostCard(Card):
             self.code_mode_label.pack(side="left")
             self.code_mode_button = Button(code_mode, theme, t("connections.action.apply"), variant="link",
                                            command=lambda: page.apply_code_mode(host))
-        skill = tk.Frame(self.access, background=c.surface)
+        skill = tk.Frame(self.rows, background=c.surface)
         skill.pack(fill="x", pady=(theme.px(SPACE_S), 0))
         tk.Label(skill, text=t("connections.row.skill"), font=theme.font("body_strong"), background=c.surface,
                  foreground=c.text, width=12, anchor="w").pack(side="left")
@@ -292,26 +345,91 @@ class HostCard(Card):
                command=lambda: page.preview_skill(host)).pack(
             side="left", padx=(theme.px(SPACE_XS), 0))
         # v0.4.4 §9.2: the BIO CE MCP servers this connection's host keeps running (one per conversation or session).
-        self.servers_row = tk.Frame(self.access, background=c.surface)
+        self.servers_row = tk.Frame(self.rows, background=c.surface)
         tk.Label(self.servers_row, text=t("connections.servers.label"), font=theme.font("body_strong"),
                  background=c.surface, foreground=c.text, width=12, anchor="w").pack(side="left")
         self.servers_label = tk.Label(self.servers_row, text="", font=theme.font("body"), background=c.surface,
                                       foreground=c.text_secondary, anchor="w")
         self.servers_label.pack(side="left")
-        self.progress = ttk.Progressbar(body, mode="indeterminate", style="BIO.Horizontal.TProgressbar")
 
-        actions = tk.Frame(body, background=c.surface)
+        actions = tk.Frame(details, background=c.surface)
         actions.pack(fill="x", pady=(theme.px(SPACE_L), 0))
         self.actions = actions
-        self.primary = Button(actions, theme, t("connections.action.connect"), icon="connections", variant="primary",
-                              command=lambda: page.connect_host(host))
-        self.primary.pack(side="left")
+        self.disconnect_button = Button(actions, theme, t("connections.action.disconnect"),
+                                        command=lambda: page.disconnect_host(host))
         self.diagnose_button = Button(actions, theme, t("connections.action.diagnose"), icon="diagnostics",
                                       command=lambda: page.diagnose_host(host),
                                       tooltip=t("connections.action.diagnose_tip"))
-        self.diagnose_button.pack(side="left", padx=(theme.px(SPACE_S), 0))
-        self.results = tk.Frame(body, background=c.surface)
-        self.checks: tuple[DiagnosticCheck, ...] = ()
+        self.diagnose_button.pack(side="left")
+        self.results = tk.Frame(details, background=c.surface)
+
+    @property
+    def primary(self) -> Button:
+        """The card's main connection button for its state: Disconnect (in the details) for a connected tool,
+        otherwise Connect or Reconnect (in the summary)."""
+        status = self.status
+        if status is not None and status.connected and not status.legacy:
+            return self.disconnect_button
+        return self.connect_button
+
+    def open_details(self) -> None:
+        self.details.set_open(True)
+
+    def attention_reasons(self) -> list[str]:
+        """What the user should act on, from the status values the card already shows (POLISH §3.1): a settings
+        conflict, a legacy connection, limited Auto memory, Codex's code-mode option off, an outdated or edited
+        skill, failed diagnostics. Nothing new is worked out here."""
+        status = self.status
+        reasons: list[str] = []
+        if status is None:
+            return reasons
+        managed = status.connected and not status.legacy and bool(status.connection_id)
+        if status.configuration_conflict:
+            reasons.append(t("connections.attention.conflict"))
+        if status.connected and status.legacy:
+            reasons.append(t("connections.attention.legacy"))
+        if status.connected and self.support.level != "available":
+            reasons.append(t("connections.attention.limited") if self.support.level == "limited"
+                           else t("connections.attention.unverified"))
+        if managed and self.host == "codex" and status.code_mode == codex_options.MISSING:
+            reasons.append(t("connections.attention.code_mode"))
+        if managed and self.host != DESKTOP and status.skill == memory_skill.OUTDATED:
+            reasons.append(t("connections.attention.skill_outdated"))
+        if managed and self.host != DESKTOP and status.skill == memory_skill.MODIFIED:
+            reasons.append(t("connections.attention.skill_modified"))
+        failed = sum(1 for check in self.checks if check.outcome == "fail")
+        if failed:
+            reasons.append(t("connections.attention.diagnostics", count=failed))
+        return reasons
+
+    def _show_attention(self) -> None:
+        reasons = self.attention_reasons()
+        if reasons:
+            self.attention_label.configure(text=t("connections.attention", reasons=" · ".join(reasons)))
+        else:
+            self.attention_label.configure(text="")
+        self._layout()
+
+    def _layout(self) -> None:
+        """Pack the summary's parts that come and go, in order, above the details row."""
+        theme, status = self.page.theme, self.status
+        managed = status is not None and status.connected and not status.legacy and bool(status.connection_id)
+        connected = status is not None and status.connected
+        parts = (
+            (self.access, bool(managed), SPACE_M),
+            (self.attention, bool(self.attention_label.cget("text")), SPACE_M),
+            (self.progress, self.busy, SPACE_M),
+            (self.summary_actions, not connected or bool(status and status.legacy), SPACE_M),
+        )
+        for part, wanted, space in parts:
+            if wanted:
+                part.pack(fill="x", pady=(theme.px(space), 0), before=self.details)
+            else:
+                part.pack_forget()
+        if connected:
+            self.desc_line.pack_forget()
+        else:
+            self.desc_line.pack(fill="x")
 
     def apply(self, status: HostStatus | None) -> None:
         self.status = status
@@ -322,11 +440,13 @@ class HostCard(Card):
         self.message.configure(text=host_message(self.host, status))
         managed = status is not None and status.connected and not status.legacy and status.connection_id
         if managed:
-            self.access.pack(fill="x", pady=(self.page.theme.px(SPACE_M), 0), after=self.message)
+            self.rows.pack(fill="x", pady=(self.page.theme.px(SPACE_XS), 0), after=self.support_detail)
+            self.details.set_hint(t("connections.details.hint_connected"))
             for mode, button in self.mode_buttons.items():
                 button.set_variant("primary" if status.mode == mode else "secondary")
             settings = self.page.connection_settings(self.host) or {}
             all_projects = bool(settings.get("all_projects", True))
+            line = [t("connections.spaces.all") if all_projects else t("connections.spaces.general_only")]
             self.spaces_label.configure(text=t("connections.spaces.all") if all_projects
                                         else t("connections.spaces.general_only"))
             self.spaces_button.set_text(t("connections.spaces.use_general_only") if all_projects
@@ -337,11 +457,15 @@ class HostCard(Card):
             else:
                 self.personal_row.pack(fill="x", pady=(self.page.theme.px(SPACE_S), 0), before=self.saving_row)
                 read, write = personal
-                self.personal_label.configure(text=t("connections.personal.read_write") if write
-                                              else t("connections.personal.read") if read else t("connections.off"))
+                access = t("connections.personal.read_write") if write \
+                    else t("connections.personal.read") if read else t("connections.off")
+                self.personal_label.configure(text=access)
                 self.personal_button.set_text(t("connections.personal.change") if read
                                               else t("connections.personal.allow"))
+                line.append(t("connections.line.personal", access=access))
             collect = settings.get("save_mode") == "collect"
+            line.append(t("connections.summary.collect") if collect else t("connections.summary.curated"))
+            self.settings_line.configure(text=" · ".join(line))
             self.saving_label.configure(text=t("connections.saving.collect") if collect
                                         else t("connections.saving.curated"))
             self.saving_button.set_text(t("connections.saving.to_curated") if collect
@@ -364,23 +488,23 @@ class HostCard(Card):
                 self.skill_label.configure(text=SKILL_LABELS.get(skill, t("connections.unknown")))
                 self.skill_button.set_text(SKILL_ACTIONS.get(skill, t("connections.action.install")))
         else:
-            self.access.pack_forget()
-        if status is not None and status.connected and status.legacy:
-            self.primary.set_text(t("connections.action.reconnect"))
-            self.primary.set_variant("primary")
-            self.primary.set_command(lambda: self.page.connect_host(self.host))
-            self.primary.set_enabled(True)
-        elif status is not None and status.connected:
-            self.primary.set_text(t("connections.action.disconnect"))
-            self.primary.set_variant("secondary")
-            self.primary.set_command(lambda: self.page.disconnect_host(self.host))
-            self.primary.set_enabled(True)
+            self.rows.pack_forget()
+            self.details.set_hint(t("connections.details.hint_new"))
+        connected = status is not None and status.connected
+        if connected and status.legacy:
+            self.connect_button.set_text(t("connections.action.reconnect"))
+            self.connect_button.set_enabled(True)
         else:
-            self.primary.set_text(t("connections.action.connect"))
-            self.primary.set_variant("primary")
-            self.primary.set_command(lambda: self.page.connect_host(self.host))
-            self.primary.set_enabled(status is not None and status.installed and not status.configuration_conflict)
+            self.connect_button.set_text(t("connections.action.connect"))
+            self.connect_button.set_enabled(status is not None and status.installed
+                                            and not status.configuration_conflict)
+        if connected and not status.legacy:
+            self.disconnect_button.pack(side="left", padx=(0, self.page.theme.px(SPACE_S)), before=self.diagnose_button)
+            self.disconnect_button.set_enabled(True)
+        else:
+            self.disconnect_button.pack_forget()
         self.diagnose_button.set_enabled(True)
+        self._show_attention()
 
     def show_servers(self, records: list[ServerRecord]) -> None:
         """How many BIO CE servers run for this card's connection, and when the latest request came."""
@@ -402,19 +526,20 @@ class HostCard(Card):
         self.busy = label is not None
         if label is not None:
             self.pill.set(label, "info")
-            self.primary.set_enabled(False)
-            self.diagnose_button.set_enabled(False)
-            self.progress.pack(fill="x", pady=(self.page.theme.px(SPACE_M), 0), before=self.actions)
+            for button in (self.connect_button, self.disconnect_button, self.diagnose_button):
+                button.set_enabled(False)
+            self._layout()
             self.progress.start(12)
         else:
             self.progress.stop()
-            self.progress.pack_forget()
+            self._layout()
 
     def show_checks(self, checks: tuple[DiagnosticCheck, ...]) -> None:
         theme, c = self.page.theme, self.page.colors
         self.checks = checks
         for child in self.results.winfo_children():
             child.destroy()
+        self._show_attention()
         if not checks:
             self.results.pack_forget()
             return
@@ -468,12 +593,21 @@ class ConnectionsPage(Page):
                  foreground=c.info).pack(side="left", anchor="n", padx=(0, theme.px(SPACE_M)), pady=theme.px(2))
         column = tk.Frame(callout.body, background=c.info_bg)
         column.pack(side="left", fill="x", expand=True)
-        tk.Label(column, text=t("connections.callout.title"), font=theme.font("body_strong"),
-                 background=c.info_bg, foreground=c.text, anchor="w").pack(fill="x")
-        WrapLabel(column, t("connections.callout.body"), font=theme.font("body"), foreground=c.text_secondary,
-                  background=c.info_bg).pack(fill="x", pady=(theme.px(2), 0))
-        WrapLabel(column, app_closed_note(), font=theme.font("body_strong"), foreground=c.text,
+        # One line and "More ▸" (POLISH §3.1); the paragraphs are inside. It starts open only when no AI tool is
+        # connected (see refresh); whether it is open is never remembered (R5).
+        self.callout_more = Disclosure(column, theme, t("connections.callout.more"))
+        self.callout_more.pack(fill="x")
+        self.callout_title = tk.Label(self.callout_more.head, text=t("connections.callout.title"),
+                                      font=theme.font("body_strong"), background=c.info_bg, foreground=c.text,
+                                      anchor="w", cursor="hand2")
+        self.callout_title.pack(side="left", padx=(0, theme.px(SPACE_S)), before=self.callout_more.toggle)
+        self.callout_title.bind("<ButtonRelease-1>", lambda _e: self.callout_more.flip(), add="+")
+        self.callout_body = WrapLabel(self.callout_more.body, t("connections.callout.body"), font=theme.font("body"),
+                                      foreground=c.text_secondary, background=c.info_bg)
+        self.callout_body.pack(fill="x", pady=(theme.px(2), 0))
+        WrapLabel(self.callout_more.body, app_closed_note(), font=theme.font("body_strong"), foreground=c.text,
                   background=c.info_bg).pack(fill="x", pady=(theme.px(SPACE_S), 0))
+        self._callout_decided = False
 
         self.cards: dict[str, HostCard] = {}
         for host in HOSTS:
@@ -494,10 +628,20 @@ class ConnectionsPage(Page):
             fill="x", pady=(theme.px(SPACE_XS), theme.px(SPACE_S)))
         self.activity_list = tk.Frame(self.activity_card.body, background=c.surface)
         self.activity_list.pack(fill="x")
+        # The latest few lines; the rest on request, for as long as the screen is shown (POLISH §3.1).
+        self.activity_all = False
+        self.activity_more = Button(self.activity_card.body, theme, t("connections.activity.all", count=0),
+                                    variant="link", command=self.toggle_activity)
+
+        # Servers and settings backups: one "Advanced ▸" line at the bottom (POLISH §3.1, §5).
+        self.advanced = Disclosure(body, theme, t("connections.advanced"),
+                                   hint=t("connections.advanced.hint", servers=t("connections.servers.none")))
+        self.advanced.pack(fill="x", pady=(theme.px(SPACE_L), theme.px(SPACE_S)))
+        advanced = self.advanced.body
 
         # v0.4.4 §9.2: the running BIO CE MCP servers of all connections, and ending the long-idle ones on request.
-        servers = Card(body, theme, padding=SPACE_L + 4)
-        servers.pack(fill="x", pady=(theme.px(SPACE_L), 0))
+        servers = Card(advanced, theme, padding=SPACE_L + 4)
+        servers.pack(fill="x", pady=(theme.px(SPACE_S), 0))
         servers_row = tk.Frame(servers.body, background=c.surface)
         servers_row.pack(fill="x")
         servers_column = tk.Frame(servers_row, background=c.surface)
@@ -512,8 +656,8 @@ class ConnectionsPage(Page):
                                       command=self.end_idle_servers)
         self.end_idle_button.pack(side="right", anchor="n", padx=(theme.px(SPACE_L), 0))
 
-        backups = Card(body, theme, padding=SPACE_L + 4)
-        backups.pack(fill="x", pady=(theme.px(SPACE_L), theme.px(SPACE_S)))
+        backups = Card(advanced, theme, padding=SPACE_L + 4)
+        backups.pack(fill="x", pady=(theme.px(SPACE_L), 0))
         row = tk.Frame(backups.body, background=c.surface)
         row.pack(fill="x")
         column = tk.Frame(row, background=c.surface)
@@ -521,8 +665,9 @@ class ConnectionsPage(Page):
         section_label(column, theme, t("connections.backups.title")).pack(fill="x")
         WrapLabel(column, t("connections.backups.note"), font=theme.font("body"),
                   foreground=c.text_secondary).pack(fill="x", pady=(theme.px(SPACE_XS), 0))
-        Button(row, theme, t("connections.backups.open"), icon="folder", command=app.open_connection_backups).pack(
-            side="right", anchor="n", padx=(theme.px(SPACE_L), 0))
+        self.backups_button = Button(row, theme, t("connections.backups.open"), icon="folder",
+                                     command=app.open_connection_backups)
+        self.backups_button.pack(side="right", anchor="n", padx=(theme.px(SPACE_L), 0))
 
     def refresh(self) -> None:
         super().refresh()
@@ -530,6 +675,12 @@ class ConnectionsPage(Page):
         for host, card in self.cards.items():
             if not card.busy:
                 card.apply(statuses.get(host))
+        if not self._callout_decided and statuses:
+            # Opened once, when the screen first knows the tools: with nothing connected the explanation is what
+            # the user needs first. After that only the user opens or closes it.
+            self._callout_decided = True
+            if not any(status is not None and status.connected for status in statuses.values()):
+                self.callout_more.set_open(True)
         self.refresh_activity()
         self.refresh_servers()
 
@@ -570,6 +721,9 @@ class ConnectionsPage(Page):
             card.show_servers([record for record in records if connection and record.connection_id == connection])
         self.servers_total.configure(text=t("connections.servers.total", count=len(records)) if records
                                      else t("connections.servers.none"))
+        self.advanced.set_hint(t("connections.advanced.hint",
+                                 servers=t("connections.advanced.servers", count=len(records)) if records
+                                 else t("connections.servers.none")))
 
     def end_idle_servers(self) -> list[int]:
         """End the BIO CE servers with no request for IDLE_SERVER_SECONDS, after the user confirms. Returns their
@@ -617,7 +771,13 @@ class ConnectionsPage(Page):
             refresh_badges()
         if not activity:
             caption_label(self.activity_list, theme, t("connections.activity.none"), muted=True).pack(fill="x")
-        for entry in activity:
+        if len(activity) > ACTIVITY_LINES:
+            self.activity_more.set_text(t("connections.activity.fewer") if self.activity_all
+                                        else t("connections.activity.all", count=len(activity)))
+            self.activity_more.pack(anchor="w", pady=(theme.px(SPACE_XS), 0))
+        else:
+            self.activity_more.pack_forget()
+        for entry in activity if self.activity_all else activity[:ACTIVITY_LINES]:
             label, kind = ACTIVITY_LABELS.get(entry.outcome, (entry.outcome, "neutral"))
             row = tk.Frame(self.activity_list, background=c.surface)
             row.pack(fill="x", pady=theme.px(2))
@@ -635,6 +795,10 @@ class ConnectionsPage(Page):
                          foreground=c.text_muted).pack(side="left", padx=(theme.px(SPACE_S), 0))
             tk.Label(row, text=relative_time(entry.recorded_at), font=theme.font("caption"), background=c.surface,
                      foreground=c.text_muted).pack(side="right")
+
+    def toggle_activity(self) -> None:
+        self.activity_all = not self.activity_all
+        self.refresh_activity()
 
     def focus_default(self) -> None:
         self.focus_set()
@@ -1118,6 +1282,7 @@ class ConnectionsPage(Page):
         self._finish(host)
         card = self.cards[host]
         card.show_checks(checks)
+        card.open_details()  # the results are in the details: they stay open on them (POLISH §3.1)
         self.update_idletasks()
         self.scroll.scroll_to_widget(card.results)
         failures = [check for check in checks if check.outcome == "fail"]

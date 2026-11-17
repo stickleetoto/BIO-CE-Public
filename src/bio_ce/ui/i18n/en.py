@@ -1610,4 +1610,25 @@ STRINGS: dict[str, object] = {
     #
     #
     # ===== end of U5-S =====
+    # POLISH §3.1 connections (rc2)
+    "connections.details": "Details",
+    "connections.details.hint_connected": "Status · spaces · session hooks · memory skill · disconnect · diagnostics",
+    "connections.details.hint_new": "What it is · status · diagnostics",
+    "connections.attention": "Needs attention: {reasons}",
+    "connections.attention.conflict": "settings conflict",
+    "connections.attention.legacy": "connected the old way",
+    "connections.attention.limited": "Auto memory is limited",
+    "connections.attention.unverified": "Auto memory is not verified",
+    "connections.attention.code_mode": "code mode option is off",
+    "connections.attention.skill_outdated": "memory skill has an update",
+    "connections.attention.skill_modified": "memory skill was edited",
+    "connections.attention.diagnostics": {"one": "{count} diagnostic check failed",
+                                          "other": "{count} diagnostic checks failed"},
+    "connections.line.personal": "Personal: {access}",
+    "connections.callout.more": "More",
+    "connections.activity.all": {"one": "Show all ({count})", "other": "Show all ({count})"},
+    "connections.activity.fewer": "Show fewer",
+    "connections.advanced": "Advanced",
+    "connections.advanced.hint": "{servers} · Settings backups",
+    "connections.advanced.servers": {"one": "{count} server running", "other": "{count} servers running"},
 }
