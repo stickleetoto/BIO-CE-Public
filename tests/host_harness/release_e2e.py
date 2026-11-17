@@ -7,8 +7,8 @@ Steps: install the previous release -> create data with it (memories, revisions,
 items, a grant, settings, a user backup) -> upgrade to the candidate -> prove every byte of user data
 survived -> launch checks -> installed MCP server and hook (Korean text, duplicate proposals) ->
 rollback: data only the candidate understands (a project space, an inbox item; since v0.4.3 also a Personal
-memory, an import batch, and a sorting suggestion), reinstall the previous release over it, prove it still serves
-General without Personal and changes nothing, upgrade again and find the items ->
+memory, an import batch, and a sorting suggestion; since v0.4.4 also the new settings rows), reinstall the previous
+release over it, prove it still serves General without Personal and changes nothing, upgrade again and find the items ->
 Claude Code and Codex registration plus hook install/remove through the real CLIs in isolated profiles
 -> revoke -> backup/restore and recovery from the pre-upgrade backup -> uninstall keeping data ->
 reinstall into a folder with Korean letters, spaces, and '#' -> uninstall -> full cleanup.
@@ -436,6 +436,30 @@ def main(argv: list[str]) -> int:
                  and personal_found["titles"][:1] == ["개인 혈액형"] and batch_after["status"] == "complete"
                  and waiting >= 1 and everything()["memories"] == v043_only["memories"],
                  personal=personal_found, batch=batch_after["status"], suggestions=waiting)
+
+        # 3d. v0.4.4 settings (app language, automatic backups kept, memory-screen view): new app_settings rows only,
+        # no schema change (design §0-2), so the previous release must start over them and keep them ----------
+        control = ControlStore(control_database_for(DATABASE))
+        try:
+            control.set_ui_language("ko")
+            control.set_auto_backup_keep(7)
+            view = control.set_hub_view({"source": "imported", "sort": "title"})
+        finally:
+            control.close()
+        v044_settings = everything()
+        ok = base.install(run, previous, "rollback-0.4.4-settings")
+        launched = base.launch_and_capture(run, gui_env, "gui-after-rollback-0.4.4-settings")
+        run.step("rollback-v044-previous-starts-over-new-settings", ok and launched["window"] and launched["exit"] == 0,
+                 **launched)
+        run.step("rollback-v044-keeps-every-row", everything() == v044_settings, integrity=base.integrity())
+        ok = base.install(run, candidate, "re-upgrade-0.4.4-settings")
+        control = ControlStore(control_database_for(DATABASE))
+        try:
+            kept = (control.ui_language(), control.auto_backup_keep(), control.hub_view())
+        finally:
+            control.close()
+        run.step("re-upgrade-finds-v044-settings", ok and kept == ("ko", 7, view)
+                 and everything()["memories"] == v044_settings["memories"], settings=list(kept[:2]))
 
         # 4. host registration and hooks through the real CLIs (isolated profiles) ---------------
         app_exe, _mcp = installed()

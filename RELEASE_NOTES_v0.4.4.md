@@ -46,8 +46,10 @@ SmartScreen, Microsoft Defender, or any other protection.
 - **Forget completely.** A memory you delete stays in **Deleted memories** (hidden from searches and your AI tools).
   **Forget completely** erases it, every earlier version, the inbox items kept for it, and the review items about it
   from BIO CE's files, as far as the app can. There is no undo; backups and exports made earlier still contain it.
-- **Korean.** The whole app is in Korean or English: it follows the language you chose in Setup, then the Windows
-  language. Text uses Malgun Gothic in both languages, so Korean memories show evenly on an English Windows too.
+- **Korean.** The whole app is in Korean or English. Choose it in Settings → Language (Korean, English, or the same as
+  Windows); it applies when the app restarts, and **Restart now** does that for you. Until you choose, it follows the
+  language you chose in Setup, then the Windows language. Text uses Malgun Gothic in both languages, so Korean
+  memories show evenly on an English Windows too.
   What AI tools read from BIO CE stays in English.
 - **Conveniences:** a search box above every page (Ctrl+F or /), filters and sorting on the memory screen (where a
   memory came from, which AI tool, when it changed, sensitive marks; remembered), quick add (type one line and press

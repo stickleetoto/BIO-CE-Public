@@ -13,7 +13,7 @@ on:
       previous_release:
         description: "Published release to upgrade from"
         required: true
-        default: "v0.4.2-rc1"
+        default: "v0.4.3-rc1"
 
 permissions:
   contents: read
@@ -136,6 +136,7 @@ jobs:
             'v0.4.0-rc1' = 'fd5ca6e21d5fb44d1aee8505a2c7f92e2d332ba39c59015c095e878b3b044e09'
             'v0.4.1-rc1' = 'a3cccbfc47634f8de1e62094515fc278fa6532729d4c235aa9368b7bb34681b3'
             'v0.4.2-rc1' = '2e641efa677ed59adb1b5b9efa89a68ce05e63372157b176a314a162bb6406a2'
+            'v0.4.3-rc1' = '2db0603da1505971549c1eb49157ecceabb3c38b29e1e883cf0cf7164c52e33c'
           }
           if (-not $pinned.ContainsKey($env:PREVIOUS_RELEASE)) { throw "no pinned SHA-256 for release: $env:PREVIOUS_RELEASE" }
           $previous = Join-Path $env:RUNNER_TEMP 'previous-release'
