@@ -27,7 +27,7 @@ from bio_ce.storage.sqlite_store import SQLiteMemoryStore
 from bio_ce.ui import i18n
 from bio_ce.ui.app import MINIMUM_SIZE
 from bio_ce.ui.dialogs import ExportDialog
-from bio_ce.ui.hub.common import READING_WIDTH, columns_for, pushes
+from bio_ce.ui.hub.common import READING_WIDTH, columns_for
 from bio_ce.ui.hub.data import INBOX as INBOX_TAB, MEMORIES, RETRACTED, REVIEWS, SUGGESTIONS
 from bio_ce.ui.theme import CONTENT_MAX_WIDTH, RECENT_TWO_COLUMNS_FROM
 from bio_ce.ui.widgets import ClampLabel
@@ -302,7 +302,7 @@ class BigScreenLayoutAuditTests(LayoutAuditTests):
         self.settle()
         self.assertTrue(self.hub.drawer_open)
         self.assertLessEqual(self.hub.drawer.column.winfo_width(), self.app.theme.px(READING_WIDTH) + 2)
-        self.assertEqual(self.hub.drawer_overlaps(), not pushes(self.root.winfo_width(), self.app.theme))
+        self.assertFalse(self.hub.drawer_overlaps())  # beside the cards at every width (POLISH §1)
         self.hub.close_drawer(force=True)
         self.settle()
         self.assertEqual(self.hub.content.winfo_width(), before)

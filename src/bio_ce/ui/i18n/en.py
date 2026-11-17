@@ -115,6 +115,7 @@ STRINGS: dict[str, object] = {
     "hub.empty.open_connections": "Open Connections",
     # Drawer
     "hub.drawer.close": "Close (Esc)",
+    "hub.drawer.back": "← List",
     "hub.drawer.edit_tip": "Edit here (E or Ctrl+E); you can also click the title",
     "hub.drawer.move": "Move ▾",
     "hub.drawer.move_tip": "Move to another space (M); a backup is made first",

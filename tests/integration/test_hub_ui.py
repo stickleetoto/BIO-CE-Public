@@ -3,8 +3,8 @@
 
 """v0.4.4 U1+U2: the unified memory screen on a real Tk window with synthetic data.
 
-Cards and their hover / focus buttons, the drawer (opens on a click, closes with Esc, ×, or the same card; pushes the
-cards aside from 1600 px, lies over them below), the window size table (§3.3), keys (E, M, Delete, Esc, Ctrl+Z),
+Cards and their hover / focus buttons, the drawer (opens on a click, closes with Esc, ×, or the same card; beside the
+cards at every width, POLISH §1), the window size table (§3.3), keys (E, M, Delete, Esc, Ctrl+Z),
 drag and drop onto space chips (only valid chips light up; Undo moves back), retracted memories and Forget
 completely (no Undo), the Connections "!", automatic backups in Settings, and the shortcut table.
 """
@@ -43,20 +43,30 @@ class FakeTheme:
 class WindowTableTests(unittest.TestCase):
     """§3.3 as numbers, at 100% and 150% scaling."""
 
-    def test_columns_and_drawer_width_follow_the_window_width(self):
+    def test_columns_follow_the_window_width(self):
         for scale in (1.0, 1.5):
             theme = FakeTheme(scale)
-            rows = ((1000, 1, False), (1100, 2, False), (1599, 2, False), (1600, 3, True), (2199, 3, True),
-                    (2200, 4, True), (3000, 4, True))
-            for width, columns, push in rows:
+            rows = ((1000, 1), (1100, 2), (1599, 2), (1600, 3), (2199, 3), (2200, 4), (3000, 4))
+            for width, columns in rows:
                 with self.subTest(scale=scale, width=width):
-                    window = theme.px(width)
-                    self.assertEqual(common.columns_for(window, theme), columns)
-                    self.assertEqual(common.pushes(window, theme), push)
-            self.assertEqual(common.drawer_width(theme.px(1000), theme), max(theme.px(420), int(theme.px(1000) * .6)))
-            self.assertEqual(common.drawer_width(theme.px(1200), theme), theme.px(520))
-            self.assertEqual(common.drawer_width(theme.px(1700), theme), theme.px(600))
-            self.assertEqual(common.drawer_width(theme.px(2400), theme), theme.px(680))
+                    self.assertEqual(common.columns_for(theme.px(width), theme), columns)
+
+    def test_the_drawer_shares_the_body_with_a_rail_at_every_width(self):
+        """POLISH §1.2's table at 100%: window, body B → drawer D, list L = B − D − 12, cards with the drawer open."""
+        theme = FakeTheme(1.0)
+        rows = ((860, 735, 423, 1), (1000, 703, 391, 1), (1100, 803, 491, 1), (1200, 903, 560, 1),
+                (1400, 1103, 560, 1), (1600, 1303, 600, 2), (1920, 1623, 600, 3), (2400, 1960, 680, 4))
+        for window, body, drawer, columns in rows:
+            with self.subTest(window=window):
+                self.assertEqual(common.drawer_width(body, window, theme), drawer)
+                rail = body - drawer - common.GAP
+                self.assertGreaterEqual(rail, common.RAIL)
+                self.assertEqual(min(common.columns_for(window, theme), common.fitting_columns(rail, theme)), columns)
+        # Below a rail plus the smallest drawer (692) the drawer takes the whole body.
+        self.assertIsNone(common.drawer_width(691, 1000, theme))
+        self.assertEqual(common.drawer_width(692, 1000, theme), common.DRAWER_MIN)
+        theme = FakeTheme(1.5)
+        self.assertEqual(common.drawer_width(theme.px(903), theme.px(1200), theme), theme.px(560))
 
 
 class HubUiTests(unittest.TestCase):
@@ -183,27 +193,63 @@ class HubUiTests(unittest.TestCase):
         self.assertFalse(self.hub.drawer_open)
         self.assertFalse(card.opened)
 
-    def test_a_narrow_window_overlaps_the_cards_and_a_wide_one_pushes_them(self):
+    def test_the_drawer_never_covers_the_cards_at_any_window_width(self):
+        """POLISH §1 (owner: the drawer covered the cards in rc1): beside the list at every width, the list keeps a
+        rail of 300, and closing gives the list its whole width back."""
+        hub, theme = self.hub, self.app.theme
+        for width in (860, 1000, 1200, 1400, 1700):
+            with self.subTest(width=width):
+                self.root.wm_maxsize(10**4, 10**4)
+                self.root.geometry(f"{theme.px(width)}x{theme.px(700)}")
+                self.settle()
+                before = hub.content.winfo_width()
+                hub.card_clicked(self.card(self.first.memory_id))
+                self.settle()
+                self.assertTrue(hub.drawer_open)
+                self.assertFalse(hub.full_swap)
+                self.assertFalse(hub.drawer_overlaps())
+                self.assertGreaterEqual(hub.content.winfo_width(), theme.px(common.RAIL) - 2)
+                self.assertGreaterEqual(hub.drawer.winfo_width(), theme.px(common.DRAWER_MIN) - 2)
+                hub.close_drawer()
+                self.settle()
+                self.assertEqual(hub.drawer.winfo_manager(), "")
+                self.assertEqual(hub.content.winfo_width(), before, "closed: the cards use the whole width again")
+
+    def test_another_card_changes_only_the_drawer_not_the_columns(self):
         hub = self.hub
-        self.root.geometry(f"{self.app.theme.px(1000)}x{self.app.theme.px(700)}")
-        self.settle()
-        before = hub.content.winfo_width()
         hub.card_clicked(self.card(self.first.memory_id))
         self.settle()
+        columns = hub.grid.columns
+        with patch.object(hub.grid, "layout", wraps=hub.grid.layout) as layout:
+            hub.card_clicked(self.card(self.second.memory_id))
+            self.settle()
+        self.assertEqual(hub.grid.columns, columns)
+        self.assertTrue(all(call.args[0] == columns for call in layout.call_args_list))
+
+    def test_a_body_too_narrow_for_a_rail_shows_the_drawer_alone_with_back_to_the_list(self):
+        hub = self.hub
+        with patch.object(hub.body, "winfo_width", return_value=self.app.theme.px(600)):
+            hub.card_clicked(self.card(self.first.memory_id))
+            self.settle()
+            self.assertTrue(hub.full_swap)
+            self.assertEqual(hub.content.winfo_manager(), "")  # the list is hidden, never half covered
+            self.assertEqual(hub.drawer.back_button.winfo_manager(), "pack")
+            hub.drawer.back_button.invoke()
+            self.settle()
+        self.assertFalse(hub.drawer_open)
+        self.assertFalse(hub.full_swap)
+        self.assertEqual(hub.content.winfo_manager(), "pack")
+        self.assertEqual(hub.drawer.back_button.winfo_manager(), "")
+
+    def test_positive_control_a_drawer_placed_over_the_cards_is_caught(self):
+        hub = self.hub
+        hub.card_clicked(self.card(self.first.memory_id))
+        self.settle()
+        hub.drawer.pack_forget()
+        hub.drawer.place(in_=hub.body, relx=1.0, rely=0, anchor="ne", relheight=1.0, width=self.app.theme.px(420))
+        hub.content.pack(side="left", fill="both", expand=True)
+        self.settle()
         self.assertTrue(hub.drawer_overlaps())
-        self.assertEqual(hub.content.winfo_width(), before, "overlapping: the cards keep their width")
-        self.assertEqual(hub.grid.columns, 1)
-        with patch.object(hub, "window_width", return_value=self.app.theme.px(1700)):
-            hub.relayout()
-            self.settle()
-            self.assertEqual(hub.drawer.winfo_manager(), "pack", "1600 px and wider: pushed aside")
-            self.assertFalse(hub.drawer_overlaps())
-        with patch.object(hub, "window_width", return_value=self.app.theme.px(1000)):
-            hub.relayout()
-            hub.close_drawer()
-            self.settle()
-        self.assertEqual(hub.drawer.winfo_manager(), "")
-        self.assertEqual(hub.content.winfo_width(), before, "closed: the cards use the whole width again")
 
     def test_card_columns_follow_the_window(self):
         with patch.object(self.hub, "window_width", return_value=self.app.theme.px(1200)):

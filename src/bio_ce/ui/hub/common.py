@@ -13,12 +13,21 @@ import tkinter as tk
 from bio_ce.ui.format import format_timestamp, parse_timestamp
 from bio_ce.ui.i18n import t
 
-# §3.3: window width at 100% scale → card columns and drawer width.
+# §3.3: window width at 100% scale → card columns.
 COLUMN_STEPS = ((2200, 4), (1600, 3), (1100, 2))
-DRAWER_WIDTHS = ((2200, 680), (1600, 600), (1100, 520))
-PUSH_FROM = 1600  # owner decision Q2: from this width the drawer pushes the cards aside; narrower, it overlaps them
 MIN_CARD = 260  # a card is never narrower than this (100% scale); fewer columns instead
+CARD_GAP = 12
 READING_WIDTH = 680  # about 72 characters (§3.3)
+
+# The drawer always pushes the cards aside, at every window width (POLISH §1, owner approval 2026-11-17: it replaces
+# decision Q2, "overlap below 1600", because the drawer covered the cards in the default 1200 window). It shares the
+# memory screen's body with the list: the list keeps at least a one-card rail, the drawer gets the rest up to a maximum
+# that grows with the window. A body too narrow for both swaps the list for the drawer entirely.
+RAIL = 300  # the list never gets narrower than this while the drawer is open
+GAP = 12  # between the list and the drawer
+DRAWER_MIN = 380
+DRAWER_MAX_STEPS = ((2200, 680), (1600, 600))
+DRAWER_MAX = 560  # below 1600
 
 
 def columns_for(window_width: int, theme) -> int:
@@ -28,15 +37,25 @@ def columns_for(window_width: int, theme) -> int:
     return 1
 
 
-def drawer_width(window_width: int, theme) -> int:
-    for limit, width in DRAWER_WIDTHS:
+def drawer_max(window_width: int, theme) -> int:
+    for limit, width in DRAWER_MAX_STEPS:
         if window_width >= theme.px(limit):
             return theme.px(width)
-    return max(theme.px(420), int(window_width * 0.6))
+    return theme.px(DRAWER_MAX)
 
 
-def pushes(window_width: int, theme) -> bool:
-    return window_width >= theme.px(PUSH_FROM)
+def drawer_width(body_width: int, window_width: int, theme) -> int | None:
+    """The drawer's width beside the list in a body ``body_width`` wide, or None when the body is too narrow for a
+    rail and the smallest drawer (the drawer then takes the whole body)."""
+    if body_width < theme.px(DRAWER_MIN) + theme.px(GAP) + theme.px(RAIL):
+        return None
+    return min(body_width - theme.px(RAIL) - theme.px(GAP), drawer_max(window_width, theme))
+
+
+def fitting_columns(width: int, theme) -> int:
+    """How many cards of at least MIN_CARD fit side by side in ``width`` (at least one)."""
+    gap = theme.px(CARD_GAP)
+    return max(1, (width + gap) // (theme.px(MIN_CARD) + gap))
 
 
 @contextmanager
@@ -146,5 +165,6 @@ class AutoText(tk.Text):
             self.configure(height=height)
 
 
-__all__ = ["AutoText", "COLUMN_STEPS", "DRAWER_WIDTHS", "MIN_CARD", "PUSH_FROM", "READING_WIDTH", "columns_for",
-           "control_of", "drawer_width", "in_space", "menu_style", "pushes", "space_label", "when"]
+__all__ = ["AutoText", "CARD_GAP", "COLUMN_STEPS", "DRAWER_MAX", "DRAWER_MIN", "GAP", "MIN_CARD", "RAIL",
+           "READING_WIDTH", "columns_for", "control_of", "drawer_max", "drawer_width", "fitting_columns", "in_space",
+           "menu_style", "space_label", "when"]

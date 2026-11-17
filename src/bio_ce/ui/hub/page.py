@@ -19,13 +19,13 @@ from bio_ce.ui.format import format_timestamp, preview
 from bio_ce.ui.hub.actions import HubActions
 from bio_ce.ui.hub.cards import CardGrid
 from bio_ce.ui.hub.common import (
-    MIN_CARD,
+    GAP,
     columns_for,
     control_of,
     drawer_width,
+    fitting_columns,
     in_space,
     menu_style,
-    pushes,
     space_label,
 )
 from bio_ce.ui.hub.data import (
@@ -79,6 +79,8 @@ class HubPage(Page):
         self._search_after: str | None = None
         self._spaces: list = []
         self._drawer_shown = False
+        self.full_swap = False  # the drawer has the whole body (too narrow for a rail beside it)
+        self._rail = False  # the list is a narrow rail beside the drawer: quick add and filters step aside
 
         # Toolbar: search, Add, Import…, Export… -------------------------------------------------------------
         toolbar = tk.Frame(self, background=c.bg)
@@ -373,33 +375,82 @@ class HubPage(Page):
             return
         if self._drawer_shown:
             self._place_drawer(window)
-        area = self.scroll.canvas.winfo_width() if self.scroll.winfo_ismapped() else self.content.winfo_width()
+        if self.full_swap:
+            return
+        if self._drawer_shown:
+            # The list's width as §1.2 computes it, not as measured: measured, it is still the old width until Tk
+            # has laid out the drawer, and the columns would change twice (the flicker §1.4 avoids).
+            area = self.body.winfo_width() - int(self.drawer.cget("width")) - self.theme.px(GAP)
+        else:
+            area = self.scroll.canvas.winfo_width() if self.scroll.winfo_ismapped() else self.content.winfo_width()
         wanted = columns_for(window, self.theme)
         if area > 1:
-            wanted = max(1, min(wanted, area // self.theme.px(MIN_CARD)))
+            wanted = min(wanted, fitting_columns(area, self.theme))
         self.grid.layout(wanted)
 
     def _place_drawer(self, window: int) -> None:
-        width = drawer_width(window, self.theme)
-        if pushes(window, self.theme):
-            self.drawer.place_forget()
-            self.drawer.configure(width=width)
-            self.drawer.pack_propagate(False)
-            if self.drawer.winfo_manager() != "pack":
-                self.drawer.pack(side="right", fill="y", padx=(self.theme.px(SPACE_M), 0), before=self.content)
-        else:
+        """Beside the list at every width (POLISH §1): the list keeps a rail, the drawer takes the rest up to its
+        maximum; a body too narrow for both shows the drawer alone with "← List" (no size shows the drawer over the
+        cards). The list is laid out again only when this changes something (§1.4: no flicker between cards)."""
+        body = self.body.winfo_width()
+        if body <= 1:
+            body = self.window_width()
+        width = drawer_width(body, window, self.theme)
+        swap = width is None
+        if swap != self.full_swap:
+            self.full_swap = swap
+            if swap:
+                self.content.pack_forget()
+            elif not self.content.winfo_manager():
+                self.content.pack(side="left", fill="both", expand=True)
+            self.drawer.show_back(swap)
+        self.drawer.pack_propagate(False)
+        if swap:
             if self.drawer.winfo_manager() == "pack":
-                self.drawer.pack_forget()
-            width = min(width, max(self.theme.px(320), self.body.winfo_width()))
-            self.drawer.place(in_=self.body, relx=1.0, rely=0, anchor="ne", relheight=1.0, width=width)
-            self.drawer.lift()
+                self.drawer.pack_configure(fill="both", expand=True, padx=0)
+            else:
+                self.drawer.pack(side="right", fill="both", expand=True)
+        else:
+            if int(self.drawer.cget("width")) != width:
+                self.drawer.configure(width=width)
+            if self.drawer.winfo_manager() != "pack":
+                self.drawer.pack(side="right", fill="y", padx=(self.theme.px(GAP), 0), before=self.content)
+            else:
+                self.drawer.pack_configure(fill="y", expand=False, padx=(self.theme.px(GAP), 0))
+        self._show_rail_tools()
+
+    def _show_rail_tools(self) -> None:
+        """While the drawer is open and the list is narrower than 520, quick add and the filters step aside; their
+        values stay and they come back when the drawer closes (§1.5). The chips and tabs stay: dragging onto a chip
+        still works."""
+        rail = self._drawer_shown and not self.full_swap and \
+            self.body.winfo_width() - int(self.drawer.cget("width")) - self.theme.px(GAP) < self.theme.px(520)
+        if rail != self._rail:
+            self._rail = rail
+            if rail:
+                for part in (self.quick_add, self.filter_bar):
+                    part.pack_forget()
+                self._shrink_empty_tools()
+            else:
+                self._show_tools()
 
     @property
     def drawer_open(self) -> bool:
         return self._drawer_shown
 
     def drawer_overlaps(self) -> bool:
-        return self._drawer_shown and self.drawer.winfo_manager() == "place"
+        """True when the open drawer covers any part of the cards' area on screen (it never should, §1)."""
+        if not self._drawer_shown or self.full_swap:
+            return False
+        try:
+            self.update_idletasks()
+            if not (self.drawer.winfo_ismapped() and self.content.winfo_ismapped()):
+                return False
+            left, right = self.content.winfo_rootx(), self.content.winfo_rootx() + self.content.winfo_width()
+            d_left, d_right = self.drawer.winfo_rootx(), self.drawer.winfo_rootx() + self.drawer.winfo_width()
+        except tk.TclError:
+            return False
+        return d_left < right and left < d_right
 
     def _show_drawer(self) -> None:
         self._drawer_shown = True
@@ -413,8 +464,12 @@ class HubPage(Page):
             return False
         self._drawer_shown = False
         self.drawer.pack_forget()
-        self.drawer.place_forget()
         self.drawer.mode = None
+        if self.full_swap:
+            self.full_swap = False
+            self.drawer.show_back(False)
+            self.content.pack(side="left", fill="both", expand=True)
+        self._show_rail_tools()
         old, self.open_key = self.open_key, None
         card = self.grid.cards.get(old) if old else None
         if card is not None:
@@ -465,11 +520,17 @@ class HubPage(Page):
         theme = self.theme
         for part in (self.quick_add, self.filter_bar, self.selection_bar):
             part.pack_forget()
-        if self.state == MEMORIES and self.app.allowed("create").enabled:
+        if self.state == MEMORIES and self.app.allowed("create").enabled and not self._rail:
             self.quick_add.pack(fill="x", pady=(0, theme.px(SPACE_S)))
-        if self.state in filters.FILTERED_STATES:
+        if self.state in filters.FILTERED_STATES and not self._rail:
             self.filter_bar.pack(fill="x", pady=(0, theme.px(SPACE_S)))
         self._update_selection_bar()
+        self._shrink_empty_tools()
+
+    def _shrink_empty_tools(self) -> None:
+        # Tk keeps a frame at its last size when its last child is removed: an empty band stayed above the cards.
+        if not self.tools.pack_slaves():
+            self.tools.configure(height=1)
 
     def _update_selection_bar(self) -> None:
         chosen = [item for item in (self.item_of(key) for key in self.selected_keys) if item is not None]
@@ -478,6 +539,7 @@ class HubPage(Page):
                 self.selection_bar.pack(fill="x", pady=(0, self.theme.px(SPACE_S)))
         elif self.selection_bar.winfo_manager():
             self.selection_bar.pack_forget()
+            self._shrink_empty_tools()
 
     def clear_selection(self) -> None:
         self.selected_keys = set()

@@ -114,6 +114,8 @@ class Drawer(tk.Frame):
         top.pack(fill="x", padx=theme.px(SPACE_L), pady=(theme.px(SPACE_M), theme.px(SPACE_S)))
         self.close_button = IconButton(top, theme, "close", t("hub.drawer.close"), command=hub.close_drawer)
         self.close_button.pack(side="right", anchor="n")
+        # Shown only when the drawer has the whole body (too narrow for the list beside it, POLISH §1.3).
+        self.back_button = Button(top, theme, t("hub.drawer.back"), variant="link", command=hub.close_drawer)
         self.action_row = FlowFrame(top, gap=theme.px(SPACE_S), background=c.surface)
         self.action_row.pack(side="left", fill="x", expand=True)
         self.edit_button = self.action_row.add(Button(self.action_row, theme, t("hub.card.edit"), icon="edit",
@@ -207,6 +209,12 @@ class Drawer(tk.Frame):
         self.editor = DrawerEditor(self.column, hub)
 
     # Layout -----------------------------------------------------------------------------------------------------
+
+    def show_back(self, show: bool) -> None:
+        if show and not self.back_button.winfo_manager():
+            self.back_button.pack(side="left", anchor="n", padx=(0, self.theme.px(SPACE_S)), before=self.action_row)
+        elif not show and self.back_button.winfo_manager():
+            self.back_button.pack_forget()
 
     def _fit_column(self, event) -> None:
         pad = self.theme.px(SPACE_XL)

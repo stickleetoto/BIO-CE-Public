@@ -126,7 +126,9 @@ class HubCard(tk.Frame):
 
     def _paint(self) -> None:
         c = self.theme.colors
-        fill = c.selection if self.selected else c.surface
+        # The opened card keeps the selection background too, so the eye follows it when the list makes room for
+        # the drawer (POLISH §1.4).
+        fill = c.selection if (self.selected or self.opened) else c.surface
         border = c.accent if (self.opened or self.selected) else c.border
         self.configure(highlightbackground=border, background=fill)
         for part in (self.body, self.title_label, self.text_label, self.meta_label, self.bar):
