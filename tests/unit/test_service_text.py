@@ -25,6 +25,8 @@ _PROGRAMMING = "a programming check: the app always passes a valid value here, s
 # Single messages that never reach a screen, with the reason.
 NOT_SHOWN: dict[str, str] = {
     "interrupted for the test": "a test hook in the importer",
+    "Community Engine": "an engine's product name: not translated (glossary §3)",
+    "BIO Core": "an engine's product name: not translated (glossary §3)",
     # connections.py, control_store.py, inbox.py, community.py
     "host must be codex or claude": _PROGRAMMING + " (the host comes from the app's own host list)",
     "mode must be one of {v1}": _PROGRAMMING + " (the mode comes from the app's radio buttons)",

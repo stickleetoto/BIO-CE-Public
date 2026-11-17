@@ -461,7 +461,7 @@ class BIOCEDesktop:
         """True when the active engine allows ``action``; otherwise tell the user why not."""
         state = self.allowed(action)
         if not state.enabled:
-            self.notify("warning", state.note or t("app.not_available"), title=t("app.not_available_title"))
+            self.notify("warning", say(state.note) or t("app.not_available"), title=t("app.not_available_title"))
         return state.enabled
 
     def gate(self, button, action: str) -> None:
@@ -469,7 +469,7 @@ class BIOCEDesktop:
         state = self.allowed(action)
         if not state.enabled:
             button.set_enabled(False)
-            Tooltip(button, self.theme, state.note)
+            Tooltip(button, self.theme, say(state.note))
 
     def memory_engine(self) -> EngineBackend:
         """The engine for reads and writes now, or :class:`EngineUnavailable`. Never another engine."""

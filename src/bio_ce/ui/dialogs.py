@@ -271,7 +271,10 @@ class ShortcutsDialog(Dialog):
         c = theme.colors
         tk.Label(self.content, text=t("shortcut.dialog_title"), font=theme.font("title"), background=c.surface,
                  foreground=c.text, anchor="w").pack(fill="x", pady=(0, theme.px(SPACE_M)))
-        grid = tk.Frame(self.content, background=c.surface)
+        # The list scrolls: Korean lines wrap taller and ran past the fixed height (self-check 2026-11-17).
+        self.scroll = ScrollFrame(self.content, theme)
+        self.scroll.pack(fill="both", expand=True)
+        grid = tk.Frame(self.scroll.body, background=c.surface)
         grid.pack(fill="both", expand=True)
         self.rows = []
         for index, shortcut in enumerate(SHORTCUTS):

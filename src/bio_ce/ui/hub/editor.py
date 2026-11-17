@@ -232,9 +232,9 @@ class DrawerEditor(tk.Frame):
                 self._baseline = self.values()
                 self.load(None, space)
                 self.hub.close_drawer(force=True)
-                self.app.notify("info", message.message, title=message.title)
+                self.app.notify("info", say(message.message), title=say(message.title))
             else:
-                self.app.notify("warning", message.message, title=message.title)
+                self.app.notify("warning", say(message.message), title=say(message.title))
             return None
         self._baseline = self.values()
         self.editing = None

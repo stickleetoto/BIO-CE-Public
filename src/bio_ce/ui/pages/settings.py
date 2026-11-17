@@ -516,7 +516,7 @@ class SettingsPage(Page):
         self.engine_banner_message.pack(fill="x", pady=(theme.px(SPACE_XS), 0))
         self.engine_list = tk.Frame(card, background=c.surface)
         self.engine_list.pack(fill="x", pady=(theme.px(SPACE_M), 0))
-        self.engine_note = WrapLabel(card, SEPARATE_DATABASES_NOTE, font=theme.font("caption"),
+        self.engine_note = WrapLabel(card, say(SEPARATE_DATABASES_NOTE), font=theme.font("caption"),
                                      foreground=c.text_muted)
         self.engine_note.pack(fill="x", pady=(theme.px(SPACE_S), 0))
         row = tk.Frame(card, background=c.surface)
@@ -530,11 +530,11 @@ class SettingsPage(Page):
     def render_engines(self) -> None:
         theme, c = self.theme, self.colors
         shown = self.app.engine_banner()
-        self.engine_banner_title.configure(text=shown.title,
+        self.engine_banner_title.configure(text=say(shown.title),
                                            foreground=c.text if shown.connected else c.warning)
         # The separate-databases notice is shown once, below the list.
         message = "" if shown.message == SEPARATE_DATABASES_NOTE else shown.message
-        self.engine_banner_message.configure(text=message)
+        self.engine_banner_message.configure(text=say(message))
         if message and not self.engine_banner_message.winfo_manager():
             self.engine_banner_message.pack(fill="x", pady=(self.theme.px(SPACE_XS), 0), before=self.engine_list)
         elif not message:
@@ -552,7 +552,7 @@ class SettingsPage(Page):
             top.pack(fill="x")
             tk.Label(top, text=entry.name, font=theme.font("body_strong"), background=c.surface_alt,
                      foreground=c.text, anchor="w").pack(side="left")
-            pill = Pill(top, theme, entry.state_text, _PILL_KIND.get(entry.tone, "neutral"))
+            pill = Pill(top, theme, say(entry.state_text), _PILL_KIND.get(entry.tone, "neutral"))
             pill.pack(side="left", padx=(theme.px(SPACE_S), 0))
             if entry.active:
                 Pill(top, theme, t("settings.engine.in_use"), "info").pack(side="left", padx=(theme.px(SPACE_XS), 0))
@@ -564,14 +564,14 @@ class SettingsPage(Page):
                 button.set_enabled(False)
                 Tooltip(button, theme, t("settings.engine.switching_disabled"))
             if entry.detail:
-                WrapLabel(inner, entry.detail, font=theme.font("caption"), foreground=c.text_muted,
+                WrapLabel(inner, say(entry.detail), font=theme.font("caption"), foreground=c.text_muted,
                           background=c.surface_alt).pack(fill="x", pady=(theme.px(SPACE_XS), 0))
             self.engine_rows[entry.engine_id] = EngineRowWidgets(entry.engine_id, entry.active, pill, button, frame)
 
     def check_engines(self) -> None:
         self.app.refresh_engine_status()
         self.render_engines()
-        self.app.notify("info", self.app.engine_banner().title, title=t("settings.engine.checked"))
+        self.app.notify("info", say(self.app.engine_banner().title), title=t("settings.engine.checked"))
 
     def _card(self, body: tk.Misc, title: str, description: str | None) -> tk.Frame:
         theme, c = self.theme, self.colors

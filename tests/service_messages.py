@@ -38,9 +38,50 @@ def _looks_like_a_sentence(text: str) -> bool:
     return " " in letters.strip() and any(ch.isalpha() for ch in letters)
 
 
+def _docstring_ids(tree: ast.AST) -> set[int]:
+    ids = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and node.body:
+            first = node.body[0]
+            if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant):
+                ids.add(id(first.value))
+    return ids
+
+
+def presentation_texts() -> list[tuple[str, int, str]]:
+    """What the screens show about engines (Settings' engine card, action notes): every text in
+    engine/presentation.py, and the Community engine's status message and database label (self-check 2026-11-17:
+    the engine card stayed English in the Korean app)."""
+    found = []
+    path = SRC / "engine" / "presentation.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    skip = _docstring_ids(tree)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.JoinedStr):  # an f-string counts whole, not its literal pieces
+            skip |= {id(part) for part in node.values}
+        if isinstance(node, ast.Assign) and any(getattr(target, "id", "") == "__all__" for target in node.targets):
+            skip |= {id(part) for part in ast.walk(node.value)}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Constant, ast.JoinedStr)) and id(node) not in skip:
+            value = _text(node)
+            if value and value[:1].isupper() and any(ch.isalpha() for ch in value):
+                found.append((path.name, node.lineno, value))
+    path = SRC / "engine" / "community.py"
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "EngineStatus" and len(node.args) > 2:
+            value = _text(node.args[2])
+            if value and _looks_like_a_sentence(value):
+                found.append((path.name, node.lineno, value))
+        if isinstance(node, ast.keyword) and node.arg == "database_label":
+            value = _text(node.value)
+            if value:
+                found.append((path.name, node.value.lineno, value))
+    return found
+
+
 def service_messages() -> list[tuple[str, int, str]]:
     """(file, line, English text with {vN} for the parts filled in at run time)."""
-    found = []
+    found = presentation_texts()
     for path in sorted(SRC.rglob("*.py")):
         if "ui" in path.relative_to(SRC).parts or path.name in HOST_ONLY:
             continue

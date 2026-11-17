@@ -26,6 +26,14 @@ _DAYS = {"7d": 7, "30d": 30, "1y": 365}
 _AI_SOURCES = ("ai-auto-memory", "ai-suggested-user-approved", "ai-host-auto-memory")
 
 
+def text_columns(text: str) -> int:
+    """How many average-character columns ``text`` takes: Hangul and other wide (CJK) characters take two (a ttk
+    box's width counts average Latin characters, so a Korean choice was cut off)."""
+    import unicodedata
+
+    return sum(2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1 for ch in text)
+
+
 def source_group(source_type: str) -> str:
     if source_type == "user-imported":
         return "imported"
@@ -109,14 +117,18 @@ class FilterBar(FlowFrame):
         self.values: dict[str, tk.StringVar] = {}
         self.boxes: dict[str, ttk.Combobox] = {}
         for key in ("source", "host", "period", "sensitive", "sort"):
-            self.add(tk.Label(self, text=t(f"hub.filter.{key}"), font=theme.font("caption_strong"),
-                              background=theme.colors.bg, foreground=theme.colors.text_muted))
+            # A label and its box wrap together (self-check 2026-11-17: "Sort" stayed on one line, its box went to
+            # the next), and the box is wide enough for its longest choice in either language.
+            pair = tk.Frame(self, background=theme.colors.bg)
+            tk.Label(pair, text=t(f"hub.filter.{key}"), font=theme.font("caption_strong"), background=theme.colors.bg,
+                     foreground=theme.colors.text_muted).pack(side="left", padx=(0, theme.px(4)))
             labels = [t(f"hub.filter.{key}.{value}") for value in CHOICES[key]]
             variable = tk.StringVar(master=self, value=t(f"hub.filter.{key}.{self.view[key]}"))
-            box = ttk.Combobox(self, textvariable=variable, state="readonly", values=labels, style="BIO.TCombobox",
-                               width=max(len(label) for label in labels) + 2)
+            box = ttk.Combobox(pair, textvariable=variable, state="readonly", values=labels, style="BIO.TCombobox",
+                               width=max(text_columns(label) for label in labels) + 3)
             box.bind("<<ComboboxSelected>>", lambda _e, k=key: self._chosen(k))
-            self.add(box)
+            box.pack(side="left")
+            self.add(pair)
             self.values[key], self.boxes[key] = variable, box
         self.clear_button = self.add(tk.Label(self, text=t("hub.filter.clear"), font=theme.font("caption"),
                                               background=theme.colors.bg, foreground=theme.colors.accent,
