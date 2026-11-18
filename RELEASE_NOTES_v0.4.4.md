@@ -1,19 +1,18 @@
 <!-- Copyright 2026 stickleetoto | Apache-2.0 -->
-# BIO CE v0.4.4-rc2 — Release Notes (DRAFT)
+# BIO CE v0.4.4-rc3 — Release Notes (DRAFT)
 
-**Status: draft, not released.** The size and SHA-256 below are those of the candidate built and tested by the
-release-qualification workflow (all steps PASS).
-v0.4.4-rc1 was not released: its screens were reworked first (see "Screens since rc1"). Nothing here is final until
-the owner approves the candidate.
+**Status: draft, not released.** The size and SHA-256 below are filled in from the CI build of the candidate.
+v0.4.4-rc1 and rc2 were not released: the screens were reworked and then finished first (see "Screens since rc1").
+Nothing here is final until the owner approves the candidate.
 
 ## Download
 
 | File | Size | SHA-256 |
 |---|---:|---|
-| `BIO-CE-Setup-v0.4.4-rc2.exe` | 41,812,937 bytes | `1687c0488f81616284bc13e0594b3be7f016f6ce8522914dad0b8b787daa6ec3` |
+| `BIO-CE-Setup-v0.4.4-rc3.exe` | (from CI) | (from CI) |
 
 ```powershell
-Get-FileHash -Algorithm SHA256 .\BIO-CE-Setup-v0.4.4-rc2.exe
+Get-FileHash -Algorithm SHA256 .\BIO-CE-Setup-v0.4.4-rc3.exe
 ```
 
 ### The installer is not code-signed
@@ -24,12 +23,12 @@ SmartScreen, Microsoft Defender, or any other protection.
 
 ## Updating
 
-- **From v0.4.3-rc1 (or older):** run the v0.4.4-rc2 installer over the existing installation. Your memories,
+- **From v0.4.3-rc1 (or older):** run the v0.4.4-rc3 installer over the existing installation. Your memories,
   settings, backups, and AI connections are kept. **Close Codex, Claude Code, and the Claude desktop app before you
   install**, and start new conversations afterwards.
 - The file formats do not change: no new tables, and both databases keep their versions. New settings (language,
   the memory screen's filters, how many automatic backups to keep) are rows in the existing settings table.
-- **Going back to v0.4.3-rc1 works:** run the v0.4.3-rc1 installer over v0.4.4-rc2. Memories you deleted stay
+- **Going back to v0.4.3-rc1 works:** run the v0.4.3-rc1 installer over v0.4.4-rc3. Memories you deleted stay
   hidden there too (v0.4.3 calls this retracting, and has no Deleted memories view); memories you forgot completely
   are gone in both versions. v0.4.3 ignores the new settings rows.
 
@@ -74,7 +73,12 @@ SmartScreen, Microsoft Defender, or any other protection.
   memory screen's filters fold behind **Filters** (which says how many apply). Nothing you need to act on is folded
   away.
 - Korean screens no longer show stored values or English: where a memory came from ("Added here" instead of
-  "user-input"), the AI tools' support notes, and the shortcut list ("Ctrl+클릭").
+  "user-input"), the AI tools' support notes, the export dialog's sources, and the shortcut list ("Ctrl+클릭").
+- A title and a text that say the same thing are shown once: when the text starts with the title, cards and the
+  drawer show the title and only the rest. What is stored does not change.
+- One name for one thing on every screen (for example the Personal space is "Personal", never "Personal (locked)";
+  Codex is "Codex"), and the sidebar's "Local only · Version …" stays on one line at any window and text size.
+- Buttons, spacing, and text sizes come from one size table, so the screens match each other.
 
 ## Changed
 

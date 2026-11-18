@@ -9,6 +9,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import tkinter as tk
+from tkinter import font as tkfont
 
 from bio_ce.ui.format import format_timestamp, parse_timestamp
 from bio_ce.ui.i18n import t
@@ -156,11 +157,18 @@ class AutoText(tk.Text):
         return self.get("1.0", "end-1c")
 
     def fit(self) -> None:
+        """As many lines as the text takes up, counting the space between wrapped lines too: a height in lines leaves
+        that space out, so the last line was cut by a few pixels (rc3 self-check)."""
         try:
             lines = self.count("1.0", "end", "displaylines")
+            pixels = self.count("1.0", "end", "ypixels")
+            linespace = tkfont.Font(font=self.cget("font")).metrics("linespace")
         except tk.TclError:
             return
         count = lines[0] if isinstance(lines, tuple) else (lines or 1)
+        pixel_count = pixels[0] if isinstance(pixels, tuple) else (pixels or 0)
+        if pixel_count and linespace:
+            count = max(int(count or 1), -(-int(pixel_count) // int(linespace)))
         height = max(1, min(int(count or 1), self.max_lines))
         if int(self.cget("height")) != height:
             self.configure(height=height)
