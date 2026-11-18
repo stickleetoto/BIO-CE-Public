@@ -411,6 +411,14 @@ class EntryEditDialog(Dialog):
         return self.result  # type: ignore[return-value]
 
 
+def export_sources() -> list[tuple[str, str]]:
+    """The export dialog's source choices in the app's language, in the source filter's words (rc3: the dialog showed
+    the exporter's English labels on Korean screens)."""
+    from bio_ce.exporter import SOURCE_KINDS
+
+    return [(key, t(f"dialog.export.source.{key}")) for key in SOURCE_KINDS]
+
+
 class ExportDialog(Dialog):
     """Choose what to export: spaces (Personal only by ticking it), the inbox, sources, and dates."""
 
@@ -437,8 +445,7 @@ class ExportDialog(Dialog):
         heading(t("dialog.export.spaces"))
         self.space_vars: dict[str, tk.BooleanVar] = {}
         for space in spaces:
-            label = (t("dialog.export.personal_space", name=space_label(space)) if space.is_personal
-                     else space_label(space))
+            label = space_label(space)  # "개인", as on every screen (rc3); the warning below says what it holds
             self.space_vars[space.space_id] = check(self.content, label,
                                                     space.space_id == current and not space.is_personal)
             if space.is_personal:

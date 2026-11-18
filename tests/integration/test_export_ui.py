@@ -12,9 +12,9 @@ from unittest.mock import patch
 
 from bio_ce.control_store import MODE_AUTO_MEMORY
 from bio_ce.desktop import AppDataPaths, BIOCEDesktop, DesktopMemoryService
-from bio_ce.exporter import SOURCE_KINDS, SOURCE_LABELS
+from bio_ce.exporter import SOURCE_KINDS
 from bio_ce.spaces import PERSONAL_SPACE
-from bio_ce.ui.dialogs import ExportDialog
+from bio_ce.ui.dialogs import ExportDialog, export_sources
 from tests.integration.test_auto_memory_ui import FakeManagedConnections
 from tests.integration.test_desktop_ui_redesign import new_root
 
@@ -75,7 +75,7 @@ class ExportUiTests(unittest.TestCase):
 
     def test_dialog_defaults_and_the_personal_warning(self):
         dialog = ExportDialog(self.root, self.app.theme, spaces=self.app.spaces(), current="general",
-                              sources=[(key, SOURCE_LABELS[key]) for key in SOURCE_KINDS])
+                              sources=export_sources())
         try:
             self.assertTrue(dialog.space_vars["general"].get())
             self.assertFalse(dialog.space_vars["personal"].get())  # never ticked for the user

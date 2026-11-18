@@ -23,7 +23,7 @@ STRINGS: dict[str, object] = {
     # Settings: language
     "settings.language.title": "언어",
     "settings.language.auto": "Windows와 같게",
-    "settings.language.note": "이 앱의 글자입니다. AI 앱이 BIO CE에서 읽는 내용은 영어로 남습니다.",
+    "settings.language.note": "이 앱의 글자입니다. AI 도구가 BIO CE에서 읽는 내용은 영어로 남습니다.",
     # Settings: automatic backups
     "settings.backups.keep": "자동 백업을 최근 {count}개만 보관",
     "settings.backups.keep_label": "보관할 자동 백업",
@@ -69,7 +69,6 @@ STRINGS: dict[str, object] = {
     "hub.export": "내보내기…",
     "hub.export_tip": "다른 AI에 붙여 넣을 수 있게 기억을 텍스트 파일로 저장",
     "hub.space": "공간",
-    "hub.chip.personal": "{space}(잠금)",
     "hub.tab.memories": "기억",
     "hub.tab.inbox": "수집함",
     "hub.tab.suggestions": "제안",
@@ -90,7 +89,6 @@ STRINGS: dict[str, object] = {
     # Cards
     "hub.card.untitled": "(제목 없음)",
     "hub.card.no_text": "본문 없음",
-    "hub.card.personal_meta": "{space}(잠금)",
     "hub.card.edit": "수정",
     "hub.card.move": "이동",
     "hub.card.delete": "삭제",
@@ -136,7 +134,7 @@ STRINGS: dict[str, object] = {
     "hub.drawer.source_short": "출처: {source}",
     "hub.drawer.no_text": "제목만 있고 본문이 없는 기억입니다.",
     "hub.drawer.revision_line": "버전 {number} · {kind} · {when}",
-    "hub.drawer.current": "지금 버전",
+    "hub.drawer.current": "현재",
     "hub.drawer.undo_suggestion": "이 제안 되돌리기…",
     "hub.drawer.full_history": "전체 기록 열기…",
     "hub.drawer.history_failed": "이 기억의 기록을 읽지 못했습니다. 새로 고친 뒤 다시 해 보세요.",
@@ -239,10 +237,10 @@ STRINGS: dict[str, object] = {
     "hub.inbox.moved": "“{title}”이(가) 이제 기억에 있습니다. 수집함 항목은 그 기억을 삭제할 때까지 보관합니다.",
     "hub.inbox.moved_title": "기억으로 옮김",
     "hub.inbox.undone": "“{title}”이(가) 수집함으로 돌아왔고, 기억은 옮기기 전과 같습니다.",
-    "hub.inbox.undone_title": "옮기기 취소함",
+    "hub.inbox.undone_title": "이동 취소함",
     "hub.inbox.undo_changed": "옮긴 뒤 기억이 바뀌어서 그대로 두었습니다. 수집함 항목은 그 기억을 위해 계속 보관합니다.",
     "hub.inbox.undo_failed": "옮기기를 취소하지 못했습니다.",
-    "hub.inbox.undo_failed_title": "취소 안 됨",
+    "hub.inbox.undo_failed_title": "실행 취소 안 됨",
     # v0.4.4 U4: 필터·정렬(F4), 빠른 추가(F5), 여러 카드(F7), 복사(F10), 어디서나 검색(F1)
     "search.everywhere": "기억 검색",
     "hub.filter.source": "출처",
@@ -250,7 +248,7 @@ STRINGS: dict[str, object] = {
     "hub.filter.source.added": "직접 추가",
     "hub.filter.source.imported": "가져온 것",
     "hub.filter.source.ai": "AI가 저장",
-    "hub.filter.host": "AI",
+    "hub.filter.host": "AI 도구",
     "hub.filter.host.any": "모두",
     "hub.filter.host.codex": "Codex",
     "hub.filter.host.claude": "Claude Code",
@@ -274,7 +272,7 @@ STRINGS: dict[str, object] = {
     "hub.quick.secret": "비밀번호·토큰·키로 보이는 글이라 BIO CE가 저장하지 않습니다.",
     "hub.quick.not_saved": "저장 안 됨",
     "hub.quick.undo_changed": "추가한 뒤 기억이 바뀌어서 그대로 두었습니다.",
-    "hub.quick.undo_failed": "취소 안 됨",
+    "hub.quick.undo_failed": "실행 취소 안 됨",
     "hub.selection.count": {"one": "{count}개 선택", "other": "{count}개 선택"},
     "hub.selection.export": "내보내기…",
     "hub.selection.clear": "선택 해제",
@@ -340,7 +338,7 @@ STRINGS: dict[str, object] = {
     "hub.forget.failed": "이 기억을 잊지 못했습니다. 아무것도 바뀌지 않았습니다.",
     "hub.forget.failed_title": "잊지 못함",
     # Suggestions tab
-    "hub.sugg.title": "정리 제안",
+    "hub.sugg.title": "제안",
     "hub.sugg.merge": "합치기",
     "hub.sugg.promote": "기억으로 남기기",
     "hub.sugg.update": "기억 바꾸기",
@@ -407,11 +405,11 @@ STRINGS: dict[str, object] = {
     "hub.review.different_title": "다른 사실일 수 있습니다.",
     "hub.review.different_message": "승인하면 지금 기억의 내용이 바뀝니다. 새 기억으로 따로 추가하는 것을 권합니다.",
     "hub.review.add": "추가",
-    "hub.review.edit_add": "편집 후 추가…",
+    "hub.review.edit_add": "수정 후 추가…",
     "hub.review.change": "바꾸기",
     "hub.review.change_anyway": "그래도 바꾸기",
     "hub.review.add_new": "새 기억으로 추가",
-    "hub.review.edit_approve": "편집 후 승인…",
+    "hub.review.edit_approve": "수정 후 승인…",
     "hub.review.retract": "기억 철회",
     "hub.review.reject": "거절",
     "hub.review.retract_title": "이 기억을 철회할까요?",
@@ -449,7 +447,7 @@ STRINGS: dict[str, object] = {
     # v0.4.4 K3/K5 import preview and MCP servers
     "import.set_date.button": "날짜 넣기…",
     "import.set_date.title": {"other": "항목 {count}개의 날짜 넣기"},
-    "import.set_date.note": "언제 말했는지 안다면 넣으세요. 여기서 넣은 날짜는 편집에서처럼 확인된 날짜로 보고 "
+    "import.set_date.note": "언제 말했는지 안다면 넣으세요. 여기서 넣은 날짜는 수정할 때처럼 확인된 날짜로 보고 "
                             "“말한 날”로 보여 줍니다.",
     "import.set_date.label": "말한 날(예: 2025-03-14 또는 2025-03)",
     "import.set_date.invalid": "2025-03-14나 2025-03 같은 날짜를 쓰세요.",
@@ -495,7 +493,7 @@ STRINGS: dict[str, object] = {
     # Host cards
     "connections.host.codex": "OpenAI의 코딩 에이전트입니다. 명령줄 도구와 데스크톱 앱이 같은 설정을 쓰므로 연결 하나로 둘 다 "
                               "됩니다.",
-    "connections.host.claude": "Anthropic의 명령줄 코딩 에이전트입니다. Claude 앱(데스크톱 채팅 앱)은 아래에 따로 카드가 "
+    "connections.host.claude": "Anthropic의 명령줄 코딩 에이전트입니다. Claude 앱은 아래에 따로 카드가 "
                                "있습니다.",
     "connections.host.claude_desktop": "Anthropic의 데스크톱 채팅 앱입니다. BIO CE가 앱의 설정 파일에 항목 하나를 "
                                        "추가합니다. 연결하거나 연결을 끊은 뒤에는 앱을 종료했다가 다시 여세요.",
@@ -722,7 +720,7 @@ STRINGS: dict[str, object] = {
     "connections.desktop.settings_file": "설정 파일: {path}",
     "connections.desktop.settings_file_found": "BIO CE가 Claude 앱의 설정 파일을 찾습니다.",
     "connections.desktop.point_backup": "먼저 파일을 백업합니다. 파일을 읽을 수 없으면 BIO CE는 아무것도 바꾸지 않습니다.",
-    "connections.desktop.point_read": "Claude 채팅에서 이 PC에 저장된 활성 기억을 검색하고 읽을 수 있게 됩니다. 채팅에서 "
+    "connections.desktop.point_read": "Claude 앱의 대화에서 이 PC에 저장된 활성 기억을 검색하고 읽을 수 있게 됩니다. 채팅에서 "
                                       "읽은 기억은 대화의 일부가 되어 {provider}에 보내집니다. 그곳에서 어떻게 되는지는 "
                                       "BIO CE가 통제할 수 없습니다.",
     "connections.desktop.point_auto_off": "자동 기억은 꺼진 채로 둡니다. 켜기 전까지 앱은 검색하고 읽을 수만 있습니다.",
@@ -791,6 +789,7 @@ STRINGS: dict[str, object] = {
     "connections.activity.note": "AI 도구가 저장했거나 업데이트했거나 저장하려 한 것입니다. 줄을 고르면 그 기억이 "
                                  "열립니다.",
     "connections.activity.none": "아직 AI 활동이 없습니다.",
+    "connections.activity.action.other": "기타 요청",
     "connections.activity.created": "저장함",
     "connections.activity.updated": "업데이트함",
     "connections.activity.queued": "검토로 보냄",
@@ -996,11 +995,15 @@ STRINGS: dict[str, object] = {
     "dialog.export.description": "기억마다 “[날짜] - 기억” 한 줄씩 담긴 .md 파일입니다. 다른 AI에 붙여 넣거나 BIO CE로 "
                                  "다시 가져오는 데 쓸 수 있습니다. 삭제한 기억, 검토 대기, 이전 버전은 빠집니다.",
     "dialog.export.spaces": "공간",
-    "dialog.export.personal_space": "{name} (내 개인 기억)",
     "dialog.export.personal_warning": "개인 기억이 파일에 들어갑니다.",
     "dialog.export.what": "내보낼 것",
     "dialog.export.include_inbox": "수집함도 (아직 정리하지 않은 항목)",
     "dialog.export.sources": "출처",
+    "dialog.export.source.user": "직접 추가",
+    "dialog.export.source.ai_host": "AI가 저장",
+    "dialog.export.source.chatgpt": "ChatGPT에서 가져온 것",
+    "dialog.export.source.claude": "Claude에서 가져온 것",
+    "dialog.export.source.other": "다른 AI에서 가져온 것",
     "dialog.export.dates": "날짜 (선택, 예: 2025-01-01)",
     "dialog.export.date_to": "~",
     "dialog.export.include_claimed": "날짜를 확인하지 않은 가져온 기억에 출처 날짜 붙이기",
@@ -1016,9 +1019,9 @@ STRINGS: dict[str, object] = {
     # Import screen: header, form
     "import.title": "기억 가져오기",
     "import.subtitle": "ChatGPT, Claude 등 다른 AI에서: 먼저 미리 보며, 덮어쓰는 것은 없습니다",
-    "import.personal_choice": "개인(추천: 다른 AI의 기억은 대부분 사용자 본인에 관한 것)",
+    "import.personal_note": "추천: 다른 AI의 기억은 대부분 사용자 본인에 관한 것입니다.",
     "import.general_note": "일반은 연결된 모든 AI 도구가 함께 쓰며 세션 훅이 불러옵니다. 개인적인 내용은 개인에 두세요.",
-    "import.source.other": "기타",
+    "import.source.other": "다른 AI",
     "import.what": "1. 가져올 것",
     "import.what_note": "다른 AI가 준 목록을 붙여 넣거나 .md 또는 .txt 파일을 여세요. 각 줄은 \"[2025-03-14] - 내용\" "
                         "모양입니다. 다른 AI가 쓴 날짜는 확인하기 전까지 출처 날짜로 둡니다.",
@@ -1078,7 +1081,7 @@ STRINGS: dict[str, object] = {
     "import.when.unconfirmed": "{date}(확인 전)",
     "import.when.unknown": "알 수 없음",
     "import.choose": "고르기…",
-    "import.summary": "새 항목 {new} · 이미 있음 {exists} · 검토할 것 {review} · 민감 {sensitive} · 차단 {blocked} · "
+    "import.summary": "새 항목 {new} · 이미 있음 {exists} · 검토 대상 {review} · 민감 {sensitive} · 차단 {blocked} · "
                       "출처 메모 {notes} · 읽지 못한 줄 {unreadable}",
     "import.date_warning": "이 날짜는 말한 날이 아니라 목록을 내보낸 날일 수 있습니다: {dates}. 직접 고르지 않으면 "
                            "\"날짜 확인\"에서 빠집니다.",
@@ -1142,7 +1145,7 @@ STRINGS: dict[str, object] = {
     "dashboard.status": "BIO CE 상태",
     "dashboard.ready": "준비됨",
     "dashboard.ready_detail": "데이터베이스 열림 · 이 PC에만 저장",
-    "dashboard.engine_down": "엔진을 쓸 수 없음",
+    "dashboard.engine_down": "기억 엔진을 쓸 수 없음",
     "dashboard.engine_down_detail": "BIO CE가 기억 엔진에 연결하지 못했습니다. 설정 → 기억 엔진을 보세요.",
     "dashboard.needs_attention": "확인 필요",
     "dashboard.read_failed": "기억 데이터베이스를 읽지 못했습니다. BIO CE를 다시 시작하고 다시 해 보세요.",
@@ -1183,7 +1186,7 @@ STRINGS: dict[str, object] = {
     "app.engine.status_unreadable": "엔진 상태를 읽지 못했습니다.",
     "app.engine.none_connected": "연결된 기억 엔진이 없습니다.",
     "app.engine.unavailable": "기억 엔진을 쓸 수 없습니다.",
-    "format.host.codex": "Codex (CLI · 데스크톱 앱)",
+    "format.host.codex": "Codex",
     "format.host.claude": "Claude Code",
     "format.host.claude_desktop": "Claude 앱",
     "format.field.title": "제목",
@@ -1205,8 +1208,8 @@ STRINGS: dict[str, object] = {
     #
     "app.edition": "Community Edition",
     "app.footer_line": "이 PC에만 저장 · 버전 {version}",
-    "app.engine.none": "연결된 엔진 없음",
-    "app.engine.name": "엔진: {name}",
+    "app.engine.none": "연결된 기억 엔진 없음",
+    "app.engine.name": "기억 엔진: {name}",
     "app.not_available": "지금은 쓸 수 없는 동작입니다.",
     "app.not_available_title": "쓸 수 없음",
     "app.personal_failed": "개인을 바꾸지 못했습니다.",
@@ -1264,7 +1267,7 @@ STRINGS: dict[str, object] = {
     "svc.support.unverified": "확인 안 됨",
     "svc.support.claude": "Claude Code 2.1.306에서 확인: 모델이 BIO CE 도구를 스스로 찾아 기억을 저장하고, 중복을 "
                           "합치고, 고치고, 다시 불러왔습니다.",
-    "svc.support.claude_desktop": "Claude 데스크톱 앱에는 세션 훅이 없어 대화를 시작할 때 아무것도 자동으로 불러오지 "
+    "svc.support.claude_desktop": "Claude 앱에는 세션 훅이 없어 대화를 시작할 때 아무것도 자동으로 불러오지 "
                                   "않습니다. 모델은 요청하면 BIO CE 도구를 쓰고 스스로 쓸 수도 있지만, 그것은 아직 "
                                   "확인하지 않았습니다. 대화에서 저장과 검색은 2026-11-14에 확인했습니다.",
     "svc.support.codex": "Codex는 기본 모델을 코드 모드로 실행하며, 코드 모드는 MCP 도구와 그 안내를 모델에 바로 "
@@ -1315,12 +1318,12 @@ STRINGS: dict[str, object] = {
     "svc.conn.hooks_remove_approval": "AI 도구 훅을 제거하려면 사용자의 명시적인 승인이 필요합니다.",
     "svc.conn.remove_approval": "AI 도구를 제거하려면 사용자의 명시적인 승인이 필요합니다.",
     "svc.conn.entry_mismatch": "설정된 bio-ce 항목이 BIO CE와 맞지 않아 그대로 두었습니다.",
-    "svc.conn.revoked_entry_left": "BIO CE가 이 연결을 철회했지만 AI 도구의 항목은 제거하지 못했습니다. 설정 백업은 남겨 "
+    "svc.conn.revoked_entry_left": "BIO CE가 이 연결을 해제했지만 AI 도구의 항목은 제거하지 못했습니다. 설정 백업은 남겨 "
                                    "두었습니다.",
-    "svc.conn.desktop_missing": "이 Windows 사용자에게 Claude 데스크톱 앱이 설치되어 있지 않습니다.",
-    "svc.conn.desktop_open_once": "Claude 데스크톱 앱을 한 번 열어 설정이 만들어지게 한 뒤 연결하세요.",
-    "svc.conn.desktop_changed": "그사이 Claude 데스크톱 설정이 바뀌어, BIO CE는 백업을 남기고 덮어쓰지 않았습니다.",
-    "svc.conn.revoked_desktop_left": "BIO CE가 이 연결을 철회했지만 그 항목은 제거하지 못했습니다. 설정 백업은 남겨 "
+    "svc.conn.desktop_missing": "이 Windows 사용자에게 Claude 앱이 설치되어 있지 않습니다.",
+    "svc.conn.desktop_open_once": "Claude 앱을 한 번 열어 설정이 만들어지게 한 뒤 연결하세요.",
+    "svc.conn.desktop_changed": "그사이 Claude 앱 설정이 바뀌어, BIO CE는 백업을 남기고 덮어쓰지 않았습니다.",
+    "svc.conn.revoked_desktop_left": "BIO CE가 이 연결을 해제했지만 그 항목은 제거하지 못했습니다. 설정 백업은 남겨 "
                                      "두었습니다.",
     "svc.conn.skill_approval": "기억 스킬을 설치하려면 사용자의 명시적인 승인이 필요합니다.",
     "svc.conn.skill_connect_first": "먼저 이 AI 도구를 연결하세요. 스킬은 그 BIO CE 연결을 씁니다.",
@@ -1333,16 +1336,16 @@ STRINGS: dict[str, object] = {
     "svc.conn.mcp_exe_missing": "데스크톱 앱 옆에 함께 설치되는 MCP/BIO-CE-MCP.exe가 없습니다.",
     "svc.conn.cli_unsafe": "{host} CLI가 설치되어 있지 않거나 안전하게 실행할 수 없습니다.",
     "svc.conn.rollback_unverified": "자동 되돌리기를 확인하지 못했습니다. MCP 설정 백업은 남겨 두었습니다.",
-    "svc.conn.database_not_ready": "BIO CE 개인 데이터베이스가 읽기 전용 연결을 받을 준비가 되지 않았습니다.",
+    "svc.conn.database_not_ready": "이 PC의 BIO CE 데이터베이스가 읽기 전용 연결을 받을 준비가 되지 않았습니다.",
     "svc.conn.name_taken": "서버 이름 bio-ce를 다른 MCP 설정이 이미 쓰고 있습니다.",
     "svc.conn.replace_failed": "BIO CE가 이전의 읽기 전용 AI 도구 항목을 바꾸지 못했습니다.",
     "svc.conn.verify_rolled_back": "BIO CE MCP 확인에 실패해 AI 도구 등록을 되돌렸습니다.",
     "svc.conn.approvals_failed": "BIO CE가 {file}에서 {host}의 도구 승인 설정을 바꾸지 못해 그대로 두었습니다.",
     "svc.conn.update_failed": "BIO CE가 {file}을(를) 바꾸지 못해 그대로 두었습니다.",
-    "svc.conn.desktop_not_json": "Claude 데스크톱 설정 파일을 JSON으로 읽을 수 없어 BIO CE가 그대로 두었습니다.",
-    "svc.conn.desktop_entry_lost": "Claude 데스크톱 설정에 예상한 항목이 남지 않았습니다.",
-    "svc.conn.desktop_verify_restored": "BIO CE MCP 확인에 실패해 Claude 데스크톱 설정을 되돌려 놓았습니다.",
-    "svc.conn.revoked_desktop_unreadable": "BIO CE가 이 연결을 철회했지만 Claude 데스크톱 설정 파일을 읽을 수 없어 그 "
+    "svc.conn.desktop_not_json": "Claude 앱 설정 파일을 JSON으로 읽을 수 없어 BIO CE가 그대로 두었습니다.",
+    "svc.conn.desktop_entry_lost": "Claude 앱 설정에 예상한 항목이 남지 않았습니다.",
+    "svc.conn.desktop_verify_restored": "BIO CE MCP 확인에 실패해 Claude 앱 설정을 되돌려 놓았습니다.",
+    "svc.conn.revoked_desktop_unreadable": "BIO CE가 이 연결을 해제했지만 Claude 앱 설정 파일을 읽을 수 없어 그 "
                                            "항목은 그대로 두었습니다.",
     "svc.conn.sdk_verify_failed": "설정된 BIO CE MCP 서버가 로컬 SDK 확인을 통과하지 못했습니다.",
     "svc.conn.powershell_needed": "Codex CLI 래퍼를 실행하려면 Windows PowerShell이 필요합니다.",
@@ -1360,9 +1363,9 @@ STRINGS: dict[str, object] = {
     "svc.conn.read_probe_revision": "MCP 읽기 확인이 선택한 버전과 맞지 않았습니다.",
     "svc.conn.read_probe_absent": "MCP 읽기 확인이 없는 ID에 대해 안전하게 실패하지 않았습니다.",
     # claude_desktop.py, codex_options.py
-    "svc.desktop_file.not_object": "Claude 데스크톱 설정 파일이 JSON 객체가 아닙니다",
-    "svc.desktop_file.servers_not_object": "Claude 데스크톱 설정 파일의 mcpServers가 JSON 객체가 아닙니다",
-    "svc.desktop_file.not_json": "Claude 데스크톱 설정 파일이 올바른 JSON이 아닙니다",
+    "svc.desktop_file.not_object": "Claude 앱 설정 파일이 JSON 객체가 아닙니다",
+    "svc.desktop_file.servers_not_object": "Claude 앱 설정 파일의 mcpServers가 JSON 객체가 아닙니다",
+    "svc.desktop_file.not_json": "Claude 앱 설정 파일이 올바른 JSON이 아닙니다",
     "svc.codex.entry_state": "bio-ce 항목의 상태가 {state}입니다",
     "svc.codex.header": "bio-ce 표 머리글이 정확히 한 번 나오지 않습니다",
     "svc.codex.other_settings": "이 옵션을 넣으면 다른 설정도 바뀝니다",
@@ -1372,8 +1375,8 @@ STRINGS: dict[str, object] = {
     "svc.ctrl.version": "BIO CE 연결 데이터베이스의 버전을 지원하지 않습니다.",
     "svc.ctrl.unknown_connection": "알 수 없는 BIO CE 연결입니다. BIO CE에서 AI 도구를 다시 연결하세요.",
     "svc.ctrl.credentials_rejected": "BIO CE가 이 연결의 인증 정보를 거절했습니다.",
-    "svc.ctrl.revoked": "이 연결의 접근 권한은 BIO CE에서 철회되었습니다.",
-    "svc.ctrl.connection_gone": "그 연결은 더 이상 없거나 철회되었습니다.",
+    "svc.ctrl.revoked": "이 연결의 접근 권한은 BIO CE에서 해제되었습니다.",
+    "svc.ctrl.connection_gone": "그 연결은 더 이상 없거나 해제되었습니다.",
     "svc.ctrl.review_gone": "그 검토 항목은 더 이상 없습니다.",
     "svc.ctrl.review_handled": "그 검토 항목은 이미 처리되었습니다.",
     "svc.ctrl.space_gone": "그 공간은 더 이상 없습니다.",
@@ -1399,7 +1402,7 @@ STRINGS: dict[str, object] = {
     "svc.desktop.settings_format": "BIO CE 설정의 형식을 지원하지 않습니다",
     "svc.desktop.no_localappdata": "Windows LOCALAPPDATA를 쓸 수 없습니다",
     "svc.desktop.settings_unreadable": "BIO CE 설정을 읽지 못했습니다",
-    "svc.desktop.privacy_not_saved": "BIO CE 개인 정보 설정을 저장하지 못했습니다",
+    "svc.desktop.privacy_not_saved": "BIO CE 개인정보 설정을 저장하지 못했습니다",
     "svc.desktop.restore_self": "지금 쓰는 데이터베이스를 그 자신으로 복원할 수는 없습니다.",
     "svc.switch.inactive": "이 요청은 더 이상 쓰지 않는 엔진 연결의 것입니다. 바뀐 것은 없습니다.",
     "svc.engine.access_unavailable": "이 연결의 BIO CE 접근 권한을 쓸 수 없습니다.",
@@ -1507,7 +1510,7 @@ STRINGS: dict[str, object] = {
     "svc.policy.confidence": "confidence는 다음 중 하나여야 합니다: {choices}",
     "svc.policy.tool_output": "도구 출력은 저장하지 않습니다. 사용자가 말하거나 확인해야 합니다",
     "svc.policy.file_text": "파일이나 페이지의 글은 사용자가 요청했을 때만 모읍니다. reason에 그렇게 적으세요",
-    "svc.policy.instructions": "AI 도우미를 향한 지시가 들어 있습니다",
+    "svc.policy.instructions": "AI 도구를 향한 지시가 들어 있습니다",
     "svc.policy.low_confidence": "확신이 낮은 추측은 저장하지 않습니다",
     "svc.policy.trivial": "오래 둘 기억이 되기에는 너무 짧거나 사소합니다",
     "svc.policy.question": "질문은 오래 갈 사실이 아닙니다. 대신 사용자가 확인한 답을 저장하세요",

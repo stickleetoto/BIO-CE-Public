@@ -347,8 +347,7 @@ class HubPage(Page):
         self.show_drop_targets(self.drop_highlight, over=self.drop_over)
 
     def _chip_label(self, space) -> str:
-        label = space_label(space)
-        return t("hub.chip.personal", space=label) if space.is_personal else label
+        return space_label(space)  # "개인" as everywhere else (rc3: the chip said "개인(잠금)", the drawer "개인")
 
     def _render_cleanup(self) -> None:
         theme, c = self.theme, self.colors

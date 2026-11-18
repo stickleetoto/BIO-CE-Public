@@ -17,9 +17,8 @@ import tkinter as tk
 import unittest
 from unittest.mock import patch
 
-from bio_ce.exporter import SOURCE_KINDS, SOURCE_LABELS
 from bio_ce.spaces import PERSONAL_SPACE
-from bio_ce.ui.dialogs import Dialog, ExportDialog
+from bio_ce.ui.dialogs import Dialog, ExportDialog, export_sources
 from bio_ce.ui.hub.data import INBOX as INBOX_TAB, MEMORIES, REVIEWS, SUGGESTIONS
 from bio_ce.ui.format import DEFAULT_SOURCE, body_without_title
 from tests.integration import test_ui_layout_audit as layout  # the module: its tests aren't collected here again
@@ -82,12 +81,14 @@ class _KoreanScreens(layout.LayoutAuditTests):
     def every_screen(self) -> list[str]:
         self.all_screens()
         dialog = ExportDialog(self.root, self.app.theme, spaces=self.app.spaces(), current="general",
-                              sources=[(key, SOURCE_LABELS[key]) for key in SOURCE_KINDS])
+                              sources=export_sources())
         try:
             dialog.space_vars["personal"].set(True)
+            dialog.deiconify()  # a dialog starts hidden until it is presented; hidden, the scan read nothing (rc3)
             for _ in range(6):
                 dialog.update()
             self.scan(dialog, "export dialog")
+            self.assertIn("직접 추가", "\n".join(text for _path, text in shown_texts(dialog)))  # it really read it
         finally:
             dialog.destroy()
         shortcuts = self.app.show_shortcuts()

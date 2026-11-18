@@ -12,6 +12,7 @@ import sys
 from typing import TYPE_CHECKING, Any, Callable
 import tkinter as tk
 from tkinter import filedialog
+from tkinter import font as tkfont
 
 import bio_ce
 from bio_ce.connections import HostStatus, MCPConnectionManager
@@ -29,8 +30,8 @@ from bio_ce.engine.presentation import ActionState, EngineBanner, action_states,
 from bio_ce.engine.switching import DEFAULT_SELECTION, EngineSelection, SwitchPhase
 from bio_ce.storage.backup import PAIR_MATCHED, BackupError, pair_path
 from bio_ce.spaces import PERSONAL_SPACE
-from bio_ce.exporter import SOURCE_KINDS, SOURCE_LABELS, UNENCRYPTED_NOTICE, ExportOptions, ExportRefused, write_export
-from bio_ce.ui.dialogs import ChoiceDialog, ConfirmDialog, ExportDialog, NameDialog, ReviewEditDialog
+from bio_ce.exporter import UNENCRYPTED_NOTICE, ExportOptions, ExportRefused, write_export
+from bio_ce.ui.dialogs import ChoiceDialog, ConfirmDialog, ExportDialog, NameDialog, ReviewEditDialog, export_sources
 from bio_ce.ui.format import HOSTS
 from bio_ce.ui.i18n import resolve, set_language, t
 from bio_ce.ui.pending import PendingDeletes
@@ -246,13 +247,36 @@ class BIOCEDesktop:
         self.sidebar_footer_text.pack(side="left", fill="x", expand=True, padx=(theme.px(SPACE_S), 0))
         # One line (POLISH §3.5): "Local only · Version …". The engine's name is in Settings; this line says it only
         # when the engine has a problem (R2).
-        # Wraps: in Korean and with large text the line is wider than the sidebar (the audit found it cut).
-        self.footer_line = WrapLabel(self.sidebar_footer_text,
-                                     t("app.footer_line", version=bio_ce.display_version()),
-                                     font=theme.font("caption"), background=c.sidebar, foreground=c.text_secondary)
+        # Always one line (owner, rc3), also in the smallest window and with large text: the text keeps the caption
+        # size where it fits and steps down only as far as the sidebar needs.
+        self._footer_font = tkfont.Font(root=self.root, font=theme.font("caption"))
+        self.footer_line = tk.Label(self.sidebar_footer_text,
+                                    text=t("app.footer_line", version=bio_ce.display_version()),
+                                    font=self._footer_font, background=c.sidebar, foreground=c.text_secondary,
+                                    anchor="w", borderwidth=0, padx=0, highlightthickness=0)
         self.footer_line.pack(fill="x")
+        self.sidebar_footer_text.bind("<Configure>", lambda _e: self.fit_footer_line(), add="+")
         self.engine_label = tk.Label(self.sidebar_footer_text, text="", font=theme.font("caption"),
                                      background=c.sidebar, foreground=c.text_muted, anchor="w", justify="left")
+
+    def fit_footer_line(self) -> None:
+        """The footer line at the caption size, or smaller until it fits the sidebar on one line (not below 6 pt)."""
+        try:
+            room = self.sidebar_footer_text.winfo_width()
+        except tk.TclError:
+            return
+        if room <= 1:
+            return
+        base = self.theme.font("caption")
+        size = int(base.cget("size"))
+        sign, size = (1, size) if size > 0 else (-1, -size)
+        text = str(self.footer_line.cget("text"))
+        self._footer_font.configure(family=base.cget("family"), weight=base.cget("weight"))
+        while True:
+            self._footer_font.configure(size=sign * size)
+            if self._footer_font.measure(text) <= room or size <= 6:
+                return
+            size -= 1
 
     def _on_resize(self, event) -> None:
         if event.widget is self.root:
@@ -641,7 +665,7 @@ class BIOCEDesktop:
 
     def ask_export(self) -> dict | None:
         return ExportDialog(self.root, self.theme, spaces=self.spaces(), current=self._space_id,
-                            sources=[(key, SOURCE_LABELS[key]) for key in SOURCE_KINDS]).ask()
+                            sources=export_sources()).ask()
 
     def export_memories(self) -> Path | None:
         """Export chosen memories as a "[date] - memory" .md file. Never overwrites; warns about Personal."""

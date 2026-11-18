@@ -228,7 +228,7 @@ class UniversalClientTests(unittest.TestCase):
         selection = EngineSelection(SwitchPhase.SAFE_DISCONNECTED, None, 2, "core", "A previous switch did not finish.")
         app = self.open(engine_selection=selection)
         self.assertEqual(app.engine_banner().title, "No memory engine connected")
-        self.assertIn("no engine", app.engine_label.cget("text").lower())
+        self.assertIn("no memory engine", app.engine_label.cget("text").lower())
         app.show_page("memories")
         self.assertEqual(app.memories.grid.cards, {})
         self.assertFalse(app.memories.add_button.enabled)

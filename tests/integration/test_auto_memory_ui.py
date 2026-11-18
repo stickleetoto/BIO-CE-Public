@@ -190,9 +190,9 @@ class AutoMemoryConnectionsPageTests(unittest.TestCase):
         codex, claude = page.cards["codex"], page.cards["claude"]
         self.root.update()
         texts = " ".join(str(w.cget("text")) for w in _all_widgets(page) if "text" in w.keys())
-        self.assertIn("You can close the BIO CE app: connected AI tools keep using your memories.", texts)
+        self.assertIn("You can close the BIO CE app: connected hosts keep using your memories.", texts)
         self.assertIn("The Claude desktop chat app has its own card below.", texts)
-        self.assertIn("Codex (CLI · desktop app)", texts)
+        self.assertIn("Codex", texts)  # one name on every screen (rc3); its card says the CLI and the app share it
         self.assertNotIn("0.164", codex.support_detail.cget("text"))
 
         self.assertEqual(codex.code_mode_label.cget("text"), "Off")

@@ -23,7 +23,7 @@ STRINGS: dict[str, object] = {
     # Settings: language
     "settings.language.title": "Language",
     "settings.language.auto": "Same as Windows",
-    "settings.language.note": "The text of this app. What AI apps read from BIO CE stays in English.",
+    "settings.language.note": "The text of this app. What AI hosts read from BIO CE stays in English.",
     # Settings: automatic backups
     "settings.backups.keep": "Keep the latest {count} automatic backups",
     "settings.backups.keep_label": "Automatic backups to keep",
@@ -71,7 +71,6 @@ STRINGS: dict[str, object] = {
     "hub.export": "Export…",
     "hub.export_tip": "Save memories as a text file to paste into another AI",
     "hub.space": "Space",
-    "hub.chip.personal": "{space} (locked)",
     "hub.tab.memories": "Memories",
     "hub.tab.inbox": "Inbox",
     "hub.tab.suggestions": "Suggestions",
@@ -93,7 +92,6 @@ STRINGS: dict[str, object] = {
     # Cards
     "hub.card.untitled": "(no title)",
     "hub.card.no_text": "No memory text",
-    "hub.card.personal_meta": "{space} (locked)",
     "hub.card.edit": "Edit",
     "hub.card.move": "Move",
     "hub.card.delete": "Delete",
@@ -116,9 +114,9 @@ STRINGS: dict[str, object] = {
     # Drawer
     "hub.drawer.close": "Close (Esc)",
     "hub.drawer.back": "← List",
-    "hub.drawer.version": "Version",
-    "hub.drawer.details_hint": "Version · source · IDs · dates",
-    "hub.drawer.history_hint": {"one": "{count} version", "other": "{count} versions"},
+    "hub.drawer.version": "Revision",
+    "hub.drawer.details_hint": "Revision · source · IDs · dates",
+    "hub.drawer.history_hint": {"one": "{count} revision", "other": "{count} revisions"},
     "hub.drawer.edit_tip": "Edit here (E or Ctrl+E); you can also click the title",
     "hub.drawer.move": "Move ▾",
     "hub.drawer.move_tip": "Move to another space (M); a backup is made first",
@@ -197,7 +195,7 @@ STRINGS: dict[str, object] = {
     "hub.delete.one": "Deleted “{title}”.",
     "hub.delete.many": {"one": "Deleted {count} memory.", "other": "Deleted {count} memories."},
     # Owner decision 2026-11-17: deleting keeps the memory, so the notice says where it stays and how to erase it.
-    "hub.delete.not_erase": "AI tools no longer see it, but it stays in Deleted memories. To erase it, use Forget "
+    "hub.delete.not_erase": "AI hosts no longer see it, but it stays in Deleted memories. To erase it, use Forget "
                             "completely.",
     "hub.delete.kept": {"one": "The inbox item it was made from, kept so that could be undone, goes with it.",
                         "other": "The {count} inbox items it was made from, kept so that could be undone, go with "
@@ -265,11 +263,11 @@ STRINGS: dict[str, object] = {
     "hub.filter.source.added": "Added here",
     "hub.filter.source.imported": "Imported",
     "hub.filter.source.ai": "From an AI",
-    "hub.filter.host": "AI",
+    "hub.filter.host": "AI host",
     "hub.filter.host.any": "Any",
     "hub.filter.host.codex": "Codex",
     "hub.filter.host.claude": "Claude Code",
-    "hub.filter.host.claude_desktop": "Claude app",
+    "hub.filter.host.claude_desktop": "Claude desktop app",
     "hub.filter.period": "Changed",
     "hub.filter.period.any": "Any time",
     "hub.filter.period.7d": "Last 7 days",
@@ -499,7 +497,7 @@ STRINGS: dict[str, object] = {
     "connections.servers.none": "No BIO CE server running",
     "connections.servers.last_request": "{servers} · last request {when}",
     "connections.servers.title": "BIO CE servers",
-    "connections.servers.note": "Each conversation or session of a connected AI tool starts its own BIO CE server "
+    "connections.servers.note": "Each conversation or session of a connected host starts its own BIO CE server "
                                 "and keeps it while that stays open. A server ends when its host closes it; BIO CE "
                                 "never ends one on its own.",
     "connections.servers.total": {"one": "{count} running in total", "other": "{count} running in total"},
@@ -531,7 +529,7 @@ STRINGS: dict[str, object] = {
                                 "host reads become part of that conversation and may be sent to the host’s AI model "
                                 "provider (for example OpenAI for Codex or Anthropic for Claude Code) under that "
                                 "provider’s terms.",
-    "connections.app_closed_note": "You can close the BIO CE app: connected AI tools keep using your memories.",
+    "connections.app_closed_note": "You can close the BIO CE app: connected hosts keep using your memories.",
     # Host cards
     "connections.host.codex": "OpenAI’s coding agent. The command-line tool and the desktop app use the same settings, "
                               "so one connection covers both.",
@@ -840,6 +838,7 @@ STRINGS: dict[str, object] = {
     "connections.activity.title": "Recent AI activity",
     "connections.activity.note": "What hosts saved, updated, or tried to save. Select an entry to open the memory.",
     "connections.activity.none": "No AI activity yet.",
+    "connections.activity.action.other": "Other request",
     "connections.activity.created": "Saved",
     "connections.activity.updated": "Updated",
     "connections.activity.queued": "Sent to review",
@@ -902,8 +901,8 @@ STRINGS: dict[str, object] = {
     "settings.privacy.no_encryption": "No encryption at rest",
     "settings.privacy.no_encryption_text": "Anyone who can sign in to your Windows account can read the database and "
                                            "backups. Protect your account.",
-    "settings.privacy.not_erase": "Retraction is not secure erase",
-    "settings.privacy.not_erase_text": "Retracted memories disappear from BIO CE and AI hosts, but earlier revisions "
+    "settings.privacy.not_erase": "Deleting is not a secure erase",
+    "settings.privacy.not_erase_text": "Deleted memories disappear from BIO CE and AI hosts, but earlier revisions "
                                        "remain in the database file.",
     "settings.privacy.host_backups": "Connection settings backups",
     "settings.privacy.host_backups_text": "Connecting or disconnecting a host first copies its MCP settings to your "
@@ -1012,7 +1011,7 @@ STRINGS: dict[str, object] = {
     "dialog.history.undo": "Undo this suggestion…",
     "dialog.welcome.product": "BIO COMMUNITY EDITION",
     "dialog.welcome.title": "Welcome to BIO CE",
-    "dialog.welcome.intro": "A private memory manager for your AI tools. Before you start, here is how your data is "
+    "dialog.welcome.intro": "A private memory manager for your AI hosts. Before you start, here is how your data is "
                             "handled.",
     "dialog.welcome.local": "Stays on this PC",
     "dialog.welcome.local_text": "Memories you save are stored in a local SQLite file in your Windows user profile. "
@@ -1031,7 +1030,7 @@ STRINGS: dict[str, object] = {
                                    "settings or environment values for other servers and are stored without "
                                    "encryption.",
     "dialog.welcome.limits": "Know the limits",
-    "dialog.welcome.limits_text": "The database is not encrypted. Retraction hides a memory but does not securely "
+    "dialog.welcome.limits_text": "The database is not encrypted. Deleting hides a memory but does not securely "
                                   "erase earlier revisions.",
     "dialog.welcome.continue_note": "Select Continue to create your local BIO CE data folder.",
     "dialog.welcome.continue": "Continue",
@@ -1049,14 +1048,18 @@ STRINGS: dict[str, object] = {
     "dialog.entry.said_on": "Said on (optional, for example 2025-03-14)",
     "dialog.export.title": "Export memories",
     "dialog.export.description": "A .md file with one \"[date] - memory\" line each, which you can paste into another "
-                                 "AI or import back into BIO CE. Retracted memories, the review queue, and older "
-                                 "versions are left out.",
+                                 "AI or import back into BIO CE. Deleted memories, the review queue, and older "
+                                 "revisions are left out.",
     "dialog.export.spaces": "Spaces",
-    "dialog.export.personal_space": "{name} (your personal memories)",
     "dialog.export.personal_warning": "Personal memories will be in the file.",
     "dialog.export.what": "What",
     "dialog.export.include_inbox": "Also the inbox (items not sorted yet)",
     "dialog.export.sources": "Sources",
+    "dialog.export.source.user": "Added here",
+    "dialog.export.source.ai_host": "From an AI",
+    "dialog.export.source.chatgpt": "Imported from ChatGPT",
+    "dialog.export.source.claude": "Imported from Claude",
+    "dialog.export.source.other": "Imported from another AI",
     "dialog.export.dates": "Dates (optional, for example 2025-01-01)",
     "dialog.export.date_to": "to",
     "dialog.export.include_claimed": "Add the source's date to imported memories whose date you haven't confirmed",
@@ -1072,10 +1075,10 @@ STRINGS: dict[str, object] = {
     # Import screen: header, form
     "import.title": "Import memories",
     "import.subtitle": "From ChatGPT, Claude, or another AI: preview first, nothing is overwritten",
-    "import.personal_choice": "Personal (recommended: memories from another AI are mostly about you)",
+    "import.personal_note": "Recommended: memories from another AI are mostly about you.",
     "import.general_note": "General is shared with every connected AI host and recalled by session hooks. Personal "
                            "details belong in Personal.",
-    "import.source.other": "Other",
+    "import.source.other": "Another AI",
     "import.what": "1. What to import",
     "import.what_note": "Paste the list another AI gave you, or open a .md or .txt file. Each line looks like "
                         "\"[2025-03-14] - content\". Dates written by another AI are kept as the source's date until "
@@ -1109,7 +1112,7 @@ STRINGS: dict[str, object] = {
     "import.filter.all": "All entries",
     "import.filter.new": "New",
     "import.filter.exists": "Already there",
-    "import.filter.review": "Goes to review",
+    "import.filter.review": "To review",
     "import.filter.sensitive": "Sensitive only",
     "import.filter.blocked": "Blocked",
     "import.check_visible": "Check visible",
@@ -1206,7 +1209,7 @@ STRINGS: dict[str, object] = {
     "dashboard.status": "BIO CE status",
     "dashboard.ready": "Ready",
     "dashboard.ready_detail": "Database open · stored only on this PC",
-    "dashboard.engine_down": "Engine unavailable",
+    "dashboard.engine_down": "Memory engine unavailable",
     "dashboard.engine_down_detail": "BIO CE can't reach the memory engine. See Settings → Memory engine.",
     "dashboard.needs_attention": "Needs attention",
     "dashboard.read_failed": "The memory database could not be read. Restart BIO CE and try again.",
@@ -1218,7 +1221,7 @@ STRINGS: dict[str, object] = {
     "dashboard.recent": "Recent memories",
     "dashboard.view_all": "View all",
     "dashboard.empty_title": "No memories yet",
-    "dashboard.empty_message": "Save notes, decisions, or preferences you want your AI tools to recall. Nothing is "
+    "dashboard.empty_message": "Save notes, decisions, or preferences you want your AI hosts to recall. Nothing is "
                                "stored until you select Save.",
     "dashboard.empty_add": "Add your first memory",
     "dashboard.hosts": "AI hosts",
@@ -1248,7 +1251,7 @@ STRINGS: dict[str, object] = {
     "app.engine.status_unreadable": "The engine status could not be read.",
     "app.engine.none_connected": "No memory engine is connected.",
     "app.engine.unavailable": "The memory engine is unavailable.",
-    "format.host.codex": "Codex (CLI · desktop app)",
+    "format.host.codex": "Codex",
     "format.host.claude": "Claude Code",
     "format.host.claude_desktop": "Claude desktop app",
     "format.field.title": "Title",
@@ -1256,7 +1259,7 @@ STRINGS: dict[str, object] = {
     "format.field.source": "Source",
     "format.revision.created": "Created",
     "format.revision.edited": "Edited",
-    "format.revision.retracted": "Retracted",
+    "format.revision.retracted": "Deleted",
     "format.not_set": "Not set",
     "format.bytes": {"one": "{size} bytes", "other": "{size} bytes"},
     "format.invalid": "BIO CE could not save this memory because a value is not valid. Check the fields and try again.",
@@ -1270,8 +1273,8 @@ STRINGS: dict[str, object] = {
     #
     "app.edition": "Community Edition",
     "app.footer_line": "Local only · Version {version}",
-    "app.engine.none": "No engine connected",
-    "app.engine.name": "Engine: {name}",
+    "app.engine.none": "No memory engine connected",
+    "app.engine.name": "Memory engine: {name}",
     "app.not_available": "This action is not available.",
     "app.not_available_title": "Not available",
     "app.personal_failed": "BIO CE couldn't change Personal.",

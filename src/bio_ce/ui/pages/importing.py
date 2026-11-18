@@ -56,7 +56,8 @@ from bio_ce.ui.widgets import (
 )
 
 def personal_choice() -> str:
-    return t("import.personal_choice")
+    """"개인" as on every screen (rc3); the recommendation is the note below the box when it is chosen."""
+    return t("space.personal")
 
 
 def general_note() -> str:
@@ -320,7 +321,8 @@ class ImportPage(Page):
             self.destination.set("")
             self._sync_buttons()
             return False
-        self.destination_note.configure(text=general_note() if chosen == "general" else "")
+        notes = {"general": general_note(), "personal": t("import.personal_note")}
+        self.destination_note.configure(text=notes.get(chosen, ""))
         if self.preview is not None and chosen:
             self.planner.set_destination(self.preview, [item.key for item in self.preview.items], chosen)
             self.render_items()

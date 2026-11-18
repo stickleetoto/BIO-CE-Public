@@ -65,11 +65,11 @@ class UIFormatTests(unittest.TestCase):
         self.assertNotIn("scope and source", message)
 
     def test_labels_for_hosts_and_revision_kinds(self):
-        self.assertEqual(host_name("codex"), "Codex (CLI · desktop app)")
+        self.assertEqual(host_name("codex"), "Codex")  # one name on every screen (rc3)
         self.assertEqual(host_name("claude"), "Claude Code")
         self.assertEqual(revision_kind_label(RevisionKind.ASSERTION), "Created")
         self.assertEqual(revision_kind_label(RevisionKind.REVISION), "Edited")
-        self.assertEqual(revision_kind_label(RevisionKind.RETRACTION), "Retracted")
+        self.assertEqual(revision_kind_label(RevisionKind.RETRACTION), "Deleted")  # as the Deleted memories tab
 
 
 if __name__ == "__main__":

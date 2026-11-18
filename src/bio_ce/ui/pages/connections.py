@@ -161,6 +161,10 @@ def host_message(host: str, status: HostStatus | None) -> str:
     return t("connections.status.installed", name=name)
 
 
+# What an AI tool asked for, by the stored action, in the review cards' words (one name for one thing, rc3).
+ACTIVITY_ACTIONS = {"create": "hub.review.kind_create", "write": "hub.review.kind_create",
+                    "update": "hub.review.kind_update", "retract": "hub.review.kind_retract"}
+
 ACTIVITY_LABELS = _Texts(lambda: {
     "created": (t("connections.activity.created"), "success"),
     "updated": (t("connections.activity.updated"), "success"),
@@ -782,7 +786,9 @@ class ConnectionsPage(Page):
             row = tk.Frame(self.activity_list, background=c.surface)
             row.pack(fill="x", pady=theme.px(2))
             Pill(row, theme, label, kind).pack(side="left", anchor="n")
-            text = f"{host_name(entry.host)} · {entry.action.replace('-', ' ')}"
+            # What the tool asked for, in words (rc3: the stored action "create" showed as it is on Korean screens).
+            action = ACTIVITY_ACTIONS.get(entry.action, "connections.activity.action.other")
+            text = f"{host_name(entry.host)} · {t(action)}"
             if entry.title:
                 text += f" · “{preview(entry.title, 60)}”"
             reason = entry.detail.get("decision") or entry.detail.get("reason") or ""

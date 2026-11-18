@@ -56,7 +56,7 @@ class PersonalUiTests(unittest.TestCase):
         hub = self.app.memories
         self.assertEqual(hub.space_filter, "personal")
         self.assertIn("personal", hub.chips)  # the Personal chip shows only while Personal is on
-        self.assertIn("locked", hub.chips["personal"].text)
+        self.assertEqual(hub.chips["personal"].text, "Personal")  # the one name on every screen (rc3)
         self.service.add(title="Clinic", content="The user's clinic is on Elm Street.", source_ref="test")
         with patch.object(self.app, "confirm", return_value=True):
             self.assertTrue(self.settings.turn_off_personal())

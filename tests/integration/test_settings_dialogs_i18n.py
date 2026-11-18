@@ -13,7 +13,6 @@ import tkinter as tk
 import unittest
 from unittest.mock import patch
 
-from bio_ce.exporter import SOURCE_KINDS, SOURCE_LABELS
 from bio_ce.ui import i18n
 from bio_ce.ui.dialogs import (
     WELCOME_POINTS,
@@ -23,6 +22,7 @@ from bio_ce.ui.dialogs import (
     HistoryDialog,
     NameDialog,
     ReviewEditDialog,
+    export_sources,
     ask_privacy_consent,
 )
 from bio_ce.ui.i18n import en, ko
@@ -142,10 +142,12 @@ class SettingsAndDialogsInKoreanTests(unittest.TestCase):
         problems += self.show(case, EntryEditDialog(root, theme, content="자전거를 탄다.", source_date="2025-07-02"),
                               "entry edit", (560, 420))
         export = ExportDialog(root, theme, spaces=app.spaces(), current="general",
-                              sources=[(key, SOURCE_LABELS[key]) for key in SOURCE_KINDS])
+                              sources=export_sources())
         export.space_vars["personal"].set(True)
-        self.assertIn("개인 (내 개인 기억)", texts(export))  # General and Personal by their Korean names (Q5)
+        self.assertIn("개인", texts(export))  # General and Personal by their one Korean names (Q5, rc3)
+        self.assertNotIn("개인 (내 개인 기억)", texts(export))
         self.assertIn("일반", texts(export))
+        self.assertIn("직접 추가", texts(export))  # the sources in Korean too (rc3: they were English)
         problems += self.show(case, export, "export", (520, 640))
         self.assertEqual(problems, [], "\n".join(problems))
         # positive control: the dialog audit sees a shown dialog, so a Korean button made far too long is caught

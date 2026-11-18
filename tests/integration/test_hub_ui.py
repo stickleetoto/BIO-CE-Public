@@ -159,7 +159,8 @@ class HubUiTests(unittest.TestCase):
         self.assertEqual({item.title for item in hub.items}, {"Editor", "Indent", "Running"})
         self.assertNotIn("Old phone", {item.title for item in hub.items}, "a retracted memory is never current")
         card = self.card(self.private.memory_id)
-        self.assertIn("Personal (locked)", card.meta_label._full)
+        self.assertTrue(card.meta_label._full.startswith("Personal · "))  # one name on every screen (rc3)
+        self.assertNotIn("(locked)", card.meta_label._full)
         self.assertEqual(int(card.text_label.max_lines), 2)
         hub.set_space_filter("personal")
         self.assertEqual([item.title for item in hub.items], ["Running"])
@@ -267,7 +268,7 @@ class HubUiTests(unittest.TestCase):
         self.assertNotIn("Version", meta)
         self.assertNotIn("Source", meta)
         self.assertFalse(drawer.history_button.winfo_ismapped())
-        self.assertEqual(drawer.history.hint_label.cget("text"), "1 version")
+        self.assertEqual(drawer.history.hint_label.cget("text"), "1 revision")
         self.assertFalse(drawer.details.opened)
         self.assertFalse(drawer.detail_values["source"].winfo_ismapped())
         drawer.details.toggle.invoke()
@@ -348,7 +349,7 @@ class HubUiTests(unittest.TestCase):
         self.assertEqual(hub.drawer.record.title, "Editor (helix)")
         hub.drawer.open_history()
         self.settle()
-        self.assertEqual(hub.drawer.history.hint_label.cget("text"), "2 versions")  # the count, once, as the hint
+        self.assertEqual(hub.drawer.history.hint_label.cget("text"), "2 revisions")  # the count, once, as the hint
 
     def test_ctrl_n_adds_to_the_space_chosen_in_the_form(self):
         self.hub.keys.app.start_new_memory()

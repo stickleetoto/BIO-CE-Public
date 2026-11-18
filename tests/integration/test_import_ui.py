@@ -24,7 +24,8 @@ from bio_ce.ui.widgets import ScrollFrame
 from tests.ui_audit import HEADING_DIVIDER, style_padding_x
 
 # The English texts as written before they moved to i18n keys (v0.4.4 U5-C); the screen must show them unchanged.
-PERSONAL_CHOICE = "Personal (recommended: memories from another AI are mostly about you)"
+PERSONAL_CHOICE = "Personal"  # the space's one name (rc3); the recommendation is the note below
+PERSONAL_NOTE = "Recommended: memories from another AI are mostly about you."
 GENERAL_NOTE = ("General is shared with every connected AI host and recalled by session hooks. Personal details "
                 "belong in Personal.")
 from tests.integration.test_auto_memory_ui import FakeManagedConnections
@@ -88,6 +89,7 @@ class ImportUiTests(unittest.TestCase):
             self.assertTrue(self.page.turn_on_personal())
         self.assertEqual(self.page.destination_id(), "personal")
         self.assertTrue(self.page.preview_button.enabled)
+        self.assertEqual(self.page.destination_note.cget("text"), PERSONAL_NOTE)
 
     def test_general_needs_the_users_choice_and_explains_itself(self):
         self.page.set_text(LIST)

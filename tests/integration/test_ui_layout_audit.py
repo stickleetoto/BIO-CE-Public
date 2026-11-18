@@ -21,12 +21,11 @@ from unittest.mock import patch
 from bio_ce.control_store import MODE_AUTO_MEMORY
 from bio_ce.core.models import MemoryScope, SourceProvenance
 from bio_ce.desktop import AppDataPaths, BIOCEDesktop, DesktopMemoryService
-from bio_ce.exporter import SOURCE_KINDS, SOURCE_LABELS
 from bio_ce.spaces import PERSONAL_SPACE
 from bio_ce.storage.sqlite_store import SQLiteMemoryStore
 from bio_ce.ui import i18n
 from bio_ce.ui.app import MINIMUM_SIZE
-from bio_ce.ui.dialogs import ExportDialog
+from bio_ce.ui.dialogs import ExportDialog, export_sources
 from bio_ce.ui.hub.common import READING_WIDTH, columns_for
 from bio_ce.ui.hub.data import INBOX as INBOX_TAB, MEMORIES, RETRACTED, REVIEWS, SUGGESTIONS
 from bio_ce.ui.theme import CONTENT_MAX_WIDTH, RECENT_TWO_COLUMNS_FROM
@@ -198,7 +197,7 @@ class LayoutAuditTests(unittest.TestCase):
         problems += self.visit("connections", "connections (details opened)")
         problems += self.visit("settings")
         dialog = ExportDialog(self.root, self.app.theme, spaces=self.app.spaces(), current="general",
-                              sources=[(key, SOURCE_LABELS[key]) for key in SOURCE_KINDS])
+                              sources=export_sources())
         try:
             dialog.space_vars["personal"].set(True)
             for _ in range(6):

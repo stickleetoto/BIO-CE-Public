@@ -43,9 +43,7 @@ class HubCard(tk.Frame):
                                      max_lines=2, font=theme.font("caption"), foreground=c.text_secondary)
         if shown or not (item.text or "").strip():
             self.text_label.pack(fill="x", pady=(theme.px(SPACE_XS), 0))
-        meta = space_label(item.space)
-        if item.space is not None and item.space.is_personal:
-            meta = t("hub.card.personal_meta", space=meta)
+        meta = space_label(item.space)  # the same name as the chips and the drawer (rc3)
         stamp = when(item.when)
         if item.state == RETRACTED and stamp:
             stamp = t("hub.retracted.when", when=stamp)
