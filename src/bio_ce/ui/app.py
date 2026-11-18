@@ -145,7 +145,8 @@ class BIOCEDesktop:
         self.main.pack(side="left", fill="both", expand=True)
         gutter = self.theme.px(SPACE_XXL)
         header = tk.Frame(self.main, background=c.bg)
-        header.pack(fill="x", padx=gutter, pady=(self.theme.px(SPACE_XXL), self.theme.px(SPACE_XL)))
+        header.pack(fill="x", padx=gutter, pady=(self.theme.px(SPACE_XL), self.theme.px(SPACE_L)))  # the page header: 24/16 (was 28/20; 32/24 left the
+        # memory screen no height for the drawer at the CI screen with large text, mirror CI 2026-11-18)
         # The page's buttons are packed first: when the header is too narrow the title text is shortened, never a
         # button (a cut-off button ignores clicks).
         self.header_actions = tk.Frame(header, background=c.bg)

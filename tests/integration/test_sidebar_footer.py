@@ -38,6 +38,12 @@ class SidebarFooterTests(unittest.TestCase):
         theme = app.theme
         root.geometry(f"{theme.px(MINIMUM_SIZE[0] + 200)}x{theme.px(MINIMUM_SIZE[1])}")  # wide enough for the full sidebar
         self.settle(root)
+        # A small screen (the CI runner) can't show that width, and the sidebar there shows icons only (the footer
+        # text is hidden by design): show the full sidebar so the line itself is checked (mirror CI 2026-11-18).
+        app._apply_compact(False)
+        self.settle(root)
+        app.fit_footer_line()
+        self.settle(root)
         return app, root
 
     @staticmethod

@@ -84,7 +84,7 @@ SPACE_XXL = 32
 # Buttons, by role: (horizontal padding, vertical padding, text size). The vertical padding sets the height.
 BUTTON_SIZES: dict[str, tuple[int, int, str]] = {
     "regular": (14, 6, "body"),  # every button unless one below fits its role
-    "compact": (10, 3, "body"),  # chips: spaces, Filters
+    "compact": (10, 3, "body"),  # chips (spaces, Filters) and the state tabs
     "small": (8, 2, "caption"),  # buttons on a memory card
     "icon": (7, 5, "body"),  # icon-only buttons (×, copy)
 }

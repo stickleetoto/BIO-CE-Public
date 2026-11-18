@@ -130,10 +130,10 @@ class HubPage(Page):
         self.tabs: dict[str, Button] = {}
         for state in STATES:
             self.tabs[state] = self.tab_row.add(Button(self.tab_row, theme, t(TAB_KEYS[state]), variant="tab",
-                                                       command=lambda s=state: self.show_state(s)))
+                                                       size="compact", command=lambda s=state: self.show_state(s)))
         # Retracted memories: a view reached from here, not a fifth tab (decision logged in the U1+U2 report).
         self.retracted_tab = self.tab_row.add(Button(self.tab_row, theme, t("hub.tab.retracted"), variant="link",
-                                                     command=lambda: self.show_state(RETRACTED),
+                                                     size="compact", command=lambda: self.show_state(RETRACTED),
                                                      tooltip=t("hub.retracted.tip")))
         self.tab_row.set_visible(self.retracted_tab, False)
         self.result_label = self.tab_row.add(tk.Label(self.tab_row, text="", font=theme.font("caption"),
