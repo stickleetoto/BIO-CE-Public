@@ -68,12 +68,35 @@ def raised(colors: Palette) -> Palette:
     return replace(colors, surface=colors.surface_raised)
 
 
+# Size tokens (rc3, owner 2026-11-18): every screen takes its spacing, button sizes, and text sizes from this table
+# only; a test refuses a number written in a screen instead (tests/unit/test_ui_tokens.py). All at 100% scale and
+# passed through Theme.px().
+#
+# Spacing (gaps, margins, padding):
+SPACE_XXS = 2
 SPACE_XS = 4
 SPACE_S = 8
 SPACE_M = 12
 SPACE_L = 16
 SPACE_XL = 24
 SPACE_XXL = 32
+#
+# Buttons, by role: (horizontal padding, vertical padding, text size). The vertical padding sets the height.
+BUTTON_SIZES: dict[str, tuple[int, int, str]] = {
+    "regular": (14, 6, "body"),  # every button unless one below fits its role
+    "compact": (10, 3, "body"),  # chips: spaces, Filters
+    "small": (8, 2, "caption"),  # buttons on a memory card
+    "icon": (7, 5, "body"),  # icon-only buttons (×, copy)
+}
+#
+# Text sizes are the fonts below (_FONT_CHOICES: body, caption, title, …); screens name them, never a point size.
+#
+# Parts with a fixed size of their own:
+ACCENT_BAR = 3  # a thin coloured bar: a selected sidebar item, a notice's edge, the progress bar
+BRAND_MARK = 28  # the square logo in the sidebar
+TABLE_ROW = 34  # one row of a table (import preview)
+COMBO_ARROW = 9  # the arrow of a drop-down
+HAIRLINE = 1  # a 1 px line or border
 
 SIDEBAR_WIDTH = 232
 SIDEBAR_COMPACT_WIDTH = 60
@@ -209,7 +232,7 @@ class Theme:
             bordercolor=trough,
             lightcolor=c.border_strong,
             darkcolor=c.border_strong,
-            arrowsize=self.px(9),
+            arrowsize=self.px(COMBO_ARROW),
             gripcount=0,
             relief="flat",
         )
@@ -252,7 +275,7 @@ class Theme:
             bordercolor=c.surface,
             lightcolor=c.surface,
             darkcolor=c.surface,
-            rowheight=self.px(34),
+            rowheight=self.px(TABLE_ROW),
             font=self.fonts["body"],
             indent=0,
         )
@@ -270,10 +293,10 @@ class Theme:
             darkcolor=c.surface,
             relief="flat",
             font=self.fonts["caption_strong"],
-            padding=(self.px(10), self.px(6)),
+            padding=(self.px(SPACE_S), self.px(SPACE_S)),
         )
         style.map("BIO.Treeview.Heading", background=[("active", c.surface)], relief=[("pressed", "flat")])
-        style.configure("BIO.Treeview.Item", padding=(self.px(10), 0))
+        style.configure("BIO.Treeview.Item", padding=(self.px(SPACE_S), 0))
 
         style.configure(
             "BIO.Horizontal.TProgressbar",
@@ -282,7 +305,7 @@ class Theme:
             bordercolor=c.surface_alt,
             lightcolor=c.accent_text,
             darkcolor=c.accent_text,
-            thickness=self.px(3),
+            thickness=self.px(ACCENT_BAR),
         )
         style.configure(
             "BIO.TCombobox",
@@ -293,7 +316,7 @@ class Theme:
             bordercolor=c.border_strong,
             lightcolor=c.surface_alt,
             darkcolor=c.surface_alt,
-            padding=(self.px(8), self.px(4)),
+            padding=(self.px(SPACE_S), self.px(SPACE_XS)),
         )
         style.map(
             "BIO.TCombobox",
@@ -401,8 +424,15 @@ def app_icon(window: tk.Misc, colors: Palette) -> tk.PhotoImage | None:
 
 
 __all__ = [
+    "ACCENT_BAR",
+    "BRAND_MARK",
+    "BUTTON_SIZES",
+    "COMBO_ARROW",
+    "HAIRLINE",
     "ICONS",
     "Palette",
+    "SPACE_XXS",
+    "TABLE_ROW",
     "raised",
     "READING_MAX_WIDTH",
     "SIDEBAR_COMPACT_BELOW",

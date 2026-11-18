@@ -14,7 +14,17 @@ from bio_ce.ui.format import format_timestamp, revision_kind_label
 from bio_ce.ui.hub.common import space_label
 from bio_ce.ui.hub.filters import source_text
 from bio_ce.ui.i18n import t
-from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS, Theme, apply_window_chrome
+from bio_ce.ui.theme import (
+    SPACE_L,
+    SPACE_M,
+    SPACE_S,
+    SPACE_XL,
+    SPACE_XS,
+    SPACE_XXL,
+    SPACE_XXS,
+    Theme,
+    apply_window_chrome,
+)
 from bio_ce.ui.widgets import Button, Field, ScrollFrame, TextArea, WrapLabel
 
 
@@ -45,7 +55,7 @@ class Dialog(tk.Toplevel):
         self.footer.pack(side="bottom", fill="x")
         tk.Frame(self, height=1, background=c.border).pack(side="bottom", fill="x")
         self.buttons = tk.Frame(self.footer, background=c.bg)
-        self.buttons.pack(side="right", padx=theme.px(SPACE_XL - 2), pady=theme.px(SPACE_L - 2))
+        self.buttons.pack(side="right", padx=theme.px(SPACE_XL), pady=theme.px(SPACE_L))
         self.content = tk.Frame(self, background=c.surface)
         self.content.pack(side="top", fill="both", expand=True,
                           padx=theme.px(SPACE_XL), pady=(theme.px(SPACE_XL), theme.px(SPACE_L)))
@@ -129,7 +139,7 @@ class ConfirmDialog(Dialog):
             box = tk.Frame(column, background=c.surface_alt, highlightthickness=1, highlightbackground=c.border)
             box.pack(fill="x", pady=(theme.px(SPACE_M), 0))
             tk.Label(box, text=quote, font=theme.font("body_strong"), background=c.surface_alt, foreground=c.text,
-                     anchor="w", justify="left", wraplength=wrap - theme.px(24)).pack(
+                     anchor="w", justify="left", wraplength=wrap - theme.px(SPACE_XL)).pack(
                 fill="x", padx=theme.px(SPACE_M), pady=theme.px(SPACE_S))
         for point in points:
             row = tk.Frame(column, background=c.surface)
@@ -137,14 +147,14 @@ class ConfirmDialog(Dialog):
             tk.Label(row, text="•", font=theme.font("body"), background=c.surface,
                      foreground=c.text_muted).pack(side="left", anchor="n", padx=(0, theme.px(SPACE_S)))
             tk.Label(row, text=point, font=theme.font("body"), background=c.surface, foreground=c.text_secondary,
-                     anchor="w", justify="left", wraplength=wrap - theme.px(16)).pack(side="left", fill="x")
+                     anchor="w", justify="left", wraplength=wrap - theme.px(SPACE_L)).pack(side="left", fill="x")
         self.option_vars: dict[str, tk.BooleanVar] = {}
         for key, label, default in options:
             variable = tk.BooleanVar(self, value=default)
             self.option_vars[key] = variable
             tk.Checkbutton(column, text=label, variable=variable, font=theme.font("body"), background=c.surface,
                            foreground=c.text, activebackground=c.surface, activeforeground=c.text,
-                           selectcolor=c.surface_alt, anchor="w", justify="left", wraplength=wrap - theme.px(24),
+                           selectcolor=c.surface_alt, anchor="w", justify="left", wraplength=wrap - theme.px(SPACE_XL),
                            highlightthickness=0, borderwidth=0).pack(fill="x", pady=(theme.px(SPACE_S), 0))
         for label, action in links:
             Button(column, theme, label, variant="link", command=lambda act=action: self._open_link(act)).pack(
@@ -280,7 +290,7 @@ class ShortcutsDialog(Dialog):
         self.rows = []
         for index, shortcut in enumerate(SHORTCUTS):
             tk.Label(grid, text=shortcut.shown, font=theme.font("mono"), background=c.surface_alt, foreground=c.text,
-                     padx=theme.px(SPACE_S), pady=theme.px(1)).grid(row=index, column=0, sticky="w", pady=theme.px(3))
+                     padx=theme.px(SPACE_S), pady=theme.px(1)).grid(row=index, column=0, sticky="w", pady=theme.px(SPACE_XS))
             label = WrapLabel(grid, t(shortcut.text), font=theme.font("body"), foreground=c.text_secondary)
             label.grid(row=index, column=1, sticky="we", padx=(theme.px(SPACE_M), 0))
             self.rows.append(label)
@@ -521,7 +531,7 @@ class ChoiceDialog(Dialog):
             if detail:
                 tk.Label(self.content, text=detail, font=theme.font("caption"), background=c.surface,
                          foreground=c.text_muted, anchor="w", justify="left", wraplength=wrap).pack(
-                    fill="x", padx=(theme.px(24), 0))
+                    fill="x", padx=(theme.px(SPACE_XL), 0))
         if note:
             WrapLabel(self.content, note, font=theme.font("caption"), foreground=c.text_muted).pack(
                 fill="x", pady=(theme.px(SPACE_M), 0))
@@ -546,7 +556,7 @@ def ask_privacy_consent(root: tk.Tk, theme: Theme) -> bool:
     scroll = ScrollFrame(page, theme, max_width=620, center=True)
     scroll.pack(fill="both", expand=True)
     body = tk.Frame(scroll.body, background=c.surface)
-    body.pack(fill="x", padx=theme.px(36), pady=(theme.px(32), theme.px(SPACE_XL)))
+    body.pack(fill="x", padx=theme.px(SPACE_XXL), pady=(theme.px(SPACE_XXL), theme.px(SPACE_XL)))
     tk.Label(body, text=t("dialog.welcome.product"), font=theme.font("caption_strong"), background=c.surface,
              foreground=c.accent_text, anchor="w").pack(fill="x")
     tk.Label(body, text=t("dialog.welcome.title"), font=theme.font("display"), background=c.surface,
@@ -556,10 +566,10 @@ def ask_privacy_consent(root: tk.Tk, theme: Theme) -> bool:
     for icon, heading_key, text_key in WELCOME_POINTS:
         heading, text = t(heading_key), t(text_key)
         row = tk.Frame(body, background=c.surface)
-        row.pack(fill="x", pady=theme.px(7))
+        row.pack(fill="x", pady=theme.px(SPACE_S))
         tk.Label(row, text=theme.icon(icon), font=theme.icon_font("normal"), background=c.surface,
                  foreground=c.warning if icon == "warning" else c.accent_text, width=2).pack(
-            side="left", anchor="n", padx=(0, theme.px(SPACE_M)), pady=(theme.px(2), 0))
+            side="left", anchor="n", padx=(0, theme.px(SPACE_M)), pady=(theme.px(SPACE_XXS), 0))
         column = tk.Frame(row, background=c.surface)
         column.pack(side="left", fill="x", expand=True)
         tk.Label(column, text=heading, font=theme.font("body_strong"), background=c.surface, foreground=c.text,

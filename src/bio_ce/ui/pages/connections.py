@@ -37,7 +37,7 @@ from bio_ce.ui.i18n import t
 from bio_ce.ui.pages import Page
 from bio_ce.ui.pages.dashboard import host_pill
 from bio_ce.ui.service_text import say
-from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS
+from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS, SPACE_XXS
 from bio_ce.ui.widgets import (
     Button,
     Card,
@@ -187,7 +187,7 @@ class HostCard(Card):
 
     def __init__(self, page: ConnectionsPage, master: tk.Misc, host: str) -> None:
         theme = page.theme
-        super().__init__(master, theme, padding=SPACE_L + 4)
+        super().__init__(master, theme, padding=SPACE_L)
         c = theme.colors
         self.page = page
         self.host = host
@@ -206,7 +206,7 @@ class HostCard(Card):
         tk.Label(tile, text=theme.icon("terminal") or ">_", font=theme.icon_font("large") or theme.font("body_strong"),
                  background=c.surface_alt, foreground=c.text_secondary).place(relx=0.5, rely=0.5, anchor="center")
         names = tk.Frame(header, background=c.surface)
-        names.pack(side="left", fill="x", expand=True, padx=(theme.px(SPACE_M + 2), 0))
+        names.pack(side="left", fill="x", expand=True, padx=(theme.px(SPACE_L), 0))
         section_label(names, theme, host_name(host)).pack(fill="x")
         # What the tool is, in one line, only while it is not connected; the whole paragraph is in the details.
         self.desc_line = ClampLabel(names, theme, HOST_DESCRIPTIONS[host], max_lines=1, font=theme.font("caption"),
@@ -239,7 +239,7 @@ class HostCard(Card):
         self.attention = tk.Frame(body, background=c.surface, cursor="hand2")
         attention_icon = tk.Label(self.attention, text=theme.icon("warning") or "!", font=theme.icon_font("small"),
                                   background=c.surface, foreground=c.warning, cursor="hand2")
-        attention_icon.pack(side="left", anchor="n", pady=(theme.px(2), 0))
+        attention_icon.pack(side="left", anchor="n", pady=(theme.px(SPACE_XXS), 0))
         self.attention_label = WrapLabel(self.attention, font=theme.font("body_strong"), foreground=c.text,
                                          cursor="hand2")
         self.attention_label.pack(side="left", fill="x", expand=True, padx=(theme.px(SPACE_S), 0))
@@ -267,7 +267,7 @@ class HostCard(Card):
         support = auto_memory_support(host)
         self.support = support
         capability = tk.Frame(details, background=c.surface)
-        capability.pack(fill="x", pady=(theme.px(SPACE_S + 2), 0))
+        capability.pack(fill="x", pady=(theme.px(SPACE_M), 0))
         self.capability = capability
         tk.Label(capability, text=t("connections.auto_support"), font=theme.font("caption_strong"),
                  background=c.surface, foreground=c.text_muted, anchor="w").pack(side="left")
@@ -555,10 +555,10 @@ class HostCard(Card):
         for check in checks:
             icon, color_name = _OUTCOME_STYLE.get(check.outcome, ("info", "info"))
             row = tk.Frame(self.results, background=c.surface)
-            row.pack(fill="x", pady=theme.px(3))
+            row.pack(fill="x", pady=theme.px(SPACE_XS))
             tk.Label(row, text=theme.icon(icon) or check.outcome.upper(), font=theme.icon_font("small"),
                      background=c.surface, foreground=getattr(c, color_name), width=2).pack(
-                side="left", anchor="n", pady=(theme.px(2), 0))
+                side="left", anchor="n", pady=(theme.px(SPACE_XXS), 0))
             column = tk.Frame(row, background=c.surface)
             column.pack(side="left", fill="x", expand=True, padx=(theme.px(SPACE_S), 0))
             tk.Label(column, text=check.name, font=theme.font("body_strong"), background=c.surface,
@@ -594,7 +594,7 @@ class ConnectionsPage(Page):
         callout.configure(highlightbackground=c.selection, highlightcolor=c.selection)
         callout.pack(fill="x")
         tk.Label(callout.body, text=theme.icon("lock"), font=theme.icon_font("normal"), background=c.info_bg,
-                 foreground=c.info).pack(side="left", anchor="n", padx=(0, theme.px(SPACE_M)), pady=theme.px(2))
+                 foreground=c.info).pack(side="left", anchor="n", padx=(0, theme.px(SPACE_M)), pady=theme.px(SPACE_XXS))
         column = tk.Frame(callout.body, background=c.info_bg)
         column.pack(side="left", fill="x", expand=True)
         # One line and "More ▸" (POLISH §3.1); the paragraphs are inside. It starts open only when no AI tool is
@@ -608,7 +608,7 @@ class ConnectionsPage(Page):
         self.callout_title.bind("<ButtonRelease-1>", lambda _e: self.callout_more.flip(), add="+")
         self.callout_body = WrapLabel(self.callout_more.body, t("connections.callout.body"), font=theme.font("body"),
                                       foreground=c.text_secondary, background=c.info_bg)
-        self.callout_body.pack(fill="x", pady=(theme.px(2), 0))
+        self.callout_body.pack(fill="x", pady=(theme.px(SPACE_XXS), 0))
         WrapLabel(self.callout_more.body, app_closed_note(), font=theme.font("body_strong"), foreground=c.text,
                   background=c.info_bg).pack(fill="x", pady=(theme.px(SPACE_S), 0))
         self._callout_decided = False
@@ -620,7 +620,7 @@ class ConnectionsPage(Page):
             self.cards[host] = card
 
         # v0.4.4: what hosts ask to change is reviewed on the memory screen (Memories → Reviews), not here.
-        self.activity_card = Card(body, theme, padding=SPACE_L + 4)
+        self.activity_card = Card(body, theme, padding=SPACE_L)
         self.activity_card.pack(fill="x", pady=(theme.px(SPACE_L), 0))
         activity_head = tk.Frame(self.activity_card.body, background=c.surface)
         activity_head.pack(fill="x")
@@ -644,7 +644,7 @@ class ConnectionsPage(Page):
         advanced = self.advanced.body
 
         # v0.4.4 §9.2: the running BIO CE MCP servers of all connections, and ending the long-idle ones on request.
-        servers = Card(advanced, theme, padding=SPACE_L + 4)
+        servers = Card(advanced, theme, padding=SPACE_L)
         servers.pack(fill="x", pady=(theme.px(SPACE_S), 0))
         servers_row = tk.Frame(servers.body, background=c.surface)
         servers_row.pack(fill="x")
@@ -660,7 +660,7 @@ class ConnectionsPage(Page):
                                       command=self.end_idle_servers)
         self.end_idle_button.pack(side="right", anchor="n", padx=(theme.px(SPACE_L), 0))
 
-        backups = Card(advanced, theme, padding=SPACE_L + 4)
+        backups = Card(advanced, theme, padding=SPACE_L)
         backups.pack(fill="x", pady=(theme.px(SPACE_L), 0))
         row = tk.Frame(backups.body, background=c.surface)
         row.pack(fill="x")
@@ -784,7 +784,7 @@ class ConnectionsPage(Page):
         for entry in activity if self.activity_all else activity[:ACTIVITY_LINES]:
             label, kind = ACTIVITY_LABELS.get(entry.outcome, (entry.outcome, "neutral"))
             row = tk.Frame(self.activity_list, background=c.surface)
-            row.pack(fill="x", pady=theme.px(2))
+            row.pack(fill="x", pady=theme.px(SPACE_XXS))
             Pill(row, theme, label, kind).pack(side="left", anchor="n")
             # What the tool asked for, in words (rc3: the stored action "create" showed as it is on Korean screens).
             action = ACTIVITY_ACTIONS.get(entry.action, "connections.activity.action.other")

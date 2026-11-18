@@ -21,7 +21,7 @@ from bio_ce.ui.i18n import AUTO, NAMES, language, resolve, t
 from bio_ce.ui.pages import Page
 from bio_ce.ui.service_text import say
 from bio_ce.ui.shortcuts import SHORTCUTS
-from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS
+from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS, SPACE_XXL, SPACE_XXS
 from bio_ce.ui.widgets import (
     Button,
     Card,
@@ -116,7 +116,7 @@ class SettingsPage(Page):
         Button(row, theme, t("settings.storage.open_folder"), icon="folder", command=app.open_data_folder).pack(
             side="right", padx=(theme.px(SPACE_S), 0))
         Button(row, theme, "", icon="copy", tooltip=t("settings.storage.copy_path"), command=self._copy_path,
-               padx=9).pack(
+               size="icon").pack(
             side="right", padx=(theme.px(SPACE_S), 0))
         self.storage_stats = tk.Label(storage, font=theme.font("caption"), background=c.surface,
                                       foreground=c.text_muted, anchor="w")
@@ -170,7 +170,7 @@ class SettingsPage(Page):
         backup_note.pack(fill="x", pady=(theme.px(SPACE_S), 0))
         self._point(backup_note, "backup", t("settings.privacy.host_backups"), t("settings.privacy.host_backups_text"))
         Button(privacy, theme, t("settings.privacy.open_backups"), variant="link",
-               command=app.open_connection_backups, anchor="w").pack(anchor="w", padx=(theme.px(30), 0))
+               command=app.open_connection_backups, anchor="w").pack(anchor="w", padx=(theme.px(SPACE_XXL), 0))
 
         shortcuts = self._card(body, t("shortcut.dialog_title"), None)
         grid = tk.Frame(shortcuts, background=c.surface)
@@ -179,7 +179,7 @@ class SettingsPage(Page):
         for index, shortcut in enumerate(SHORTCUTS):  # one table for the keys and this list (v0.4.4 F3)
             tk.Label(grid, text=shortcut.shown, font=theme.font("mono"), background=c.surface_alt, foreground=c.text,
                      padx=theme.px(SPACE_S), pady=theme.px(1)).grid(row=index, column=0, sticky="w",
-                                                                    pady=theme.px(3))
+                                                                    pady=theme.px(SPACE_XS))
             label = WrapLabel(grid, t(shortcut.text), font=theme.font("body"), foreground=c.text_secondary)
             label.grid(row=index, column=1, sticky="we", padx=(theme.px(SPACE_M), 0))
             self.shortcut_rows.append(label)
@@ -314,7 +314,7 @@ class SettingsPage(Page):
                      foreground=c.text_muted, anchor="w").pack(fill="x")
             for key, label in folders:
                 line = tk.Frame(inner, background=c.surface_alt)
-                line.pack(fill="x", pady=(theme.px(2), 0))
+                line.pack(fill="x", pady=(theme.px(SPACE_XXS), 0))
                 tk.Label(line, text=f"  {label}", font=theme.font("body"), background=c.surface_alt,
                          foreground=c.text_secondary, anchor="w").pack(side="left")
                 Button(line, theme, t("settings.spaces.unlink"), variant="link",
@@ -445,7 +445,7 @@ class SettingsPage(Page):
         self.inbox_values: dict[str, tk.StringVar] = {}
         for row, (key, label, unit) in enumerate(self.INBOX_FIELDS):
             tk.Label(grid, text=t(label), font=theme.font("body"), background=c.surface, foreground=c.text,
-                     anchor="w").grid(row=row, column=0, sticky="w", pady=theme.px(3))
+                     anchor="w").grid(row=row, column=0, sticky="w", pady=theme.px(SPACE_XS))
             value = tk.StringVar(master=self)
             Field(grid, theme, textvariable=value, width=8).grid(row=row, column=1, sticky="w",
                                                                   padx=(theme.px(SPACE_M), theme.px(SPACE_S)))
@@ -575,7 +575,7 @@ class SettingsPage(Page):
 
     def _card(self, body: tk.Misc, title: str, description: str | None) -> tk.Frame:
         theme, c = self.theme, self.colors
-        card = Card(body, theme, padding=SPACE_L + 4)
+        card = Card(body, theme, padding=SPACE_L)
         card.pack(fill="x", pady=(0, theme.px(SPACE_L)))  # page cards 16 apart (POLISH §2.4)
         section_label(card.body, theme, title).pack(fill="x")
         if description:
@@ -586,10 +586,10 @@ class SettingsPage(Page):
     def _point(self, master: tk.Misc, icon: str, heading: str, text: str) -> None:
         theme, c = self.theme, self.colors
         row = tk.Frame(master, background=c.surface)
-        row.pack(fill="x", pady=(theme.px(SPACE_S + 2), 0))
+        row.pack(fill="x", pady=(theme.px(SPACE_M), 0))
         tk.Label(row, text=theme.icon(icon), font=theme.icon_font("normal"), background=c.surface,
                  foreground=c.warning if icon in {"warning", "retract"} else c.accent_text, width=2).pack(
-            side="left", anchor="n", padx=(0, theme.px(SPACE_S)), pady=(theme.px(2), 0))
+            side="left", anchor="n", padx=(0, theme.px(SPACE_S)), pady=(theme.px(SPACE_XXS), 0))
         column = tk.Frame(row, background=c.surface)
         column.pack(side="left", fill="x", expand=True)
         tk.Label(column, text=heading, font=theme.font("body_strong"), background=c.surface, foreground=c.text,

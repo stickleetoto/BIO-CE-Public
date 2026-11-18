@@ -57,6 +57,8 @@ from bio_ce.ui.theme import (
     SPACE_XL,
     SPACE_XS,
     SPACE_XXL,
+    SPACE_XXS,
+    BRAND_MARK,
     Theme,
     app_icon,
     apply_window_chrome,
@@ -143,7 +145,7 @@ class BIOCEDesktop:
         self.main.pack(side="left", fill="both", expand=True)
         gutter = self.theme.px(SPACE_XXL)
         header = tk.Frame(self.main, background=c.bg)
-        header.pack(fill="x", padx=gutter, pady=(self.theme.px(SPACE_XL + 4), self.theme.px(SPACE_L + 4)))
+        header.pack(fill="x", padx=gutter, pady=(self.theme.px(SPACE_XXL), self.theme.px(SPACE_XL)))
         # The page's buttons are packed first: when the header is too narrow the title text is shortened, never a
         # button (a cut-off button ignores clicks).
         self.header_actions = tk.Frame(header, background=c.bg)
@@ -164,7 +166,7 @@ class BIOCEDesktop:
         self.header_title.pack(fill="x")
         self.header_subtitle = WrapLabel(titles, font=self.theme.font("body"), background=c.bg,
                                          foreground=c.text_secondary)
-        self.header_subtitle.pack(fill="x", pady=(self.theme.px(2), 0))
+        self.header_subtitle.pack(fill="x", pady=(self.theme.px(SPACE_XXS), 0))
 
         self.page_host = tk.Frame(self.main, background=c.bg)
         self.page_host.pack(fill="both", expand=True, padx=gutter, pady=(0, self.theme.px(SPACE_XL)))
@@ -216,14 +218,14 @@ class BIOCEDesktop:
     def _build_sidebar(self) -> None:
         theme, c = self.theme, self.theme.colors
         brand = tk.Frame(self.sidebar, background=c.sidebar)
-        brand.pack(fill="x", padx=theme.px(SPACE_M + 2), pady=(theme.px(SPACE_XL - 2), theme.px(SPACE_XL)))
-        mark = tk.Frame(brand, background=c.accent, width=theme.px(28), height=theme.px(28))
+        brand.pack(fill="x", padx=theme.px(SPACE_L), pady=(theme.px(SPACE_XL), theme.px(SPACE_XL)))
+        mark = tk.Frame(brand, background=c.accent, width=theme.px(BRAND_MARK), height=theme.px(BRAND_MARK))
         mark.pack(side="left")
         mark.pack_propagate(False)
         tk.Label(mark, text=theme.icon("memories") or "B", font=theme.icon_font("small") or theme.font("caption"),
                  background=c.accent, foreground=c.on_accent).place(relx=0.5, rely=0.5, anchor="center")
         self.brand_text = tk.Frame(brand, background=c.sidebar)
-        self.brand_text.pack(side="left", padx=(theme.px(SPACE_M - 2), 0))
+        self.brand_text.pack(side="left", padx=(theme.px(SPACE_M), 0))
         tk.Label(self.brand_text, text="BIO CE", font=theme.font("brand"), background=c.sidebar,
                  foreground=c.text, anchor="w").pack(fill="x")
         tk.Label(self.brand_text, text=t("app.edition"), font=theme.font("caption"), background=c.sidebar,
@@ -241,7 +243,7 @@ class BIOCEDesktop:
         row = tk.Frame(footer, background=c.sidebar)
         row.pack(fill="x")
         tk.Label(row, text=theme.icon("shield"), font=theme.icon_font("small"), background=c.sidebar,
-                 foreground=c.success).pack(side="left", anchor="n", pady=(theme.px(2), 0))
+                 foreground=c.success).pack(side="left", anchor="n", pady=(theme.px(SPACE_XXS), 0))
         self.sidebar_footer_text = tk.Frame(row, background=c.sidebar)
         # expand: the footer line wraps at the sidebar's width, not at its own (it broke after every word).
         self.sidebar_footer_text.pack(side="left", fill="x", expand=True, padx=(theme.px(SPACE_S), 0))
@@ -313,7 +315,7 @@ class BIOCEDesktop:
                 frame.pack_forget()
             elif not frame.winfo_manager():
                 frame.pack(side="left", fill="x", expand=frame is self.sidebar_footer_text,
-                           padx=(self.theme.px(SPACE_S if frame is self.sidebar_footer_text else SPACE_M - 2), 0))
+                           padx=(self.theme.px(SPACE_S if frame is self.sidebar_footer_text else SPACE_M), 0))
 
     @property
     def compact(self) -> bool:

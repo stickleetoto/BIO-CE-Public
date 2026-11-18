@@ -9,6 +9,7 @@ from __future__ import annotations
 import tkinter as tk
 
 from bio_ce.ui.i18n import t
+from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS
 
 THRESHOLD = 6  # px at 100% the pointer must travel before a press becomes a drag
 
@@ -100,11 +101,11 @@ class DragController:
             ghost.wm_overrideredirect(True)
             ghost.configure(background=c.accent)
             tk.Label(ghost, text=t("hub.drag.label", count=len(self.items)), font=theme.font("caption_strong"),
-                     background=c.surface_alt, foreground=c.text, padx=theme.px(8), pady=theme.px(4)).pack(
+                     background=c.surface_alt, foreground=c.text, padx=theme.px(SPACE_S), pady=theme.px(SPACE_XS)).pack(
                 padx=1, pady=1)
             self._ghost = ghost
         try:
-            self._ghost.wm_geometry(f"+{x + theme.px(14)}+{y + theme.px(10)}")
+            self._ghost.wm_geometry(f"+{x + theme.px(SPACE_L)}+{y + theme.px(SPACE_M)}")
         except tk.TclError:
             pass
 

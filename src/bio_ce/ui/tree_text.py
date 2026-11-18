@@ -15,7 +15,7 @@ import tkinter as tk
 from tkinter import font as tkfont
 from tkinter import ttk
 
-from bio_ce.ui.theme import Theme
+from bio_ce.ui.theme import SPACE_M, SPACE_S, SPACE_XL, SPACE_XS, Theme
 from bio_ce.ui.widgets import Tooltip, style_padding_x
 
 ELLIPSIS = "…"
@@ -68,7 +68,7 @@ class ElidedColumn:
 
     def fit(self) -> None:
         try:
-            pad = style_padding_x(self.tree, ".Item") or self.theme.px(20)
+            pad = style_padding_x(self.tree, ".Item") or self.theme.px(SPACE_XL)
             width = int(self.tree.column(self.column, "width")) - pad - 2
         except tk.TclError:
             return  # the window is closing
@@ -117,10 +117,10 @@ class RowTooltip(Tooltip):
         window.wm_overrideredirect(True)
         window.configure(background=c.border_strong)
         tk.Label(window, text=self.text, background=c.surface_alt, foreground=c.text, font=theme.font("caption"),
-                 justify="left", anchor="w", wraplength=theme.px(480), padx=theme.px(8), pady=theme.px(4)).pack(
+                 justify="left", anchor="w", wraplength=theme.px(480), padx=theme.px(SPACE_S), pady=theme.px(SPACE_XS)).pack(
             padx=1, pady=1)
         box = self.tree.bbox(self.row) if self.row and self.tree.exists(self.row) else ""
-        x = self.tree.winfo_pointerx() + theme.px(12)
-        y = self.tree.winfo_rooty() + (box[1] + box[3] if box else self.tree.winfo_height()) + theme.px(4)
+        x = self.tree.winfo_pointerx() + theme.px(SPACE_M)
+        y = self.tree.winfo_rooty() + (box[1] + box[3] if box else self.tree.winfo_height()) + theme.px(SPACE_XS)
         window.wm_geometry(f"+{x}+{y}")
         self._window = window

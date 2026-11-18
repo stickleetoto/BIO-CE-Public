@@ -13,7 +13,7 @@ from bio_ce.ui.format import HOSTS, body_without_title, host_name, preview, rela
 from bio_ce.ui.hub.data import REVIEWS
 from bio_ce.ui.i18n import t
 from bio_ce.ui.pages import Page
-from bio_ce.ui.theme import RECENT_TWO_COLUMNS_FROM, SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS
+from bio_ce.ui.theme import RECENT_TWO_COLUMNS_FROM, SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS, SPACE_XXS
 from bio_ce.ui.widgets import (
     Button,
     Card,
@@ -80,15 +80,15 @@ class DashboardPage(Page):
         stats = tk.Frame(body, background=c.bg)
         stats.pack(fill="x")
         self.stats = stats
-        self.status_card = Card(stats, theme, padding=SPACE_L + 2)
-        self.count_card = Card(stats, theme, padding=SPACE_L + 2)
-        self.hosts_card = Card(stats, theme, padding=SPACE_L + 2)
-        self.review_card = Card(stats, theme, padding=SPACE_L + 2)
+        self.status_card = Card(stats, theme, padding=SPACE_L)
+        self.count_card = Card(stats, theme, padding=SPACE_L)
+        self.hosts_card = Card(stats, theme, padding=SPACE_L)
+        self.review_card = Card(stats, theme, padding=SPACE_L)
         self._stat_cards = (self.status_card, self.count_card, self.hosts_card, self.review_card)
 
         caption_label(self.status_card.body, theme, t("dashboard.status")).pack(fill="x")
         self.status_pill = Pill(self.status_card.body, theme, t("dashboard.ready"), "success")
-        self.status_pill.pack(anchor="w", pady=(theme.px(SPACE_S + 2), theme.px(SPACE_S)))
+        self.status_pill.pack(anchor="w", pady=(theme.px(SPACE_M), theme.px(SPACE_S)))
         self.status_detail = caption_label(self.status_card.body, theme, "", muted=True)
         self.status_detail.pack(fill="x")
 
@@ -120,7 +120,7 @@ class DashboardPage(Page):
         lower = tk.Frame(body, background=c.bg)
         lower.pack(fill="both", expand=True, pady=(theme.px(SPACE_L), 0))
         self.lower = lower
-        self.recent_card = Card(lower, theme, padding=SPACE_L + 2)
+        self.recent_card = Card(lower, theme, padding=SPACE_L)
         header = tk.Frame(self.recent_card.body, background=c.surface)
         header.pack(fill="x", pady=(0, theme.px(SPACE_S)))
         section_label(header, theme, t("dashboard.recent")).pack(side="left")
@@ -135,7 +135,7 @@ class DashboardPage(Page):
         )
         self.recent_empty.configure(height=theme.px(240))
 
-        self.connections_card = Card(lower, theme, padding=SPACE_L + 2)
+        self.connections_card = Card(lower, theme, padding=SPACE_L)
         header = tk.Frame(self.connections_card.body, background=c.surface)
         header.pack(fill="x", pady=(0, theme.px(SPACE_S)))
         section_label(header, theme, t("dashboard.hosts")).pack(side="left")
@@ -148,22 +148,22 @@ class DashboardPage(Page):
             glyph = row.track(tk.Label(row.body, text=theme.icon("terminal"), font=theme.icon_font("normal"),
                                        background=c.surface, foreground=c.text_secondary, width=2))
             glyph.pack(side="left", anchor="n", padx=(theme.px(SPACE_XS), theme.px(SPACE_S)),
-                       pady=theme.px(SPACE_S + 2))
+                       pady=theme.px(SPACE_M))
             # Name and status on separate lines: a long host name and a long status never clip each other.
             column = row.track(tk.Frame(row.body, background=c.surface))
             column.pack(side="left", fill="x", expand=True, pady=theme.px(SPACE_S))
             row.track(tk.Label(column, text=host_name(host), font=theme.font("body"), background=c.surface,
                                foreground=c.text, anchor="w")).pack(fill="x")
             pill = Pill(column, theme)
-            pill.pack(anchor="w", pady=(theme.px(2), 0))
+            pill.pack(anchor="w", pady=(theme.px(SPACE_XXS), 0))
             row.track(pill, paint=False)
             self.host_rows[host] = pill
         # The explanation paragraph that stood here is on the Connections screen (POLISH §3.5).
 
         footer = tk.Frame(body, background=c.bg)
-        footer.pack(fill="x", pady=(theme.px(SPACE_XL - 4), theme.px(SPACE_S)))
+        footer.pack(fill="x", pady=(theme.px(SPACE_XL), theme.px(SPACE_S)))
         tk.Label(footer, text=theme.icon("lock"), font=theme.icon_font("small"), background=c.bg,
-                 foreground=c.text_muted).pack(side="left", anchor="n", padx=(0, theme.px(SPACE_S)), pady=theme.px(2))
+                 foreground=c.text_muted).pack(side="left", anchor="n", padx=(0, theme.px(SPACE_S)), pady=theme.px(SPACE_XXS))
         WrapLabel(footer, t("dashboard.privacy"), font=theme.font("caption"),
                   foreground=c.text_muted).pack(side="left", fill="x", expand=True)
 
@@ -187,7 +187,7 @@ class DashboardPage(Page):
                     need = max(need, widget.winfo_reqwidth())
                 else:
                     pending.extend(widget.winfo_children())
-        return need + 2 * self.theme.px(SPACE_L + 2) + self.theme.px(8)
+        return need + 2 * self.theme.px(SPACE_L) + self.theme.px(SPACE_S)
 
     def _relayout(self, event=None) -> None:
         try:

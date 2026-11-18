@@ -31,7 +31,7 @@ class HubCard(tk.Frame):
         self.selected = False
         self.opened = False
         body = tk.Frame(self, background=c.surface)
-        body.pack(fill="both", expand=True, padx=theme.px(SPACE_M), pady=theme.px(SPACE_M - 2))
+        body.pack(fill="both", expand=True, padx=theme.px(SPACE_M), pady=theme.px(SPACE_M))
         self.body = body
         self.title_label = ElideLabel(body, text=item.title or t("hub.card.untitled"),
                                       font=theme.font("body_strong"), background=c.surface, foreground=c.text,
@@ -67,7 +67,7 @@ class HubCard(tk.Frame):
         for key, text, command in specs:
             button = Button(self.bar, theme, text, variant="danger_subtle" if key in ("delete", "forget")
                             else "secondary",
-                            command=command, padx=8, pady=2, font="caption")
+                            command=command, size="small")
             button.pack(side="left", padx=(theme.px(SPACE_XS), 0))
             self.buttons[key] = button
         gates = {"edit": "edit", "move": "edit", "delete": "retract" if item.state == MEMORIES else "review",

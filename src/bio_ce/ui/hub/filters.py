@@ -15,7 +15,7 @@ from bio_ce.ui.format import parse_timestamp
 from bio_ce.ui.hub.common import control_of, in_space
 from bio_ce.ui.hub.data import INBOX, MEMORIES, RETRACTED
 from bio_ce.ui.i18n import t
-from bio_ce.ui.theme import SPACE_S
+from bio_ce.ui.theme import SPACE_S, SPACE_XS
 from bio_ce.ui.widgets import FlowFrame
 
 CHOICES = {"source": ("any", "added", "imported", "ai"), "host": ("any", "codex", "claude", "claude_desktop"),
@@ -153,7 +153,7 @@ class FilterBar(FlowFrame):
             apart = key == "sort" and sort_parent is not None
             pair = tk.Frame(sort_parent if apart else self, background=theme.colors.bg)
             tk.Label(pair, text=t(f"hub.filter.{key}"), font=theme.font("caption_strong"), background=theme.colors.bg,
-                     foreground=theme.colors.text_muted).pack(side="left", padx=(0, theme.px(4)))
+                     foreground=theme.colors.text_muted).pack(side="left", padx=(0, theme.px(SPACE_XS)))
             labels = [t(f"hub.filter.{key}.{value}") for value in CHOICES[key]]
             variable = tk.StringVar(master=self, value=t(f"hub.filter.{key}.{self.view[key]}"))
             box = ttk.Combobox(pair, textvariable=variable, state="readonly", values=labels, style="BIO.TCombobox",

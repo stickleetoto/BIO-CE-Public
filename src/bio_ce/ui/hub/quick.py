@@ -17,7 +17,7 @@ from bio_ce.ui.hub.common import in_space, space_label
 from bio_ce.ui.hub.data import INBOX, MEMORIES
 from bio_ce.ui.i18n import t
 from bio_ce.ui.service_text import say
-from bio_ce.ui.theme import SPACE_S
+from bio_ce.ui.theme import SPACE_M, SPACE_S, SPACE_XS, SPACE_XXS
 from bio_ce.ui.widgets import Button, Field, FlowFrame
 
 TITLE_LIMIT = 60
@@ -46,12 +46,12 @@ class QuickAdd(Field):
         theme = hub.theme
         self.text = tk.StringVar(master=master)
         super().__init__(master, theme, textvariable=self.text)
-        self.entry.pack_configure(padx=(theme.px(4), theme.px(4)))
+        self.entry.pack_configure(padx=(theme.px(SPACE_XS), theme.px(SPACE_XS)))
         glyph = theme.icon("add")
         if glyph:
             icon = tk.Label(self.content, text=glyph, font=theme.icon_font("small"), background=self._fill,
                             foreground=theme.colors.text_muted)
-            icon.pack(side="left", padx=(theme.px(10), theme.px(2)), before=self.entry)
+            icon.pack(side="left", padx=(theme.px(SPACE_M), theme.px(SPACE_XXS)), before=self.entry)
             icon.bind("<Button-1>", lambda _e: self.entry.focus_set())
         self.placeholder = tk.Label(self.content, text=t("hub.quick.placeholder"), font=theme.font("body"),
                                     background=self._fill, foreground=theme.colors.text_muted, borderwidth=0)

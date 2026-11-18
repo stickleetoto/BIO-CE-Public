@@ -49,7 +49,7 @@ from bio_ce.ui.hub.reviews import ReviewsView
 from bio_ce.ui.hub.suggestions import SuggestionsView
 from bio_ce.ui.i18n import t
 from bio_ce.ui.pages import Page
-from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS
+from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS, SPACE_XXS
 from bio_ce.ui.widgets import Button, Card, EmptyState, FlowFrame, ScrollFrame, SearchBox, WrapLabel, section_label
 
 TAB_KEYS = {MEMORIES: "hub.tab.memories", INBOX: "hub.tab.inbox", SUGGESTIONS: "hub.tab.suggestions",
@@ -119,7 +119,7 @@ class HubPage(Page):
         self.tab_row = FlowFrame(self.tab_bar, gap=theme.px(SPACE_XS), background=c.bg)
         self.tab_row.pack(side="left", fill="x", expand=True)
         self.tab_tools = tk.Frame(self.tab_row, background=c.bg)
-        self.filter_toggle = Button(self.tab_tools, theme, t("hub.filter.toggle"), variant="chip", padx=10, pady=3,
+        self.filter_toggle = Button(self.tab_tools, theme, t("hub.filter.toggle"), variant="chip", size="compact",
                                     command=self.toggle_filters)
         self.filter_clear = Button(self.tab_tools, theme, t("hub.filter.clear"), variant="link",
                                    command=lambda: self.filter_bar.clear())
@@ -130,7 +130,7 @@ class HubPage(Page):
         self.tabs: dict[str, Button] = {}
         for state in STATES:
             self.tabs[state] = self.tab_row.add(Button(self.tab_row, theme, t(TAB_KEYS[state]), variant="tab",
-                                                       padx=10, command=lambda s=state: self.show_state(s)))
+                                                       command=lambda s=state: self.show_state(s)))
         # Retracted memories: a view reached from here, not a fifth tab (decision logged in the U1+U2 report).
         self.retracted_tab = self.tab_row.add(Button(self.tab_row, theme, t("hub.tab.retracted"), variant="link",
                                                      command=lambda: self.show_state(RETRACTED),
@@ -337,7 +337,7 @@ class HubPage(Page):
             self.chips = {}
             for space_id, label in [(ALL_SPACES, t("space.all"))] + [(s.space_id, self._chip_label(s))
                                                                     for s in spaces]:
-                chip = Button(self.chip_row, self.theme, label, variant="chip", padx=10, pady=3,
+                chip = Button(self.chip_row, self.theme, label, variant="chip", size="compact",
                               command=lambda sid=space_id: self.set_space_filter(sid))
                 chip.space_id = space_id  # type: ignore[attr-defined]
                 self.chips[space_id] = self.chip_row.add(chip)
@@ -361,7 +361,7 @@ class HubPage(Page):
         self.cleanup.pack(fill="x", pady=(0, theme.px(SPACE_M)), before=self.scroll)
         for proposal in proposals:
             row = tk.Frame(self.cleanup_rows, background=c.surface)
-            row.pack(fill="x", pady=(theme.px(2), 0))
+            row.pack(fill="x", pady=(theme.px(SPACE_XXS), 0))
             due = format_timestamp(proposal.get("due_at") or "") if proposal.get("due_at") else t("hub.cleanup.soon")
             tk.Label(row, text=t("hub.cleanup.row", count=len(proposal["memory_ids"]), due=due),
                      font=theme.font("body"), background=c.surface, foreground=c.text, anchor="w").pack(side="left")
@@ -759,8 +759,8 @@ class HubPage(Page):
             for other in self.grid.card_list():
                 other.set_state(selected=other.key in self.selected_keys)
         menu = self.context_menu(self.chosen_items() or [card.item])
-        x = event.x_root if event is not None else card.winfo_rootx() + self.theme.px(20)
-        y = event.y_root if event is not None else card.winfo_rooty() + self.theme.px(20)
+        x = event.x_root if event is not None else card.winfo_rootx() + self.theme.px(SPACE_XL)
+        y = event.y_root if event is not None else card.winfo_rooty() + self.theme.px(SPACE_XL)
         try:
             menu.tk_popup(x, y)
         except tk.TclError:

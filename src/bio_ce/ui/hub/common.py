@@ -12,6 +12,7 @@ import tkinter as tk
 
 from bio_ce.ui.format import format_timestamp, parse_timestamp
 from bio_ce.ui.i18n import t
+from bio_ce.ui.theme import SPACE_XS, SPACE_XXS
 
 # §3.3: window width at 100% scale → card columns.
 COLUMN_STEPS = ((2200, 4), (1600, 3), (1100, 2))
@@ -129,7 +130,7 @@ class AutoText(tk.Text):
                          borderwidth=0, highlightthickness=0, background=background,
                          foreground=foreground or c.text, selectbackground=c.selection, selectforeground=c.text,
                          inactiveselectbackground=c.selection, cursor="arrow", takefocus=0, padx=0, pady=0,
-                         spacing2=theme.px(3), spacing3=theme.px(2))
+                         spacing2=theme.px(SPACE_XS), spacing3=theme.px(SPACE_XXS))
         self.max_lines = max_lines
         self.configure(state="disabled")
         self.bind("<Configure>", lambda _e: self.after_idle(self.fit), add="+")

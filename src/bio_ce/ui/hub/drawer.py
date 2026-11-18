@@ -20,7 +20,7 @@ from bio_ce.ui.hub.editor import DrawerEditor
 from bio_ce.ui.hub.filters import source_text
 from bio_ce.ui.hub.quick import copy_items
 from bio_ce.ui.i18n import t
-from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS, raised
+from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS, SPACE_XXS, raised
 from bio_ce.ui.widgets import (
     Button,
     ClampLabel,
@@ -161,7 +161,7 @@ class Drawer(tk.Frame):
                 ("valid_from", t("hub.drawer.valid_from"), False), ("valid_until", t("hub.drawer.valid_until"), False))
         for index, (key, label, copyable) in enumerate(rows):
             tk.Label(self.details.body, text=label, font=theme.font("caption"), background=c.surface,
-                     foreground=c.text_muted, anchor="w").grid(row=index, column=0, sticky="w", pady=theme.px(2))
+                     foreground=c.text_muted, anchor="w").grid(row=index, column=0, sticky="w", pady=theme.px(SPACE_XXS))
             # One line that ends in "…" in a narrow drawer (the copy button copies the whole id).
             value = ElideLabel(self.details.body, font=theme.font("mono" if copyable else "caption"),
                                background=c.surface, foreground=c.text_secondary, width=1)

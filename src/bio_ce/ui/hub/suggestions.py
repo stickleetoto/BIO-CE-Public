@@ -21,7 +21,7 @@ from bio_ce.ui.hub.common import control_of, space_label
 from bio_ce.ui.hub.data import ALL_SPACES
 from bio_ce.ui.i18n import t
 from bio_ce.ui.service_text import say
-from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS
+from bio_ce.ui.theme import SPACE_L, SPACE_M, SPACE_S, SPACE_XS, SPACE_XXS
 from bio_ce.ui.widgets import (
     Button,
     Card,
@@ -209,7 +209,7 @@ class SuggestionsView(tk.Frame):
                  foreground=c.text_muted, anchor="w").pack(fill="x")
         for sentence in extras:
             row = tk.Frame(box, background=c.surface)
-            row.pack(fill="x", pady=(theme.px(2), 0))
+            row.pack(fill="x", pady=(theme.px(SPACE_XXS), 0))
             button = Button(row, theme, t("hub.sugg.add_extra"), variant="link")
             button.pack(side="right", anchor="n")
             WrapLabel(row, sentence, font=theme.font("caption"), foreground=c.text_secondary).pack(

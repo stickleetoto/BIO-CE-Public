@@ -16,7 +16,19 @@ from tkinter import font as tkfont
 from tkinter import ttk
 
 from bio_ce.ui.i18n import t
-from bio_ce.ui.theme import READING_MAX_WIDTH, SPACE_L, SPACE_M, SPACE_XS, Theme
+from bio_ce.ui.theme import (
+    ACCENT_BAR,
+    BUTTON_SIZES,
+    READING_MAX_WIDTH,
+    SPACE_L,
+    SPACE_M,
+    SPACE_S,
+    SPACE_XL,
+    SPACE_XS,
+    SPACE_XXL,
+    SPACE_XXS,
+    Theme,
+)
 
 
 Command = Callable[[], object] | None
@@ -88,11 +100,11 @@ class Tooltip:
             background=c.surface_alt,
             foreground=c.text,
             font=self.theme.font("caption"),
-            padx=self.theme.px(8),
-            pady=self.theme.px(4),
+            padx=self.theme.px(SPACE_S),
+            pady=self.theme.px(SPACE_XS),
         ).pack(padx=1, pady=1)
         x = self.widget.winfo_rootx()
-        y = self.widget.winfo_rooty() + self.widget.winfo_height() + self.theme.px(4)
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + self.theme.px(SPACE_XS)
         window.wm_geometry(f"+{x}+{y}")
         self._window = window
 
@@ -124,17 +136,16 @@ class Button(tk.Frame):
         icon: str | None = None,
         variant: str = "secondary",
         tooltip: str | None = None,
-        padx: int = 14,
-        pady: int = 6,
-        font: str = "body",
+        size: str = "regular",
         anchor: str = "center",
     ) -> None:
+        padx, pady, font = BUTTON_SIZES[size]  # the token table only (rc3): no size written per screen
         self.theme = theme
         self._surface = surface_of(master)
         super().__init__(
             master,
             background=self._surface,
-            highlightthickness=theme.px(2),
+            highlightthickness=theme.px(SPACE_XXS),
             highlightbackground=self._surface,
             highlightcolor=theme.colors.focus,
             takefocus=1,
@@ -150,13 +161,14 @@ class Button(tk.Frame):
         self.body = tk.Frame(self, background=self._surface)
         self.body.pack(fill="both", expand=True, padx=1, pady=1)
         inner = tk.Frame(self.body, background=self._surface)
-        inner.pack(expand=True, anchor=anchor, padx=theme.px(padx if variant != "link" else 2), pady=theme.px(pady))
+        inner.pack(expand=True, anchor=anchor, padx=theme.px(padx if variant != "link" else SPACE_XXS),
+                   pady=theme.px(pady))
         self._inner = inner
         self.icon_label: tk.Label | None = None
         glyph = theme.icon(icon) if icon else ""
         if glyph:
             self.icon_label = tk.Label(inner, text=glyph, font=theme.icon_font("small"), borderwidth=0)
-            self.icon_label.pack(side="left", padx=(0, theme.px(8) if text else 0))
+            self.icon_label.pack(side="left", padx=(0, theme.px(SPACE_S) if text else 0))
         self.label = tk.Label(inner, text=text, font=theme.font(font), borderwidth=0)
         if text:
             self.label.pack(side="left")
@@ -248,7 +260,7 @@ class Button(tk.Frame):
             self.icon_label.configure(background=fill, foreground=foreground)
         tab = self.variant in ("tab", "tab_selected")
         if tab and self._underline is None:
-            self._underline = tk.Frame(self.body, height=self.theme.px(2))
+            self._underline = tk.Frame(self.body, height=self.theme.px(SPACE_XXS))
             self._underline.pack(side="bottom", fill="x", before=self._inner)
         if self._underline is not None:
             chosen = self.variant == "tab_selected"
@@ -291,7 +303,7 @@ class IconButton(Button):
 
     def __init__(self, master: tk.Misc, theme: Theme, icon: str, tooltip: str, *, command: Command = None) -> None:
         super().__init__(master, theme, "" if theme.has_icons else tooltip, icon=icon, variant="subtle",
-                         command=command, tooltip=tooltip, padx=7, pady=5)
+                         command=command, tooltip=tooltip, size="icon")
 
 
 class NavItem(tk.Frame):
@@ -301,7 +313,7 @@ class NavItem(tk.Frame):
         c = theme.colors
         self.theme = theme
         self._surface = surface_of(master)
-        super().__init__(master, background=self._surface, highlightthickness=theme.px(2),
+        super().__init__(master, background=self._surface, highlightthickness=theme.px(SPACE_XXS),
                          highlightbackground=self._surface, highlightcolor=c.focus, takefocus=1)
         self.text = text
         self.command = command
@@ -309,16 +321,16 @@ class NavItem(tk.Frame):
         self._hover = False
         self.row = tk.Frame(self, background=self._surface)
         self.row.pack(fill="x")
-        self.indicator = tk.Frame(self.row, width=theme.px(3), background=self._surface)
-        self.indicator.pack(side="left", fill="y", pady=theme.px(8))
+        self.indicator = tk.Frame(self.row, width=theme.px(ACCENT_BAR), background=self._surface)
+        self.indicator.pack(side="left", fill="y", pady=theme.px(SPACE_S))
         self.icon_label = tk.Label(self.row, text=theme.icon(icon), font=theme.icon_font("normal"),
                                    width=2, borderwidth=0)
-        self.icon_label.pack(side="left", padx=(theme.px(9), theme.px(4)), pady=theme.px(8))
+        self.icon_label.pack(side="left", padx=(theme.px(SPACE_S), theme.px(SPACE_XS)), pady=theme.px(SPACE_S))
         self.label = tk.Label(self.row, text=text, font=theme.font("body"), anchor="w", borderwidth=0)
-        self.label.pack(side="left", fill="x", expand=True, padx=(theme.px(6), theme.px(8)))
+        self.label.pack(side="left", fill="x", expand=True, padx=(theme.px(SPACE_S), theme.px(SPACE_S)))
         # A count of things waiting for the user (for example review items); hidden at 0.
         self.badge = tk.Label(self.row, text="", font=theme.font("caption_strong"), borderwidth=0,
-                              background=c.warning, foreground=c.bg, padx=theme.px(6))
+                              background=c.warning, foreground=c.bg, padx=theme.px(SPACE_S))
         self.badge_count = 0
         self.alert = False
         self._compact = False
@@ -355,7 +367,7 @@ class NavItem(tk.Frame):
         if compact:
             self.label.pack_forget()
         elif not self.label.winfo_manager():
-            self.label.pack(side="left", fill="x", expand=True, padx=(self.theme.px(6), self.theme.px(8)))
+            self.label.pack(side="left", fill="x", expand=True, padx=(self.theme.px(SPACE_S), self.theme.px(SPACE_S)))
         self._show_badge()
 
     def _show_badge(self) -> None:
@@ -365,11 +377,11 @@ class NavItem(tk.Frame):
         if not self.badge_count:
             return
         if self._compact:
-            self.badge.place(in_=self.row, relx=1.0, x=-self.theme.px(2), y=self.theme.px(2), anchor="ne")
+            self.badge.place(in_=self.row, relx=1.0, x=-self.theme.px(SPACE_XXS), y=self.theme.px(SPACE_XXS), anchor="ne")
             self.badge.lift()
         else:
             # Packed before the text so the count keeps its width and a long text shortens instead.
-            self.badge.pack(side="right", padx=(0, self.theme.px(10)), pady=self.theme.px(8),
+            self.badge.pack(side="right", padx=(0, self.theme.px(SPACE_M)), pady=self.theme.px(SPACE_S),
                             before=self.label if self.label.winfo_manager() else None)
 
     def _paint(self) -> None:
@@ -409,7 +421,7 @@ class RowButton(tk.Frame):
     def __init__(self, master: tk.Misc, theme: Theme, command: Command) -> None:
         self.theme = theme
         self._surface = surface_of(master)
-        super().__init__(master, background=self._surface, highlightthickness=theme.px(2),
+        super().__init__(master, background=self._surface, highlightthickness=theme.px(SPACE_XXS),
                          highlightbackground=self._surface, highlightcolor=theme.colors.focus, takefocus=1)
         self.command = command
         self._hover = False
@@ -492,12 +504,12 @@ def fit_tree_columns(tree: ttk.Treeview, theme: Theme, flexible: str,
     except (tk.TclError, ValueError):
         body_font = theme.font("body")
     # The paddings ttk draws with, from the style (a guessed 18 px cut "DESTINATION" by a few pixels, 2026-11-16).
-    heading_pad = style_padding_x(tree, ".Heading") or theme.px(20)
-    cell_pad = style_padding_x(tree, ".Item") or theme.px(20)
+    heading_pad = style_padding_x(tree, ".Heading") or theme.px(SPACE_XL)
+    cell_pad = style_padding_x(tree, ".Item") or theme.px(SPACE_XL)
     lowest = {}
     for column in columns:
         heading = str(tree.heading(column, "text"))
-        lowest[column] = max(theme.px(24), heading_font.measure(heading) + heading_pad + 2)  # 2: the divider
+        lowest[column] = max(theme.px(SPACE_XL), heading_font.measure(heading) + heading_pad + 2)  # 2: the divider
     designed = {column: max(lowest[column], int(tree.column(column, "width"))) for column in columns}
     for column in columns:
         tree.column(column, minwidth=lowest[column], stretch=False)
@@ -795,7 +807,7 @@ def round_corners(frame: tk.Frame, theme: Theme, *, border: str, fill: str, outs
 class Card(tk.Frame):
     """Raised surface with a 1px border and rounded corners. Put content in ``card.body``."""
 
-    def __init__(self, master: tk.Misc, theme: Theme, *, padding: int = 20, background: str | None = None) -> None:
+    def __init__(self, master: tk.Misc, theme: Theme, *, padding: int = SPACE_L, background: str | None = None) -> None:
         c = theme.colors
         fill = background or c.surface
         super().__init__(master, background=fill, highlightthickness=1,
@@ -812,7 +824,7 @@ class Pill(tk.Label):
 
     def __init__(self, master: tk.Misc, theme: Theme, text: str = "", kind: str = "neutral") -> None:
         self.theme = theme
-        super().__init__(master, font=theme.font("caption_strong"), padx=theme.px(8), pady=theme.px(2), borderwidth=0)
+        super().__init__(master, font=theme.font("caption_strong"), padx=theme.px(SPACE_S), pady=theme.px(SPACE_XXS), borderwidth=0)
         self.kind = kind
         self.set(text, kind)
 
@@ -899,7 +911,7 @@ class Field(tk.Frame):
         )
         if readonly:
             self.entry.configure(state="readonly", foreground=c.text_secondary)
-        self.entry.pack(side="left", fill="x", expand=True, padx=theme.px(10), pady=theme.px(7))
+        self.entry.pack(side="left", fill="x", expand=True, padx=theme.px(SPACE_M), pady=theme.px(SPACE_S))
         self.entry.bind("<FocusIn>", lambda _e: self._paint(True), add="+")
         self.entry.bind("<FocusOut>", lambda _e: self._paint(False), add="+")
         for part in (self, self.content):
@@ -926,12 +938,12 @@ class SearchBox(Field):
         super().__init__(master, theme, textvariable=variable)
         c = theme.colors
         self.variable = variable
-        self.entry.pack_configure(padx=(theme.px(4), theme.px(4)))
+        self.entry.pack_configure(padx=(theme.px(SPACE_XS), theme.px(SPACE_XS)))
         glyph = theme.icon("search")
         if glyph:
             icon = tk.Label(self.content, text=glyph, font=theme.icon_font("small"), background=self._fill,
                             foreground=c.text_muted)
-            icon.pack(side="left", padx=(theme.px(10), theme.px(2)), before=self.entry)
+            icon.pack(side="left", padx=(theme.px(SPACE_M), theme.px(SPACE_XXS)), before=self.entry)
             icon.bind("<Button-1>", lambda _e: self.entry.focus_set())
         self.placeholder = tk.Label(self.content, text=placeholder, font=theme.font("body"), background=self._fill,
                                     foreground=c.text_muted, borderwidth=0)
@@ -952,7 +964,7 @@ class SearchBox(Field):
         if self.variable.get():
             self.placeholder.place_forget()
             if not self.clear_button.winfo_manager():
-                self.clear_button.pack(side="right", padx=(0, self.theme.px(2)))
+                self.clear_button.pack(side="right", padx=(0, self.theme.px(SPACE_XXS)))
         else:
             self.placeholder.place(in_=self.entry, x=1, rely=0.5, anchor="w")
             if self.clear_button.winfo_manager():
@@ -986,18 +998,18 @@ class TextArea(tk.Frame):
             selectbackground=c.selection,
             selectforeground=c.text,
             inactiveselectbackground=c.selection,
-            padx=theme.px(12) if bordered else 0,
-            pady=theme.px(10) if bordered else theme.px(2),
+            padx=theme.px(SPACE_M) if bordered else 0,
+            pady=theme.px(SPACE_M) if bordered else theme.px(SPACE_XXS),
             spacing1=theme.px(1),
-            spacing2=theme.px(3),
-            spacing3=theme.px(6) if readonly else theme.px(2),
-            tabs=(theme.px(32),),
+            spacing2=theme.px(SPACE_XS),
+            spacing3=theme.px(SPACE_S) if readonly else theme.px(SPACE_XXS),
+            tabs=(theme.px(SPACE_XXL),),
         )
         self.scrollbar = AutoScrollbar(self, orient="vertical", command=self.text.yview,
                                        style=theme.scrollbar_style(fill))
         self.text.configure(yscrollcommand=self.scrollbar.set)
         self.text.grid(row=0, column=0, sticky="nsew")
-        self.scrollbar.grid(row=0, column=1, sticky="ns", padx=(0, theme.px(2)), pady=theme.px(2))
+        self.scrollbar.grid(row=0, column=1, sticky="ns", padx=(0, theme.px(SPACE_XXS)), pady=theme.px(SPACE_XXS))
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
         self.readonly = readonly
@@ -1197,7 +1209,7 @@ class EmptyState(tk.Frame):
 
     def _fit(self, event) -> None:
         self.message_label.configure(wraplength=max(self.theme.px(160), min(self.theme.px(420), event.width - self.theme.px(48))))
-        needed = self.column.winfo_reqheight() + self.theme.px(24)
+        needed = self.column.winfo_reqheight() + self.theme.px(SPACE_XL)
         self.configure(height=max(needed, 1))
 
 
@@ -1268,20 +1280,20 @@ class InfoBar(tk.Frame):
         self.kind: str | None = None
         self.title: str = ""
         self.message: str = ""
-        self.stripe = tk.Frame(self, width=theme.px(3))
+        self.stripe = tk.Frame(self, width=theme.px(ACCENT_BAR))
         self.stripe.pack(side="left", fill="y")
         self.inner = tk.Frame(self)
         self.inner.pack(side="left", fill="both", expand=True)
         self.icon_label = tk.Label(self.inner, font=theme.icon_font("normal"), borderwidth=0)
-        self.icon_label.pack(side="left", anchor="n", padx=(theme.px(12), theme.px(10)), pady=theme.px(11))
+        self.icon_label.pack(side="left", anchor="n", padx=(theme.px(SPACE_M), theme.px(SPACE_M)), pady=theme.px(SPACE_M))
         text_column = tk.Frame(self.inner)
-        text_column.pack(side="left", fill="both", expand=True, pady=theme.px(9))
+        text_column.pack(side="left", fill="both", expand=True, pady=theme.px(SPACE_S))
         self.text_column = text_column
         self.title_label = tk.Label(text_column, font=theme.font("body_strong"), anchor="w", borderwidth=0)
         self.message_label = WrapLabel(text_column, font=theme.font("body"))
         self.message_label.pack(fill="x")
         self.close_button = IconButton(self.inner, theme, "close", t("widget.dismiss"), command=self.hide)
-        self.close_button.pack(side="right", anchor="n", padx=theme.px(6), pady=theme.px(5))
+        self.close_button.pack(side="right", anchor="n", padx=theme.px(SPACE_S), pady=theme.px(SPACE_XS))
         self.action_button: Button | None = None
 
     def set_pack_padx(self, padx: int) -> None:
@@ -1315,12 +1327,12 @@ class InfoBar(tk.Frame):
             self.action_button = None
         self.close_button.destroy()
         self.close_button = IconButton(self.inner, self.theme, "close", t("widget.dismiss"), command=self.hide)
-        self.close_button.pack(side="right", anchor="n", padx=self.theme.px(6), pady=self.theme.px(5))
+        self.close_button.pack(side="right", anchor="n", padx=self.theme.px(SPACE_S), pady=self.theme.px(SPACE_XS))
         if action is not None:
             label, callback = action
             self.action_button = Button(self.inner, self.theme, label, variant="secondary",
                                         command=lambda: (self.hide(), callback()))
-            self.action_button.pack(side="right", anchor="n", pady=self.theme.px(7))
+            self.action_button.pack(side="right", anchor="n", pady=self.theme.px(SPACE_S))
         if not self.winfo_manager():
             options = dict(self._pack_options)
             if self._before is not None:

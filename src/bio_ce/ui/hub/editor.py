@@ -87,7 +87,7 @@ class DrawerEditor(tk.Frame):
     def _label_row(self, text: str, *, top: int = 0) -> tk.Label:
         c = self.colors
         row = tk.Frame(self, background=c.surface)
-        row.pack(fill="x", pady=(self.theme.px(top), self.theme.px(SPACE_XS + 2)))
+        row.pack(fill="x", pady=(self.theme.px(top), self.theme.px(SPACE_S)))
         tk.Label(row, text=text, font=self.theme.font("body_strong"), background=c.surface, foreground=c.text,
                  anchor="w").pack(side="left")
         label = tk.Label(row, font=self.theme.font("caption"), background=c.surface, foreground=c.text_muted,
@@ -181,7 +181,7 @@ class DrawerEditor(tk.Frame):
         }[field_name]
         field.set_error(True)
         label.configure(text=message)
-        options = {"fill": "x", "pady": (self.theme.px(SPACE_XS + 2), 0)}
+        options = {"fill": "x", "pady": (self.theme.px(SPACE_S), 0)}
         if before is not None:
             options["before"] = before
         else:
