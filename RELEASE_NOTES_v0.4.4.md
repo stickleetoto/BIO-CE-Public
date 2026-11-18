@@ -1,7 +1,8 @@
 <!-- Copyright 2026 stickleetoto | Apache-2.0 -->
 # BIO CE v0.4.4-rc2 — Release Notes (DRAFT)
 
-**Status: draft, not released.** The size and SHA-256 below are filled in from the CI build of the candidate.
+**Status: draft, not released.** The size and SHA-256 below are those of the candidate built and tested by the
+release-qualification workflow (all steps PASS).
 v0.4.4-rc1 was not released: its screens were reworked first (see "Screens since rc1"). Nothing here is final until
 the owner approves the candidate.
 
@@ -9,7 +10,7 @@ the owner approves the candidate.
 
 | File | Size | SHA-256 |
 |---|---:|---|
-| `BIO-CE-Setup-v0.4.4-rc2.exe` | (from CI) | (from CI) |
+| `BIO-CE-Setup-v0.4.4-rc2.exe` | 41,812,937 bytes | `1687c0488f81616284bc13e0594b3be7f016f6ce8522914dad0b8b787daa6ec3` |
 
 ```powershell
 Get-FileHash -Algorithm SHA256 .\BIO-CE-Setup-v0.4.4-rc2.exe
