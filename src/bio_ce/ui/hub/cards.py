@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import tkinter as tk
 
+from bio_ce.ui.format import body_without_title
 from bio_ce.ui.hub.common import space_label, when
 from bio_ce.ui.hub.data import INBOX, MEMORIES, RETRACTED
 from bio_ce.ui.i18n import t
@@ -36,9 +37,12 @@ class HubCard(tk.Frame):
                                       font=theme.font("body_strong"), background=c.surface, foreground=c.text,
                                       width=1)
         self.title_label.pack(fill="x")
-        self.text_label = ClampLabel(body, theme, text=" ".join((item.text or "").split()) or t("hub.card.no_text"),
+        # The title once: a body that repeats it shows only the rest, or nothing (rc3, owner 2026-11-18).
+        shown = " ".join(body_without_title(item.title, item.text).split())
+        self.text_label = ClampLabel(body, theme, text=shown or t("hub.card.no_text"),
                                      max_lines=2, font=theme.font("caption"), foreground=c.text_secondary)
-        self.text_label.pack(fill="x", pady=(theme.px(SPACE_XS), 0))
+        if shown or not (item.text or "").strip():
+            self.text_label.pack(fill="x", pady=(theme.px(SPACE_XS), 0))
         meta = space_label(item.space)
         if item.space is not None and item.space.is_personal:
             meta = t("hub.card.personal_meta", space=meta)

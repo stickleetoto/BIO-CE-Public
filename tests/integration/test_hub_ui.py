@@ -275,6 +275,26 @@ class HubUiTests(unittest.TestCase):
         self.assertTrue(drawer.detail_values["version"].winfo_ismapped())
         self.assertTrue(drawer.danger.winfo_ismapped())
 
+    def test_a_body_that_repeats_the_title_is_shown_once(self):
+        """rc3 (owner 2026-11-18): the card and the drawer show the title once; a different body is shown whole."""
+        hub = self.hub
+        same = self.service.add(title="사용자는 한국어 답변을 선호한다.", content="사용자는 한국어 답변을 선호한다.",
+                                source_ref="test")
+        longer = self.service.add(title="Tea", content="Tea: green tea after lunch.", source_ref="test")
+        hub.refresh()
+        self.settle()
+        same_card, longer_card = self.card(same.memory_id), self.card(longer.memory_id)
+        self.assertEqual(same_card.text_label.winfo_manager(), "")  # no second line on the card
+        self.assertEqual(longer_card.text_label._full, "green tea after lunch.")  # the title, then only the rest
+        hub.card_clicked(same_card)
+        self.settle()
+        self.assertEqual(hub.drawer.reader.winfo_manager(), "")  # no text area repeating the title
+        self.assertTrue(hub.drawer.history.winfo_manager())  # History and Details still there, under the meta line
+        hub.card_clicked(self.card(self.first.memory_id))
+        self.settle()
+        self.assertEqual(hub.drawer.reader.winfo_manager(), "pack")  # positive control: a different body is shown
+        self.assertIn("helix", hub.drawer.reader.get_text())
+
     def test_positive_control_a_drawer_placed_over_the_cards_is_caught(self):
         hub = self.hub
         hub.card_clicked(self.card(self.first.memory_id))

@@ -21,7 +21,7 @@ from bio_ce.exporter import SOURCE_KINDS, SOURCE_LABELS
 from bio_ce.spaces import PERSONAL_SPACE
 from bio_ce.ui.dialogs import Dialog, ExportDialog
 from bio_ce.ui.hub.data import INBOX as INBOX_TAB, MEMORIES, REVIEWS, SUGGESTIONS
-from bio_ce.ui.format import DEFAULT_SOURCE
+from bio_ce.ui.format import DEFAULT_SOURCE, body_without_title
 from tests.integration import test_ui_layout_audit as layout  # the module: its tests aren't collected here again
 from tests.ui_text_scan import leaks, shown_texts
 
@@ -62,6 +62,9 @@ class _KoreanScreens(layout.LayoutAuditTests):
                 "Alpha Project With A Long Name", "test"]
         lines = [line for line in layout.SAMPLE.splitlines() if line.strip()]
         data += lines + [line.split(" - ", 1)[1] for line in lines if " - " in line]  # an entry as the preview shows it
+        # A body as a card shows it under its title: only the rest when it starts with the title (rc3).
+        data += [rest for title in data for body in data
+                 if (rest := body_without_title(title, body)) and rest != body]
         data += [sentence.rstrip(".") + " without fail." for sentence in data if sentence.endswith(".")]
         return data
 

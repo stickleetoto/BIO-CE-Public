@@ -13,7 +13,7 @@ import tkinter as tk
 
 from bio_ce.core.models import MemoryNotFoundError
 from bio_ce.engine.contract import MemoryView
-from bio_ce.ui.format import format_timestamp, middle_ellipsis, preview, revision_kind_label
+from bio_ce.ui.format import body_without_title, format_timestamp, middle_ellipsis, preview, revision_kind_label
 from bio_ce.ui.hub.common import READING_WIDTH, AutoText, in_space, space_label, when
 from bio_ce.ui.hub.data import INBOX, MEMORIES, RETRACTED, HubItem
 from bio_ce.ui.hub.editor import DrawerEditor
@@ -241,10 +241,7 @@ class Drawer(tk.Frame):
                                              t("hub.drawer.updated", when=when(record.recorded_at)))))
         self.meta_label.pack(fill="x", pady=(self.theme.px(SPACE_XS), 0), after=self.title_label)
         self.inbox_meta.pack_forget()
-        if record.content:
-            self.reader.set(record.content)
-        else:
-            self.reader.set(t("hub.drawer.no_text"), "empty")
+        self._set_reader(record.title, record.content, t("hub.drawer.no_text"))
         values = {"version": str(record.revision_number), "source": source_text(record),
                   "memory_id": middle_ellipsis(record.memory_id, 40),
                   "revision_id": middle_ellipsis(record.revision_id, 40),
@@ -269,13 +266,33 @@ class Drawer(tk.Frame):
         """History and Details, each under a line (POLISH §2.4)."""
         parts = ((self.history_rule, SPACE_S), (self.history, SPACE_XS), (self.details_rule, SPACE_XS),
                  (self.details, SPACE_XS))
-        previous = self.reader
+        previous = self._last_shown_above()
         for part, top in parts:
             if show:
                 part.pack(fill="x", pady=(self.theme.px(top), 0), after=previous)
                 previous = part
             else:
                 part.pack_forget()
+
+    def _last_shown_above(self) -> tk.Misc:
+        if self.reader.winfo_manager():
+            return self.reader
+        return self.inbox_meta if self.inbox_meta.winfo_manager() else self.meta_label
+
+    def _set_reader(self, title: str | None, text: str | None, empty: str | None = None) -> None:
+        """The text under the title, once (rc3): a body that repeats the title shows only the rest, or no text area
+        at all. ``empty`` is shown when there is no text."""
+        shown = body_without_title(title, text)
+        if shown:
+            self.reader.set(shown)
+        elif empty and not (text or "").strip():
+            self.reader.set(empty, "empty")
+        else:
+            self.reader.pack_forget()
+            return
+        if not self.reader.winfo_manager():
+            anchor = self.inbox_meta if self.inbox_meta.winfo_manager() else self.meta_label
+            self.reader.pack(fill="x", pady=(self.theme.px(SPACE_L), self.theme.px(SPACE_M)), after=anchor)
 
     def show_inbox(self, item: HubItem) -> bool:
         self.mode, self.item, self.record, self.revisions = INBOX, item, None, ()
@@ -290,7 +307,7 @@ class Drawer(tk.Frame):
         self.meta_label.set_text(space_label(item.space))
         self.inbox_meta.configure(text=inbox_meta(revision) if revision is not None else "")
         self.inbox_meta.pack(fill="x", pady=(self.theme.px(SPACE_XS), 0), after=self.meta_label)
-        self.reader.set(item.text or "")
+        self._set_reader(item.title, item.text)
         self._show_sections(False)
         self._show(self.view)
         return True
@@ -305,7 +322,7 @@ class Drawer(tk.Frame):
                                              t("hub.retracted.when", when=format_timestamp(item.when)))))
         self.inbox_meta.configure(text=t("hub.retracted.note"))
         self.inbox_meta.pack(fill="x", pady=(self.theme.px(SPACE_XS), 0), after=self.meta_label)
-        self.reader.set(item.text or t("hub.drawer.no_text"))
+        self._set_reader(item.title, item.text, t("hub.drawer.no_text"))
         self._show_sections(False)
         self._show(self.view)
         return True

@@ -77,6 +77,27 @@ def relative_time(value: str | None, *, now: datetime | None = None) -> str:
     return parsed.astimezone().strftime("%Y-%m-%d")
 
 
+def body_without_title(title: str | None, body: str | None) -> str:
+    """The body as a card or the drawer shows it under ``title`` (rc3, owner 2026-11-18): "" when it says the same as
+    the title, only the rest when it starts with the title, else the whole body. Letters and digits are compared,
+    ignoring case, spaces, and punctuation; the title must end where a word ends in the body ("tea" is not the start
+    of "teapot"). What is stored is never changed."""
+    body = body or ""
+    key = [ch for ch in (title or "").casefold() if ch.isalnum()]
+    if not key or not body:
+        return body
+    matched = 0
+    for index, ch in enumerate(body):
+        if not ch.isalnum():
+            continue
+        if matched == len(key):  # the title is used up: the body goes on, after a word break only
+            return body if body[index - 1].isalnum() else body[index:].strip()
+        if ch.casefold() != key[matched]:
+            return body
+        matched += 1
+    return "" if matched == len(key) else body
+
+
 def preview(text: str | None, limit: int = 120) -> str:
     """Collapse whitespace and shorten text for one-line previews."""
     flattened = re.sub(r"\s+", " ", text or "").strip()
@@ -144,6 +165,7 @@ def validation_feedback(error: ValidationError) -> tuple[str | None, str]:
 
 
 __all__ = [
+    "body_without_title",
     "CONTENT_LIMIT",
     "DEFAULT_SOURCE",
     "HOST_COMMANDS",
