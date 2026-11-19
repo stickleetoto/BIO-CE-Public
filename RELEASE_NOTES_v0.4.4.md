@@ -1,18 +1,20 @@
 <!-- Copyright 2026 stickleetoto | Apache-2.0 -->
-# BIO CE v0.4.4-rc3 — Release Notes (DRAFT)
+# BIO CE v0.4.4-rc4 — Release Notes (DRAFT)
 
 **Status: draft, not released.** The size and SHA-256 below are filled in from the CI build of the candidate.
 v0.4.4-rc1 and rc2 were not released: the screens were reworked and then finished first (see "Screens since rc1").
+rc3 was not released either: Forget completely could erase an inbox item that another memory still kept (see
+"Fixed"). rc4 is rc3 with that fix only.
 Nothing here is final until the owner approves the candidate.
 
 ## Download
 
 | File | Size | SHA-256 |
 |---|---:|---|
-| `BIO-CE-Setup-v0.4.4-rc3.exe` | (from CI) | (from CI) |
+| `BIO-CE-Setup-v0.4.4-rc4.exe` | (from CI) | (from CI) |
 
 ```powershell
-Get-FileHash -Algorithm SHA256 .\BIO-CE-Setup-v0.4.4-rc3.exe
+Get-FileHash -Algorithm SHA256 .\BIO-CE-Setup-v0.4.4-rc4.exe
 ```
 
 ### The installer is not code-signed
@@ -23,12 +25,12 @@ SmartScreen, Microsoft Defender, or any other protection.
 
 ## Updating
 
-- **From v0.4.3-rc1 (or older):** run the v0.4.4-rc3 installer over the existing installation. Your memories,
+- **From v0.4.3-rc1 (or older):** run the v0.4.4-rc4 installer over the existing installation. Your memories,
   settings, backups, and AI connections are kept. **Close Codex, Claude Code, and the Claude desktop app before you
   install**, and start new conversations afterwards.
 - The file formats do not change: no new tables, and both databases keep their versions. New settings (language,
   the memory screen's filters, how many automatic backups to keep) are rows in the existing settings table.
-- **Going back to v0.4.3-rc1 works:** run the v0.4.3-rc1 installer over v0.4.4-rc3. Memories you deleted stay
+- **Going back to v0.4.3-rc1 works:** run the v0.4.3-rc1 installer over v0.4.4-rc4. Memories you deleted stay
   hidden there too (v0.4.3 calls this retracting, and has no Deleted memories view); memories you forgot completely
   are gone in both versions. v0.4.3 ignores the new settings rows.
 
@@ -91,6 +93,11 @@ SmartScreen, Microsoft Defender, or any other protection.
 
 ## Fixed
 
+- **Forget completely no longer takes an inbox item another memory still keeps** (found in testing, not in use;
+  rc3 had it). Undo after **To memories** gives the inbox item back; if that item was then used for another memory,
+  forgetting the first memory erased the item too, so the second move's Undo could not give it back and its text
+  was lost. Forget completely, Delete, Discard, an approved delete request, and undoing an import now leave an inbox
+  item that a memory still keeps; it goes when that memory goes.
 - The reading pane no longer runs out of height on small screens (the drawer scrolls).
 - The import preview's TEXT column ends long text in "…"; hover a row for all of it. **Set date…** puts a source date
   back without opening Edit.
