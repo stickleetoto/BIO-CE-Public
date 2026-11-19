@@ -1,12 +1,13 @@
 <!-- Copyright 2026 stickleetoto | Apache-2.0 -->
-# BIO CE v0.4.4-rc4 — Release Notes (DRAFT)
+# BIO CE v0.4.4-rc4 — Release Notes (pre-release)
 
-**Status: draft, not released.** The size and SHA-256 below are those of the CI build of the candidate (commit
-`7d911d6`; this file is outside the installer).
+**Status: pre-release.** Not a final release.
+
+The installer was built and tested on a GitHub-hosted Windows runner from source commit `7d911d6`. The tag also
+contains later commits that change only this file and `docs/known-limitations.md`; neither goes into the installer.
 v0.4.4-rc1 and rc2 were not released: the screens were reworked and then finished first (see "Screens since rc1").
 rc3 was not released either: Forget completely could erase an inbox item that another memory still kept (see
 "Fixed"). rc4 is rc3 with that fix only.
-Nothing here is final until the owner approves the candidate.
 
 ## Download
 
@@ -107,6 +108,15 @@ SmartScreen, Microsoft Defender, or any other protection.
 
 ## Known limitations
 
-See [docs/known-limitations.md](docs/known-limitations.md#v044-in-development--draft). In short: the installer is not
+See [docs/known-limitations.md](docs/known-limitations.md#v044-rc4-pre-release). In short: the installer is not
 code-signed; Forget completely, Discard, and removing old backups erase as far as the app can, not from the drive
 itself; idle MCP servers end only when you ask; the memory screen's search matches words, not meaning.
+
+Two limitations of Forget completely in this pre-release:
+
+- **A memory moved to another space can leave its kept inbox item behind.** If a memory made from an inbox item was
+  moved to another space, deleting or forgetting it there does not remove the inbox item kept for its Undo in the
+  first space, so that item's text can stay in BIO CE's database file (no list shows it). Forget the memory before
+  moving it, or move it back first. A fix is planned for v0.4.5.
+- **For a deleted memory, the confirmation doesn't count its kept inbox items.** Forget completely still erases them
+  (unless another memory still keeps one).

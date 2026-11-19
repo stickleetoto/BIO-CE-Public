@@ -22,9 +22,17 @@
 - Source provenance: the full local BIO Core source, history, and its private remote were compared with BIO CE on 2026-10-25 and no BIO Core code was found. The owner decisions and residual risks (for example, AI-assisted code was not checked against public code databases) are listed in the [provenance audit](audit/source-provenance.md).
 - GitHub Actions CI: **PASS** on commit `9a59ed4` ([run 40283656213](https://github.com/stickleetoto/BIO-CE-Public/actions/runs/40283656213), 2026-10-26, `windows-2025`, CPython 3.12.10): 100 passed, 3 skipped. The skips are expected on a hosted runner: two host-connection tests need the Codex and Claude Code CLIs, and the packaged-EXE test needs a local installer build; all three pass locally. The CI runner has no display scaling, no real desktop session, and no AI host CLIs, so it does not replace the installer E2E. Windows 10 remains NOT RUN.
 
-## v0.4.4 (in development — draft)
+## v0.4.4-rc4 (pre-release)
 
 - The installer and the programs it installs are **not code-signed**.
+- **A memory moved to another space can leave its kept inbox item behind.** When a memory made from an inbox item
+  (with **To memories** or an approved suggestion) is moved to another space, the inbox item kept for its Undo stays
+  in the first space's kept area. Deleting or forgetting the memory completely in its new space does not remove that
+  kept item, so its text can stay in BIO CE's database file. No list shows it and it is not used anywhere. To avoid
+  it, forget the memory completely before moving it, or move it back first. A fix is planned for v0.4.5.
+- **The Forget completely confirmation for a deleted memory doesn't count its kept inbox items.** For a memory in
+  **Deleted memories**, the confirmation does not say how many kept inbox items go with it, but Forget completely
+  still erases them (unless another memory still keeps one).
 - **Delete and Forget completely are different.** Deleting a memory hides it from BIO CE's searches and your AI
   tools; it stays in **Deleted memories** (and in the database file) until you use **Forget completely**. Forget
   completely erases the memory, every earlier version, the inbox items kept for it, and the review items about it from
@@ -54,7 +62,8 @@
 - Fixed since v0.4.3-rc1: the reading-pane height on small screens (the drawer scrolls), the import preview's TEXT
   column (long text ends in "…", hover a row for all of it), Suggestions now follow the space you choose, **Set
   date…** in the import preview, automatic backups no longer pile up, long titles end in "…", and a merge draft keeps
-  the most detailed item.
+  the most detailed item. Fixed in rc4: Forget completely no longer erases an inbox item that another memory still
+  keeps.
 
 ## v0.3 Auto memory (v0.3.0-rc1)
 
