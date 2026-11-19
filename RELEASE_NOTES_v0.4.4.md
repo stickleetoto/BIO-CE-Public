@@ -1,7 +1,8 @@
 <!-- Copyright 2026 stickleetoto | Apache-2.0 -->
 # BIO CE v0.4.4-rc4 — Release Notes (DRAFT)
 
-**Status: draft, not released.** The size and SHA-256 below are filled in from the CI build of the candidate.
+**Status: draft, not released.** The size and SHA-256 below are those of the CI build of the candidate (commit
+`7d911d6`; this file is outside the installer).
 v0.4.4-rc1 and rc2 were not released: the screens were reworked and then finished first (see "Screens since rc1").
 rc3 was not released either: Forget completely could erase an inbox item that another memory still kept (see
 "Fixed"). rc4 is rc3 with that fix only.
@@ -11,7 +12,7 @@ Nothing here is final until the owner approves the candidate.
 
 | File | Size | SHA-256 |
 |---|---:|---|
-| `BIO-CE-Setup-v0.4.4-rc4.exe` | (from CI) | (from CI) |
+| `BIO-CE-Setup-v0.4.4-rc4.exe` | 41,823,211 bytes | `72a986fb9daa4bb0e087c3c1b0a3bf3990c93ddd9917871e373a2897aadb7ca7` |
 
 ```powershell
 Get-FileHash -Algorithm SHA256 .\BIO-CE-Setup-v0.4.4-rc4.exe
