@@ -51,6 +51,7 @@ from bio_ce.inbox import (
     inbox_scope,
     kept_originals,
     kept_scope,
+    kept_to_erase,
     run_expiry,
 )
 from bio_ce.memory_policy import DUPLICATE_THRESHOLD, detect_secrets, normalize, similarity
@@ -207,7 +208,7 @@ class DesktopMemoryService:
             owned = control is None
             control = control or ControlStore(control_database_for(self.database))
             try:
-                erase_kept_for(self._store, control, self.scope, kept)
+                erase_kept_for(self._store, control, self.scope, kept, leaving=[current.memory_id])
             finally:
                 if owned:
                     control.close()
@@ -236,9 +237,10 @@ class DesktopMemoryService:
         return self._store.count_retracted(self.scope)
 
     def kept_count(self, memory_id: str, *, inbox: bool = False) -> int:
-        """How many inbox items are kept for this memory (shown before it is deleted)."""
+        """How many inbox items kept for this memory go with it when it is deleted (shown before): those no other
+        memory still keeps."""
         scope = inbox_scope(self.scope) if inbox else self.scope
-        return len(kept_originals(self._store, scope, [memory_id]))
+        return len(kept_to_erase(self._store, scope, [memory_id]))
 
     def approve_review(
         self, control: ControlStore, review_id: int, *, title: str | None = None, content: str | None = None

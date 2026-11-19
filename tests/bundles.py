@@ -33,6 +33,8 @@ DATA_SAFETY: dict[str, tuple[str, ...] | None] = {
     "tests/integration/test_forget_completely.py": None,
     "tests/integration/test_backup_pair_and_discard.py": None,
     "tests/integration/test_kept_originals_erase.py": None,
+    "tests/integration/test_kept_still_referenced.py": None,  # rc4: forget never takes another memory's kept item
+    "tests/integration/test_forget_kept_ui.py": None,  # rc4: the same through the app (Ctrl+Z, a covered Undo)
     "tests/integration/test_import.py": ("never_stored",),
     # Backup and restore
     "tests/integration/test_auto_backup_keep.py": None,

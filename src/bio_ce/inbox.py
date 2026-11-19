@@ -18,7 +18,8 @@ the items.
 Kept items: approving a suggestion or moving an inbox item to the memories keeps the inbox items it used aside
 ("<space>.inbox.kept") so it can be undone, instead of deleting them. Their result names them (source metadata
 ``kept``). When the result is deleted (a discard, or retracting the memory: :func:`erase_kept_for`), they are
-discarded the same way, first, so an interruption never leaves them behind a deleted result.
+discarded the same way, first, so an interruption never leaves them behind a deleted result. A kept item that
+another memory still names (an Undo gave it back and it was used again) stays until that memory goes too (rc4).
 """
 
 from __future__ import annotations
@@ -108,25 +109,65 @@ def _kept_chain(store: SQLiteMemoryStore, scope: MemoryScope, queue: list[tuple[
     return sorted(present)
 
 
+def still_kept_for_others(store: SQLiteMemoryStore, candidates: list[str] | tuple[str, ...], *,
+                          leaving: list[str] | tuple[str, ...] = ()) -> set[str]:
+    """The ``candidates`` (kept items about to be discarded) that a memory staying in BIO CE still names: its
+    current revision's kept list, or what a kept item it names was made from in turn (rc4, owner decision
+    2026-11-19). ``leaving`` are the memories being deleted or forgotten, so their own claims don't count.
+
+    A kept item can be named by more than one memory: an Undo gives it back to the inbox while the undone memory's
+    last revision still lists it, and the item can then be used again for another memory. Only memories that are
+    not retracted count; each one's Undo (to memories, a suggestion, a review update) needs its kept items back."""
+    wanted = set(candidates)
+    if not wanted:
+        return set()
+    claims = store.kept_claims()
+    skip = set(leaving) | wanted
+    protected: set[str] = set()
+    queue = [memory_id for memory_id in claims if memory_id not in skip]
+    while queue:
+        for kept_id in _kept_in(claims.get(queue.pop(), {})):
+            if kept_id not in protected:
+                protected.add(kept_id)
+                queue.append(kept_id)
+    return protected & wanted
+
+
+def kept_to_erase(store: SQLiteMemoryStore, scope: MemoryScope, memory_ids: list[str] | tuple[str, ...]) -> list[str]:
+    """What deleting ``memory_ids`` would discard with them: their kept originals that no other memory keeps."""
+    kept = kept_originals(store, scope, memory_ids)
+    claimed = still_kept_for_others(store, kept, leaving=memory_ids)
+    return [memory_id for memory_id in kept if memory_id not in claimed]
+
+
 def erase_kept_for(store: SQLiteMemoryStore, control: ControlStore, scope: MemoryScope, kept: list[str], *,
-                   host: str = DESKTOP_HOST, connection_id: str | None = None) -> int:
-    """Discard ``kept`` (from :func:`kept_originals`) after their result was deleted; returns how many."""
+                   host: str = DESKTOP_HOST, connection_id: str | None = None,
+                   leaving: list[str] | tuple[str, ...] = ()) -> int:
+    """Discard ``kept`` (from :func:`kept_originals`) after their result (``leaving``) was deleted; returns how many.
+    An item another memory still keeps stays (:func:`still_kept_for_others`)."""
     if not kept:
         return 0
     return discard_inbox_items(store, control, kept_scope(scope), kept, host=host,
-                               connection_id=connection_id).deleted
+                               connection_id=connection_id, leaving=leaving).deleted
 
 
 def discard_inbox_items(store: SQLiteMemoryStore, control: ControlStore, scope: MemoryScope,
                         memory_ids: list[str] | tuple[str, ...], *, host: str = DESKTOP_HOST,
-                        connection_id: str | None = None, item_id: int | None = None) -> DiscardResult:
+                        connection_id: str | None = None, item_id: int | None = None,
+                        leaving: list[str] | tuple[str, ...] = ()) -> DiscardResult:
     """Discard now. ``item_id`` carries out an existing proposal instead of recording a new one.
 
-    The items kept for what is discarded go first (see the module notes)."""
+    The items kept for what is discarded go first (see the module notes). Kept items (a kept area's ``scope``)
+    that a memory other than ``leaving`` still keeps are left as they are (:func:`still_kept_for_others`)."""
     ids = sorted(set(memory_ids))
-    if not scope.namespace.endswith(KEPT_SUFFIX):
+    if scope.namespace.endswith(KEPT_SUFFIX):
+        claimed = still_kept_for_others(store, ids, leaving=leaving)
+        ids = [memory_id for memory_id in ids if memory_id not in claimed]
+        if not ids:
+            return DiscardResult(item_id if item_id is not None else 0, 0, True)
+    else:
         erase_kept_for(store, control, scope, kept_originals(store, scope, ids), host=host,
-                       connection_id=connection_id)
+                       connection_id=connection_id, leaving=ids)
     if item_id is None:
         item_id = control.open_discard(ids, status=CURATION_CLEANUP_PENDING)
     else:
@@ -181,7 +222,7 @@ def forget_memory(store: SQLiteMemoryStore, control: ControlStore, scope: Memory
         originals = _kept_chain(store, scope, [], found=list(dict.fromkeys(seeds)))
     review_ids = sorted({int(revision.source.metadata["review_id"]) for revision in history
                          if type(revision.source.metadata.get("review_id")) is int})
-    kept = erase_kept_for(store, control, scope, originals, host=host)
+    kept = erase_kept_for(store, control, scope, originals, host=host, leaving=[memory_id])
     reviews = control.forget_reviews([memory_id], review_ids=review_ids)
     control.forget_memories([memory_id])
     item_id = control.open_discard([memory_id], status=CURATION_CLEANUP_PENDING)
@@ -291,4 +332,4 @@ def run_expiry(store: SQLiteMemoryStore, control: ControlStore, *, now: datetime
 
 
 __all__ = ["DISCARD_NOTICE", "ExpiryResult", "run_expiry", "DiscardResult", "discard_inbox_items", "finish_pending_cleanups", "inbox_scope",
-           "ForgetResult", "forget_memory"]
+           "ForgetResult", "forget_memory", "kept_to_erase", "still_kept_for_others"]

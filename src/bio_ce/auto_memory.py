@@ -548,7 +548,8 @@ class ReviewService:
                 kept = kept_originals(self.store, scope, [item.memory_id])  # read before: a retracted one can't be
                 revision = self.store.retract(scope, item.memory_id,
                                               expected_revision_id=item.expected_revision_id, source=source)
-                erase_kept_for(self.store, self.control, scope, kept)  # the items kept for it go with it
+                erase_kept_for(self.store, self.control, scope, kept,  # the items kept for it go with it
+                               leaving=[item.memory_id])
         except (RevisionConflictError, MemoryNotFoundError) as exc:
             self.control.resolve_review(review_id, REVIEW_FAILED, "the memory changed after the request")
             self.control.record(host=item.host, connection_id=item.connection_id, action=f"review-{item.kind}",

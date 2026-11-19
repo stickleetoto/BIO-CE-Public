@@ -636,6 +636,27 @@ class SQLiteMemoryStore:
                 continue
         return found
 
+    def kept_claims(self) -> dict[str, dict]:
+        """memory_id -> source metadata of every current, non-retracted revision, in any space (inbox and kept areas
+        included), whose metadata may name inbox items kept for it ("kept", or the "merged_from" / "from_inbox" of
+        a suggestion result approved before "kept" was recorded). Read-only; the caller decides what names what."""
+        with self._read_transaction():
+            rows = self._connection.execute(
+                """SELECT m.memory_id, r.source_metadata_json FROM memories AS m
+                   JOIN revisions AS r ON r.revision_id = m.current_revision_id
+                   WHERE r.kind IN ('assertion', 'revision')
+                     AND (r.source_metadata_json LIKE '%"kept"%' OR r.source_metadata_json LIKE '%"suggestion"%')"""
+            ).fetchall()
+        claims: dict[str, dict] = {}
+        for memory_id, metadata in rows:
+            try:
+                value = json.loads(metadata)
+            except ValueError:
+                continue
+            if isinstance(value, dict):
+                claims[str(memory_id)] = value
+        return claims
+
     def created_dates(self, scope: MemoryScope) -> dict[str, str]:
         """memory_id -> when the memory was first saved, for one scope (exports use the first save day)."""
         _validate_scope(scope)
