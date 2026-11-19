@@ -4,7 +4,8 @@
 **Status: pre-release.** Not a final release.
 
 The installer was built and tested on a GitHub-hosted Windows runner from source commit `7d911d6`. The tag also
-contains later commits that change only this file and `docs/known-limitations.md`; neither goes into the installer.
+contains later commits that change only this file, `docs/known-limitations.md`, and the test sandbox
+(`tests/sandbox.py`); none of them goes into the installer.
 v0.4.4-rc1 and rc2 were not released: the screens were reworked and then finished first (see "Screens since rc1").
 rc3 was not released either: Forget completely could erase an inbox item that another memory still kept (see
 "Fixed"). rc4 is rc3 with that fix only.

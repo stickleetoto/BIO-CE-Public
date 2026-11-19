@@ -9,7 +9,8 @@ started directly without the sandboxed runner:
 1. LOCALAPPDATA, APPDATA, USERPROFILE, HOME (and HOMEDRIVE/HOMEPATH), TEMP/TMP, CODEX_HOME and CLAUDE_CONFIG_DIR
    point into a new folder made for this test process; the folder is removed when the tests end.
 2. A guard stops the tests at once when anything opens, connects to, creates, renames, or deletes a path under a
-   real user location: the user's BIO CE data (``%LOCALAPPDATA%\\BIO-CE``, ``E:\\BIO-CE``), Store app data
+   real user location: the user's BIO CE data (``%LOCALAPPDATA%\\BIO-CE``, or a ``BIO-CE`` folder at the root of any
+   drive), Store app data
    (``%LOCALAPPDATA%\\Packages``), Claude and Codex settings and data (``Claude-Data``, ``%APPDATA%\\Claude``,
    ``~\\.claude``, ``~\\.claude.json``, ``~\\.codex``). The real locations come from Windows itself
    (the login token and the Shell Folders registry key), so a changed environment can not hide them. It checks before the call, so nothing is
@@ -99,7 +100,7 @@ def real_locations() -> dict[str, Path]:
 
 def protected_roots() -> list[Path]:
     real = REAL or real_locations()
-    roots = [Path("E:/BIO-CE")]
+    roots = [Path(f"{drive}:/BIO-CE") for drive in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"]  # a data folder at a drive's root
     if "LOCALAPPDATA" in real:
         local = real["LOCALAPPDATA"]
         roots += [local / "BIO-CE", local / "Packages", local / "Claude-Data", local / "AnthropicClaude"]
