@@ -24,6 +24,14 @@
 
 ## v0.4.4-rc4 (pre-release)
 
+- **Don't copy or replace the files in the data folder by hand, and don't keep it in a cloud sync folder**
+  (OneDrive, Dropbox, Google Drive). The data folder is `%LOCALAPPDATA%\BIO-CE\data`. SQLite applies the
+  `memories.sqlite3-wal` file beside the database to it, whatever file that `-wal` came from. A `-wal` left there by
+  a hand copy, or put back or moved separately by a sync program, is laid over your memories as soon as the app, an
+  AI tool's BIO CE server or a session hook opens the file, and the app's next close makes it permanent: memories
+  can be lost. Use **Settings → Create backup…** and **Restore** instead, and keep the data folder outside any sync
+  folder. If you already copied files into it, copy the whole data folder somewhere else before you start BIO CE
+  again. The next release refuses to open a data file over a `-wal` it didn't write for that file.
 - The installer and the programs it installs are **not code-signed**.
 - **A memory moved to another space can leave its kept inbox item behind.** When a memory made from an inbox item
   (with **To memories** or an approved suggestion) is moved to another space, the inbox item kept for its Undo stays
